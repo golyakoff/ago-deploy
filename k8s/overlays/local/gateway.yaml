@@ -1,0 +1,44 @@
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: ago-chat-gateway
+spec:
+  gatewayClassName: nginx
+  listeners:
+    - name: http
+      port: 80
+      protocol: HTTP
+      hostname: ago-chat.localhost
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: ago-chat-api
+spec:
+  parentRefs:
+    - name: ago-chat-gateway
+  hostnames:
+    - ago-chat.localhost
+  rules:
+    # Only the health path is real at Stage 0; /api and /hubs arrive with Stage 1's actual
+    # endpoints (docs/conventions/api-design.md).
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /healthz
+      backendRefs:
+        - name: ago-chat-api
+          port: 80
+---
+apiVersion: gateway.nginx.org/v1alpha1
+kind: UpstreamSettingsPolicy
+metadata:
+  name: ago-chat-api-least-conn
+spec:
+  targetRefs:
+    - group: core
+      kind: Service
+      name: ago-chat-api
+  # least_conn, not round-robin: with long-lived WebSockets, round-robin distributes connection
+  # *events* evenly but leaves connection *counts* skewed after any partial outage (edge.md).
+  loadBalancingMethod: least_conn

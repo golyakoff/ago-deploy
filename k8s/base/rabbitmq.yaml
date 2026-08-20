@@ -1,0 +1,99 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: rabbitmq-data
+spec:
+  accessModes: ["ReadWriteOnce"]
+  resources:
+    requests:
+      storage: 1Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: rabbitmq
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: rabbitmq
+  template:
+    metadata:
+      labels:
+        app: rabbitmq
+    spec:
+      containers:
+        - name: rabbitmq
+          image: rabbitmq:4-management
+          ports:
+            - containerPort: 5672 # AMQP
+            - containerPort: 15672 # management UI
+          env:
+            # The image expects RABBITMQ_DEFAULT_*; the shared secret carries RABBITMQ_* (same
+            # names docker-compose.yml uses), so these two are remapped rather than dumped in raw
+            # via envFrom.
+            - name: RABBITMQ_DEFAULT_USER
+              valueFrom:
+                secretKeyRef:
+                  name: infra-credentials
+                  key: RABBITMQ_USER
+            - name: RABBITMQ_DEFAULT_PASS
+              valueFrom:
+                secretKeyRef:
+                  name: infra-credentials
+                  key: RABBITMQ_PASSWORD
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/rabbitmq
+          resources:
+            requests:
+              memory: 512Mi
+              cpu: 250m
+            limits:
+              # Verified against a real cluster: both 256Mi and 512Mi OOM-killed the container
+              # during startup - the Erlang VM plus the management plugin spike well above steady
+              # state while booting. 1Gi is deliberately generous rather than re-tuned to the exact
+              # edge, since this is a single local broker with no other tenant for the headroom to
+              # cost.
+              memory: 1Gi
+              cpu: 500m
+          readinessProbe:
+            # Verified against a real cluster: rabbitmq-diagnostics ping spawns its own Erlang VM
+            # to RPC into the running one - genuinely expensive, not just slow to answer. With too
+            # short a period, successive probe invocations pile up (five overlapping diagnostics
+            # processes were observed at once), and that pile-up's own memory cost was a real
+            # contributor to the OOM kills below - not just the broker's own footprint. periodSeconds
+            # is deliberately wide so one invocation always finishes before the next starts.
+            exec:
+              command: ["rabbitmq-diagnostics", "-q", "ping"]
+            initialDelaySeconds: 15
+            periodSeconds: 20
+            timeoutSeconds: 10
+          livenessProbe:
+            # A TCP check, not rabbitmq-diagnostics: liveness must never itself be the expensive,
+            # pile-up-prone probe, since restarting a broker that was merely slow to answer is the
+            # failure this whole file exists to avoid. Readiness (above) still uses the real
+            # protocol-level check; this only confirms the process is accepting connections at all.
+            tcpSocket:
+              port: 5672
+            initialDelaySeconds: 30
+            periodSeconds: 15
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: rabbitmq-data
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: rabbitmq
+spec:
+  selector:
+    app: rabbitmq
+  ports:
+    - name: amqp
+      port: 5672
+      targetPort: 5672
+    - name: management
+      port: 15672
+      targetPort: 15672

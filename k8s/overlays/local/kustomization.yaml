@@ -1,0 +1,44 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: ago-chat
+
+resources:
+  - ../../base
+  - gateway.yaml
+
+# Same shape as docker/.env (copy the values across so both loops use the same local dev
+# passwords) - kustomize refuses to read a secretGenerator source from outside its own directory
+# tree (a deliberate anti-path-traversal restriction), so this cannot simply point at
+# ../../../docker/.env. One Secret, not three: these are throwaway local passwords, and three
+# generators reading the same file would each carry all six keys anyway (`envs:` loads the whole
+# file, it does not filter per generator).
+secretGenerator:
+  - name: infra-credentials
+    envs: [.env]
+
+# Images built locally (runbooks/local-dev.md) never come from a registry, so a pull must never be
+# attempted - imagePullPolicy: Never turns "forgot to build the image" into a clear ErrImageNeverPull
+# instead of a confusing hang waiting on a registry that does not have this tag.
+patches:
+  - target:
+      kind: Deployment
+      name: ago-chat-api
+    patch: |
+      - op: add
+        path: /spec/template/spec/containers/0/imagePullPolicy
+        value: Never
+  - target:
+      kind: Deployment
+      name: ago-chat-worker
+    patch: |
+      - op: add
+        path: /spec/template/spec/containers/0/imagePullPolicy
+        value: Never
+  - target:
+      kind: Deployment
+      name: ago-chat-webhooks
+    patch: |
+      - op: add
+        path: /spec/template/spec/containers/0/imagePullPolicy
+        value: Never

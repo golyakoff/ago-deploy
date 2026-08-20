@@ -1,0 +1,5 @@
+# Local dev credentials (docs/architecture/repositories.md: "no secrets, ever" -
+# local values live in gitignored files, the repository carries .example files only).
+.env
+docker/.env
+k8s/overlays/local/.env

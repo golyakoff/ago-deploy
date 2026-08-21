@@ -18,6 +18,19 @@ spec:
           image: ago-chat-worker:local
           ports:
             - containerPort: 8080 # health endpoint only - this host has no business HTTP surface
+          envFrom:
+            - secretRef:
+                name: infra-credentials
+          env:
+            # Same requirement as ago-chat-api - see the comment there.
+            - name: AGO_CHAT_CONNECTION_STRING
+              value: "Host=postgres;Port=5432;Database=$(POSTGRES_DB);Username=$(POSTGRES_USER);Password=$(POSTGRES_PASSWORD)"
+            - name: Messaging__RabbitMq__HostName
+              value: "rabbitmq"
+            - name: Messaging__RabbitMq__UserName
+              value: "$(RABBITMQ_USER)"
+            - name: Messaging__RabbitMq__Password
+              value: "$(RABBITMQ_PASSWORD)"
           resources:
             requests:
               memory: 128Mi

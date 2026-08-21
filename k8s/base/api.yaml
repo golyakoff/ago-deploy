@@ -18,6 +18,25 @@ spec:
           image: ago-chat-api:local
           ports:
             - containerPort: 8080
+          envFrom:
+            - secretRef:
+                name: infra-credentials
+          env:
+            # ChatModule.ConfigureServices requires this (chat/src/Ago.Chat.Module/ChatModule.cs) -
+            # in-cluster it points at the postgres Service, not the docker-compose host from
+            # local-dev.md. $(VAR) here expands against the envFrom keys above (k8s dependent env
+            # vars), not a shell.
+            - name: AGO_CHAT_CONNECTION_STRING
+              value: "Host=postgres;Port=5432;Database=$(POSTGRES_DB);Username=$(POSTGRES_USER);Password=$(POSTGRES_PASSWORD)"
+            # RabbitMqOptions (Ago.Platform.Messaging.RabbitMq) marks HostName/UserName/Password
+            # [Required] - appsettings.json carries no Messaging:RabbitMq section, so these must
+            # come from here or ChatModule's AddRabbitMqMessaging fails validation at startup.
+            - name: Messaging__RabbitMq__HostName
+              value: "rabbitmq"
+            - name: Messaging__RabbitMq__UserName
+              value: "$(RABBITMQ_USER)"
+            - name: Messaging__RabbitMq__Password
+              value: "$(RABBITMQ_PASSWORD)"
           resources:
             requests:
               memory: 128Mi

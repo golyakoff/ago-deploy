@@ -52,6 +52,10 @@ spec:
             # Gateway with no sticky sessions must all validate the same visitor/operator tokens.
             - name: Auth__SigningKey
               value: "$(AUTH_JWT_SIGNING_KEY)"
+            # `5-05`/`adr/0022`: the Operator scheme's issuer/JWKS source - keycloak.yaml's own
+            # Service, not the docker-compose loop's localhost:8081 (local-dev.md).
+            - name: Auth__Keycloak__Authority
+              value: "http://keycloak:8080/realms/ago-chat"
           resources:
             requests:
               memory: 128Mi

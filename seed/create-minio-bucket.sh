@@ -6,7 +6,7 @@
 # nothing to seed a tenant or operator row into. That half of this script arrives with Stage 1.
 set -euo pipefail
 
-BUCKET="${1:-ago-chat-attachments}"
+BUCKET="${1:-attachments}"
 NETWORK="ago-chat-infra_default"
 
 : "${MINIO_ROOT_USER:?Set MINIO_ROOT_USER (source docker/.env first)}"

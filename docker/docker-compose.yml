@@ -73,6 +73,31 @@ services:
       timeout: 3s
       retries: 10
 
+  # `5-05`/`adr/0022`: the operator IdP. `start-dev` (never `start`, which demands a real TLS/hostname
+  # setup this local loop has no use for) plus `--import-realm` to bring in the demo realm/client/
+  # operator on every boot - idempotent, matching `create-demo-tenant.sh`'s own fixed-id precedent, so
+  # a container recreate never produces a second copy.
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.0
+    restart: unless-stopped
+    command: start-dev --import-realm --health-enabled=true
+    environment:
+      KEYCLOAK_ADMIN: ${KEYCLOAK_ADMIN_USER:?}
+      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:?}
+    ports:
+      - "8081:8080" # OIDC - Ago.Chat.Api's Auth:Keycloak:Authority points here
+      - "8082:9000" # health/management, separate from the OIDC port as of recent Keycloak versions
+    volumes:
+      # Lives in k8s/base/, not a sibling keycloak/ folder - kustomize's configMapGenerator needs it
+      # inside its own kustomization root (that file's own comment has the detail); this compose file
+      # has no such restriction and just reaches up into the same one, so there is still one copy.
+      - ../k8s/base/keycloak-realm-import.json:/opt/keycloak/data/import/ago-chat-realm.json:ro
+    healthcheck:
+      test: ["CMD-SHELL", "exec 3<>/dev/tcp/localhost/9000 && echo -e 'GET /health/ready HTTP/1.1\r\nhost: localhost\r\nConnection: close\r\n\r\n' >&3 && cat <&3 | grep -q 'UP'"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
 volumes:
   postgres-data:
   rabbitmq-data:

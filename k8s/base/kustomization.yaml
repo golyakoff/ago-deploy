@@ -9,6 +9,17 @@ resources:
   - rabbitmq.yaml
   - redis.yaml
   - minio.yaml
+  - keycloak.yaml
   - api.yaml
   - worker.yaml
   - webhooks.yaml
+
+# `5-05`/`adr/0022`: the demo realm lives inside this directory (keycloak-realm-import.json), not a
+# sibling `keycloak/` folder that would read more naturally - kustomize's configMapGenerator refuses a
+# files: source outside its own kustomization root (the same anti-path-traversal restriction the
+# local overlay's own secretGenerator comment already documents for .env). docker-compose.yml has no
+# such restriction and reaches up into this same file instead, so there is still exactly one copy.
+configMapGenerator:
+  - name: keycloak-realm-import
+    files:
+      - ago-chat-realm.json=keycloak-realm-import.json

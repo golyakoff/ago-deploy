@@ -28,6 +28,13 @@ patches:
       - op: add
         path: /spec/template/spec/containers/0/imagePullPolicy
         value: Never
+      # 3-06: three replicas is the direct proof this backlog item needs - one visitor's node dies,
+      # it reconnects to a different one, the Gateway's least_conn UpstreamSettingsPolicy
+      # (gateway.yaml) has more than one live upstream to actually balance across. base/api.yaml
+      # stays at 1 (no other overlay needs 3 today).
+      - op: replace
+        path: /spec/replicas
+        value: 3
   - target:
       kind: Deployment
       name: ago-chat-worker

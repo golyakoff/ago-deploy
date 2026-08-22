@@ -12,7 +12,12 @@ spec:
       labels:
         app: ago-chat-api
     spec:
-      terminationGracePeriodSeconds: 30 # must exceed the preStop sleep + drain deadline (edge.md)
+      # 3-06: must exceed preStop's sleep (15s, worst-case readiness propagation below) plus
+      # ConnectionDrainCoordinator's DrainOptions.DrainTimeout (20s, Ago.Platform.Realtime), with
+      # margin left over for the rest of the host to actually stop (edge.md). 15 + 20 = 35; 45 leaves
+      # a 10s buffer - not measured, a starting point for Stage 7 to tune (CLAUDE.md: "measure or
+      # stay silent" applies to the 45 itself, not to the 35 lower bound, which is arithmetic).
+      terminationGracePeriodSeconds: 45
       containers:
         - name: api
           image: ago-chat-api:local
@@ -37,6 +42,16 @@ spec:
               value: "$(RABBITMQ_USER)"
             - name: Messaging__RabbitMq__Password
               value: "$(RABBITMQ_PASSWORD)"
+            # 3-04/3-06: ChatModule's AddRedisCaching (site-config cache, cache invalidation) and
+            # Ago.Platform.Realtime's connection registry both need this - redis.yaml's Service has
+            # no auth, so no credential half like the two blocks above.
+            - name: Redis__ConnectionString
+              value: "redis:6379"
+            # 3-06: Program.cs falls back to a random per-process key when this is unset (fine for
+            # the single-instance dotnet-run dev loop) - required here because 3 replicas behind a
+            # Gateway with no sticky sessions must all validate the same visitor/operator tokens.
+            - name: Auth__SigningKey
+              value: "$(AUTH_JWT_SIGNING_KEY)"
           resources:
             requests:
               memory: 128Mi
@@ -57,6 +72,10 @@ spec:
               path: /healthz/ready
               port: 8080
             periodSeconds: 5
+            # Explicit, not just relying on the default: preStop's sleep below is sized directly off
+            # this number (worst case periodSeconds * failureThreshold before kubelet marks the pod
+            # NotReady and the Gateway stops routing to it).
+            failureThreshold: 3
           livenessProbe:
             httpGet:
               path: /healthz/live
@@ -65,10 +84,14 @@ spec:
           lifecycle:
             preStop:
               exec:
-                # Gives the ingress time to notice readiness went false before the process actually
-                # stops (edge.md) - this is placeholder timing until Stage 3 adds real drain
-                # behaviour (tell clients to reconnect, then wait for connections to drop).
-                command: ["sh", "-c", "sleep 5"]
+                # 3-06: readinessProbe above can take up to periodSeconds * failureThreshold = 15s
+                # worst-case to mark this pod NotReady once /healthz/ready starts failing (edge.md
+                # step 2) - sleeping that long before SIGTERM is what actually happens next
+                # (ConnectionDrainCoordinator.StopAsync, Ago.Platform.Realtime) guarantees the
+                # Gateway has genuinely stopped routing new connections here first. The drain itself
+                # is not in this hook - it runs automatically in-process on SIGTERM, during the
+                # generic host's own shutdown sequence.
+                command: ["sh", "-c", "sleep 15"]
 ---
 apiVersion: v1
 kind: Service

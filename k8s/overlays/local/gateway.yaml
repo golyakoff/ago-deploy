@@ -20,12 +20,28 @@ spec:
   hostnames:
     - ago-chat.localhost
   rules:
-    # Only the health path is real at Stage 0; /api and /hubs arrive with Stage 1's actual
-    # endpoints (docs/conventions/api-design.md).
     - matches:
         - path:
             type: PathPrefix
             value: /healthz
+      backendRefs:
+        - name: ago-chat-api
+          port: 80
+    # 3-06: the visitor-session issuance path (Auth/AuthEndpoints.cs) and both SignalR hubs - added
+    # now because proving least_conn and cross-node reconnect over 3 replicas needs real hub traffic
+    # through the Gateway, not just the health path Stage 0 verified. Stale "arrive with Stage 1"
+    # comment removed - those endpoints have existed since Stage 1/2, this route just never caught up.
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /api
+      backendRefs:
+        - name: ago-chat-api
+          port: 80
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /hubs
       backendRefs:
         - name: ago-chat-api
           port: 80

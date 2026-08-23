@@ -26,9 +26,12 @@ readonly EXTERNAL_SUBJECT_ID="00000000-0000-0000-0000-000000000004"
 readonly PUBLIC_KEY="demo_site"
 
 SQL=$(cat <<SQL
+-- DO UPDATE, not DO NOTHING, for allowed_origins specifically (5-06): an existing local install
+-- seeded before ago-console's own dev origin (:5173) was added would otherwise never pick it up on
+-- a re-run - the same "re-linking" reasoning 5-05's own operator row update already established.
 insert into sites (id, public_key, allowed_origins)
-values ('$SITE_ID', '$PUBLIC_KEY', array['http://localhost:8080']::text[])
-on conflict (id) do nothing;
+values ('$SITE_ID', '$PUBLIC_KEY', array['http://localhost:8080', 'http://localhost:5173']::text[])
+on conflict (id) do update set allowed_origins = excluded.allowed_origins;
 
 insert into operators (id, site_id, status, capacity, external_subject_id)
 values ('$OPERATOR_ID', '$SITE_ID', 'Online', 5, '$EXTERNAL_SUBJECT_ID')

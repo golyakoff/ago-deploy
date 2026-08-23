@@ -42,6 +42,23 @@
           "temporary": false
         }
       ]
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000005",
+      "username": "demo-admin",
+      "email": "demo-admin@example.test",
+      "firstName": "Demo",
+      "lastName": "Admin",
+      "enabled": true,
+      "emailVerified": true,
+      "requiredActions": [],
+      "credentials": [
+        {
+          "type": "password",
+          "value": "demo-admin-password",
+          "temporary": false
+        }
+      ]
     }
   ]
 }

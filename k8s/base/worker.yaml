@@ -31,6 +31,13 @@ spec:
               value: "$(RABBITMQ_USER)"
             - name: Messaging__RabbitMq__Password
               value: "$(RABBITMQ_PASSWORD)"
+            # `4-04`: OperatorDisconnectGraceConsumer/OperatorDisconnectSweepJob read presence via
+            # IConnectionRegistry, which ChatModule.ConfigureServices wires up unconditionally for
+            # every host (same AddConnectionRegistry call api.yaml's own Redis__ConnectionString
+            # comment describes) - missing here since 4-04 shipped, found live while verifying
+            # `5-10` (this host crashed at startup with "Set Redis:ConnectionString").
+            - name: Redis__ConnectionString
+              value: "redis:6379"
           resources:
             requests:
               memory: 128Mi

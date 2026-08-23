@@ -6,7 +6,25 @@
 # Neither printed value is a secret: the site's public_key identifies a tenant and grants nothing
 # beyond starting a visitor session (api-design.md); the operator id resolves from Keycloak's own
 # token via OperatorIdentityClaimsTransformation (5-05, adr/0022) - there is no password stored here,
-# Keycloak owns that (keycloak/ago-chat-realm.json seeds the matching demo-operator user).
+# Keycloak owns that (keycloak/ago-chat-realm.json seeds the matching demo-operator/demo-admin users).
+#
+# `5-08`: also seeds a second demo operator holding the "Admin" role (site:configure,
+# site:manage_operators, attachment:delete - authorization.md's admin-role bullet, adr/0016's own
+# naming convention) - the console needs a real account with a *different* permission set than
+# demo-operator's to manually verify "an admin sees every conversation, an ordinary operator does
+# not" and "an admin can delete an attachment an ordinary operator cannot" (5-08's own Done-when).
+# The admin demo operator also gets the "Operator" role, not Admin-only - it needs conversation:read/
+# send/assign too, to actually be assignable a conversation and exercise the attachment-delete action
+# inside its own message thread the same way any operator would (this item's own scoping note: the
+# admin's site-wide view is read-only summary data, not a bypass of the existing per-conversation
+# assignment/read checks - see 5-08's commit-prep notes for why that bypass was deliberately not
+# built). Granting the Operator role's permission *set* to a second role, not adding a third role
+# that duplicates it, keeps "which permissions exist" answerable from the `roles` table alone.
+#
+# Seed-script-only, deliberately: adr/0016 left "who can grant a role" ungranted by anything but this
+# script, and 5-08's own scope explicitly defers a role-assignment UI (a general role-editor is out of
+# scope per that item's own notes) - this remains the only way any role, Operator or Admin, is ever
+# granted in this project today.
 set -euo pipefail
 
 NETWORK="ago-chat-infra_default"
@@ -25,6 +43,13 @@ readonly ROLE_ID="00000000-0000-0000-0000-000000000003"
 readonly EXTERNAL_SUBJECT_ID="00000000-0000-0000-0000-000000000004"
 readonly PUBLIC_KEY="demo_site"
 
+# `5-08`: the admin demo operator - EXTERNAL_SUBJECT_ID matches demo-admin's fixed `id` in
+# keycloak-realm-import.json, the same link OPERATOR_ID/EXTERNAL_SUBJECT_ID above already establish
+# for demo-operator.
+readonly ADMIN_OPERATOR_ID="00000000-0000-0000-0000-000000000006"
+readonly ADMIN_ROLE_ID="00000000-0000-0000-0000-000000000007"
+readonly ADMIN_EXTERNAL_SUBJECT_ID="00000000-0000-0000-0000-000000000005"
+
 SQL=$(cat <<SQL
 -- DO UPDATE, not DO NOTHING, for allowed_origins specifically (5-06): an existing local install
 -- seeded before ago-console's own dev origin (:5173) was added would otherwise never pick it up on
@@ -37,13 +62,30 @@ insert into operators (id, site_id, status, capacity, external_subject_id)
 values ('$OPERATOR_ID', '$SITE_ID', 'Online', 5, '$EXTERNAL_SUBJECT_ID')
 on conflict (id) do update set external_subject_id = excluded.external_subject_id;
 
+insert into operators (id, site_id, status, capacity, external_subject_id)
+values ('$ADMIN_OPERATOR_ID', '$SITE_ID', 'Online', 5, '$ADMIN_EXTERNAL_SUBJECT_ID')
+on conflict (id) do update set external_subject_id = excluded.external_subject_id;
+
 insert into roles (id, site_id, name, permissions)
 values ('$ROLE_ID', '$SITE_ID', 'Operator',
         array['conversation:read', 'conversation:send', 'conversation:assign']::text[])
 on conflict (id) do nothing;
 
+insert into roles (id, site_id, name, permissions)
+values ('$ADMIN_ROLE_ID', '$SITE_ID', 'Admin',
+        array['site:configure', 'site:manage_operators', 'attachment:delete']::text[])
+on conflict (id) do nothing;
+
 insert into operator_roles (operator_id, role_id)
 values ('$OPERATOR_ID', '$ROLE_ID')
+on conflict (operator_id, role_id) do nothing;
+
+insert into operator_roles (operator_id, role_id)
+values ('$ADMIN_OPERATOR_ID', '$ROLE_ID')
+on conflict (operator_id, role_id) do nothing;
+
+insert into operator_roles (operator_id, role_id)
+values ('$ADMIN_OPERATOR_ID', '$ADMIN_ROLE_ID')
 on conflict (operator_id, role_id) do nothing;
 SQL
 )
@@ -55,3 +97,4 @@ docker run --rm --network "$NETWORK" \
 
 echo "Demo site ready: public_key=$PUBLIC_KEY"
 echo "Demo operator ready: id=$OPERATOR_ID (role: Operator, Keycloak user: demo-operator)"
+echo "Demo admin ready: id=$ADMIN_OPERATOR_ID (roles: Operator + Admin, Keycloak user: demo-admin)"

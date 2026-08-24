@@ -57,9 +57,13 @@ patches:
       kind: Deployment
       name: keycloak
     patch: |
-      - op: add
-        path: /spec/template/spec/containers/0/imagePullPolicy
-        value: Never
+      # No imagePullPolicy patch here, deliberately - unlike the three ago-chat-* Deployments above,
+      # keycloak runs the real upstream `quay.io/keycloak/keycloak` image (base/keycloak.yaml), never
+      # built locally, so it needs its own default pull policy to actually reach the registry. Copying
+      # the Never patch here by pattern-matching the ago-chat-* entries above was a real bug, caught
+      # live: it produced ErrImageNeverPull on the real cluster (2026-08-24), since nothing had ever
+      # imported a "keycloak:local" tag into this node's containerd - there is no such tag, it was
+      # never meant to exist.
       # adr/0026: base/keycloak.yaml's args (start-dev --import-realm --health-enabled=true) are
       # correct for a Keycloak that only ever sees requests addressed to localhost/the in-cluster
       # Service name. Publicly, NGINX Gateway Fabric terminates TLS in front of it and forwards plain

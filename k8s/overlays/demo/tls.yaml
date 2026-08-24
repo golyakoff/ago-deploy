@@ -31,9 +31,9 @@ kind: Certificate
 metadata:
   name: ago-public-tls
 spec:
-  # One cert for all three public hostnames - fewer moving parts than one Certificate per host, and
+  # One cert for all four public hostnames - fewer moving parts than one Certificate per host, and
   # Let's Encrypt's own rate limits (certificates per registered domain per week) are friendlier to a
-  # single multi-SAN cert than three separate ones for a domain this size.
+  # single multi-SAN cert than separate ones for a domain this size.
   secretName: ago-public-tls
   issuerRef:
     name: letsencrypt-prod
@@ -42,3 +42,4 @@ spec:
     - chat.reserve-me.ru
     - auth.reserve-me.ru
     - console.reserve-me.ru
+    - grafana.reserve-me.ru

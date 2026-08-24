@@ -4,6 +4,17 @@ metadata:
   name: keycloak
 spec:
   replicas: 1 # local dev IdP only - never scaled out here, same reasoning as postgres.yaml
+  # Keycloak's start-dev mode defaults to its embedded H2 database, which only ever allows one
+  # process to hold the file open (exclusive-mode lock) - a real deadlock found live (2026-08-24):
+  # the default RollingUpdate strategy briefly runs the old and new pod together during any rollout,
+  # and with a single-writer embedded DB backing a PVC, both pods then fight over the same exclusive
+  # lock and neither ever becomes Ready. Recreate (old pod terminated before the new one starts) is
+  # the correct strategy for any single-replica Deployment backed by an exclusive-lock store - the
+  # same reasoning postgres.yaml/redis.yaml/rabbitmq.yaml/minio.yaml already apply implicitly by
+  # virtue of Postgres/Redis/RabbitMQ/MinIO each managing their own multi-writer safety internally,
+  # which Keycloak's embedded H2 specifically does not.
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app: keycloak

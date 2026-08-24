@@ -3,3 +3,6 @@
 .env
 docker/.env
 k8s/overlays/local/.env
+
+# Personal, machine-local Claude Code overrides - never shared, never committed.
+.claude/settings.local.json

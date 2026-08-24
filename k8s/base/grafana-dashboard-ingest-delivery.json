@@ -1,0 +1,137 @@
+{
+  "title": "AGO Chat / Ingest & delivery",
+  "uid": "ago-chat-ingest-delivery",
+  "tags": ["ago-chat", "7-03"],
+  "timezone": "utc",
+  "schemaVersion": 39,
+  "version": 1,
+  "editable": false,
+  "time": { "from": "now-1h", "to": "now" },
+  "panels": [
+    {
+      "id": 1,
+      "title": "Hub method rate, by outcome",
+      "description": "nfr.md: RED per hub method. ago.chat.hub.method.count, tagged hub/method/outcome (7-02).",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "reqps" }, "overrides": [] },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "sum(rate(ago_chat_hub_method_count_total[5m])) by (hub, method, outcome)",
+          "legendFormat": "{{hub}}.{{method}} ({{outcome}})"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "title": "Hub method error ratio",
+      "description": "Errors / all calls, across every hub method.",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "percentunit", "max": 1, "min": 0 }, "overrides": [] },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "sum(rate(ago_chat_hub_method_count_total{outcome=\"error\"}[5m])) / sum(rate(ago_chat_hub_method_count_total[5m]))",
+          "legendFormat": "error ratio"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "title": "Hub method duration (p50 / p95 / p99)",
+      "description": "nfr.md latency targets overlaid as threshold lines - Send->ack (persisted): p50 15ms, p95 50ms, p99 150ms.",
+      "type": "timeseries",
+      "gridPos": { "h": 9, "w": 24, "x": 0, "y": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": { "thresholdsStyle": { "mode": "line" } },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 0.05 },
+              { "color": "red", "value": 0.15 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "histogram_quantile(0.5, sum(rate(ago_chat_hub_method_duration_seconds_bucket[5m])) by (le, hub, method))",
+          "legendFormat": "p50 {{hub}}.{{method}}"
+        },
+        {
+          "refId": "B",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "histogram_quantile(0.95, sum(rate(ago_chat_hub_method_duration_seconds_bucket[5m])) by (le, hub, method))",
+          "legendFormat": "p95 {{hub}}.{{method}}"
+        },
+        {
+          "refId": "C",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "histogram_quantile(0.99, sum(rate(ago_chat_hub_method_duration_seconds_bucket[5m])) by (le, hub, method))",
+          "legendFormat": "p99 {{hub}}.{{method}}"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "title": "Broker consumer rate, by outcome",
+      "description": "nfr.md: RED per consumer. ago.platform.messaging.rabbitmq.consumer.count, tagged topic/consumer/outcome (7-02).",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 17 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "reqps" }, "overrides": [] },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "sum(rate(ago_platform_messaging_rabbitmq_consumer_count_total[5m])) by (topic, consumer, outcome)",
+          "legendFormat": "{{topic}} / {{consumer}} ({{outcome}})"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "title": "Broker consumer duration (p95)",
+      "description": "nfr.md latency target - Send->delivered to a recipient on another node: p95 120ms.",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 17 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": { "thresholdsStyle": { "mode": "line" } },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 0.04 },
+              { "color": "red", "value": 0.12 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "histogram_quantile(0.95, sum(rate(ago_platform_messaging_rabbitmq_consumer_duration_seconds_bucket[5m])) by (le, topic, consumer))",
+          "legendFormat": "p95 {{topic}} / {{consumer}}"
+        }
+      ]
+    }
+  ]
+}

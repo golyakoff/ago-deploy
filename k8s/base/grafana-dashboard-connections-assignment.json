@@ -1,0 +1,63 @@
+{
+  "title": "AGO Chat / Connections & assignment",
+  "uid": "ago-chat-connections-assignment",
+  "tags": ["ago-chat", "7-03"],
+  "timezone": "utc",
+  "schemaVersion": 39,
+  "version": 1,
+  "editable": false,
+  "time": { "from": "now-1h", "to": "now" },
+  "panels": [
+    {
+      "id": 1,
+      "title": "Connections per node",
+      "description": "nfr.md: connection count per node. What this node's own connection registry believes each node currently holds. ago.platform.realtime.connections (7-02, Ago.Platform.Realtime).",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "ago_platform_realtime_connections",
+          "legendFormat": "{{node}}"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "title": "Assignment capacity claim attempts, by outcome",
+      "description": "nfr.md: assignment attempts vs conflicts. IOperatorCapacity.TryClaimAsync calls, tagged outcome (claimed/conflict). ago.chat.assignment.capacity_claim_attempts (7-02).",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "sum(rate(ago_chat_assignment_capacity_claim_attempts_total[5m])) by (outcome)",
+          "legendFormat": "{{outcome}}"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "title": "Assignment conflict ratio",
+      "description": "concurrency.md: a claim conflict (rows-affected 0) is a normal outcome to retry, not an error - this tracks how often that happens relative to every attempt. ago.chat.assignment.capacity_claim_conflicts / capacity_claim_attempts (7-02).",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "percentunit", "max": 1, "min": 0 }, "overrides": [] },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "sum(rate(ago_chat_assignment_capacity_claim_conflicts_total[5m])) / sum(rate(ago_chat_assignment_capacity_claim_attempts_total[5m]))",
+          "legendFormat": "conflict ratio"
+        }
+      ]
+    }
+  ]
+}

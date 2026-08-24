@@ -38,6 +38,23 @@ spec:
             # `5-10` (this host crashed at startup with "Set Redis:ConnectionString").
             - name: Redis__ConnectionString
               value: "redis:6379"
+            # `7-03`: same finding as ago-chat-api's own comment - S3StorageOptions/
+            # WebhookSecretCipherOptions are validated for every host, and this manifest never carried
+            # them. Pre-existing gap since `5-02`/`6-05`, fixed here only because a healthy pod is this
+            # item's own Done-when bar.
+            - name: Storage__S3__ServiceUrl
+              value: "http://minio:9000"
+            - name: Storage__S3__AccessKey
+              value: "$(MINIO_ROOT_USER)"
+            - name: Storage__S3__SecretKey
+              value: "$(MINIO_ROOT_PASSWORD)"
+            - name: Storage__S3__Bucket
+              value: "attachments"
+            - name: Webhooks__SecretEncryptionKey
+              value: "Vg1G2KjonUB1uH8trETJzr30EPoeqt0YRGzYibDKy1o="
+            # `7-03`: same requirement as ago-chat-api - see the comment there.
+            - name: Otel__Exporter__Endpoint
+              value: "http://jaeger:4317"
           resources:
             requests:
               memory: 128Mi

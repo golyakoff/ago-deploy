@@ -56,6 +56,31 @@ spec:
             # Service, not the docker-compose loop's localhost:8081 (local-dev.md).
             - name: Auth__Keycloak__Authority
               value: "http://keycloak:8080/realms/ago-chat"
+            # `7-03`: found while verifying this item's own Done-when live - S3StorageOptions is
+            # validated at startup for every host now (not just Api), and this manifest never carried
+            # it, so this pod crash-looped the moment a fresh image reached ValidateOnStart. Pre-existing
+            # gap since `5-02`, unrelated to 7-01/7-02/7-03's own scope - fixed here only because a
+            # healthy pod is this item's own Done-when bar. Same values appsettings.Development.json's
+            # fast-loop config already uses, minio.yaml's own Service instead of localhost.
+            - name: Storage__S3__ServiceUrl
+              value: "http://minio:9000"
+            - name: Storage__S3__AccessKey
+              value: "$(MINIO_ROOT_USER)"
+            - name: Storage__S3__SecretKey
+              value: "$(MINIO_ROOT_PASSWORD)"
+            - name: Storage__S3__Bucket
+              value: "attachments"
+            # `7-03`: same finding as above - WebhookSecretCipherOptions is bound and validated for
+            # every host (ChatModule.ConfigureServices), not only Ago.Chat.Webhooks. Same throwaway
+            # local dev value appsettings.Development.json already commits in plain text.
+            - name: Webhooks__SecretEncryptionKey
+              value: "Vg1G2KjonUB1uH8trETJzr30EPoeqt0YRGzYibDKy1o="
+            # `7-03`: PlatformObservabilityOptions.Exporter.Endpoint is [Required] - AddPlatformObservability
+            # (7-01/7-02) fails ValidateOnStart without it, and appsettings.json carries no default (only
+            # appsettings.Development.json does, for the fast loop). jaeger.yaml's own Service, not the
+            # compose loop's localhost:4317 (adr/0025: every host exports OTLP directly here, no collector).
+            - name: Otel__Exporter__Endpoint
+              value: "http://jaeger:4317"
           resources:
             requests:
               memory: 128Mi

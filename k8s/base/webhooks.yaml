@@ -18,6 +18,44 @@ spec:
           image: ago-chat-webhooks:local
           ports:
             - containerPort: 8080
+          # `7-03`: found while verifying this item's own Done-when live - this container previously had
+          # no env/envFrom block at all, so ChatModule.ConfigureServices (AGO_CHAT_CONNECTION_STRING,
+          # Messaging:RabbitMq, Redis:ConnectionString - all required for every host, api.yaml/
+          # worker.yaml's own comments have the detail) and WebhookSecretCipherOptions
+          # (Webhooks:SecretEncryptionKey) would fail ValidateOnStart and crash-loop the pod before ever
+          # reaching a healthz endpoint. Pre-existing gap, unrelated to 7-01/7-02/7-03's own scope -
+          # fixed here only because a healthy Webhooks pod is this item's own Done-when bar (Prometheus's
+          # targets page showing all three Ago.Chat.* hosts). Same values worker.yaml already uses.
+          envFrom:
+            - secretRef:
+                name: infra-credentials
+          env:
+            - name: AGO_CHAT_CONNECTION_STRING
+              value: "Host=postgres;Port=5432;Database=$(POSTGRES_DB);Username=$(POSTGRES_USER);Password=$(POSTGRES_PASSWORD)"
+            - name: Messaging__RabbitMq__HostName
+              value: "rabbitmq"
+            - name: Messaging__RabbitMq__UserName
+              value: "$(RABBITMQ_USER)"
+            - name: Messaging__RabbitMq__Password
+              value: "$(RABBITMQ_PASSWORD)"
+            - name: Redis__ConnectionString
+              value: "redis:6379"
+            - name: Storage__S3__ServiceUrl
+              value: "http://minio:9000"
+            - name: Storage__S3__AccessKey
+              value: "$(MINIO_ROOT_USER)"
+            - name: Storage__S3__SecretKey
+              value: "$(MINIO_ROOT_PASSWORD)"
+            - name: Storage__S3__Bucket
+              value: "attachments"
+            # Same throwaway local dev value appsettings.Development.json already commits in plain text
+            # for the fast loop (Ago.Chat.Webhooks/appsettings.Development.json) - not a real secret,
+            # following that file's own existing precedent rather than inventing a second pattern here.
+            - name: Webhooks__SecretEncryptionKey
+              value: "Vg1G2KjonUB1uH8trETJzr30EPoeqt0YRGzYibDKy1o="
+            # `7-03`: same requirement as ago-chat-api - see that manifest's own comment.
+            - name: Otel__Exporter__Endpoint
+              value: "http://jaeger:4317"
           resources:
             requests:
               memory: 128Mi

@@ -1,0 +1,26 @@
+# `7-03`: Grafana's own provisioning format (https://grafana.com/docs/grafana/latest/administration/provisioning/#datasources)
+# - checked in, not hand-clicked, per this item's own scope. One file, both loops, same "lives in
+# k8s/base/, compose reaches up into it" convention as keycloak-realm-import.json and
+# prometheus-scrape-config.yml in this same directory. Service names below (`prometheus`, `jaeger`)
+# resolve identically in both loops: docker-compose's own DNS (service name = hostname on the compose
+# network) and k8s Service DNS both resolve a bare service name within the same network/namespace.
+apiVersion: 1
+
+datasources:
+  # Explicit uid: the five dashboard JSON files (grafana-dashboard-*.json) reference this fixed id
+  # rather than "whatever the default datasource happens to be" - provisioning assigns a random uid
+  # otherwise, which would silently break every panel's datasource reference on a re-provision.
+  - name: Prometheus
+    uid: prometheus
+    type: prometheus
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: true
+    editable: false
+
+  - name: Jaeger
+    uid: jaeger
+    type: jaeger
+    access: proxy
+    url: http://jaeger:16686
+    editable: false

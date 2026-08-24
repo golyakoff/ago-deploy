@@ -1,0 +1,45 @@
+{
+  "title": "AGO Chat / Cache",
+  "uid": "ago-chat-cache",
+  "tags": ["ago-chat", "7-03"],
+  "timezone": "utc",
+  "schemaVersion": 39,
+  "version": 1,
+  "editable": false,
+  "time": { "from": "now-1h", "to": "now" },
+  "panels": [
+    {
+      "id": 1,
+      "title": "Cache hit ratio, by namespace",
+      "description": "nfr.md: cache hit ratio per key namespace. A query-time ratio over raw hit/miss counts, not a pre-divided instrument - caching.md's own namespace convention (key = {namespace}:{id}). ago.platform.caching.redis.cache_access (7-02, Ago.Platform.Caching.Redis).",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "percentunit", "max": 1, "min": 0 }, "overrides": [] },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "sum(rate(ago_platform_caching_redis_cache_access_total{outcome=\"hit\"}[5m])) by (namespace) / sum(rate(ago_platform_caching_redis_cache_access_total[5m])) by (namespace)",
+          "legendFormat": "{{namespace}}"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "title": "Cache access rate, by namespace and outcome",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "reqps" }, "overrides": [] },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "sum(rate(ago_platform_caching_redis_cache_access_total[5m])) by (namespace, outcome)",
+          "legendFormat": "{{namespace}} ({{outcome}})"
+        }
+      ]
+    }
+  ]
+}

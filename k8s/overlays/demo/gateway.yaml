@@ -261,3 +261,51 @@ spec:
   # Same reasoning as overlays/local/gateway.yaml (edge.md): least_conn, not round-robin, for
   # long-lived WebSocket connections.
   loadBalancingMethod: least_conn
+---
+# edge.md's own "What the edge is responsible for" names both of these ("coarse, cluster-protecting
+# rate limits and connection caps per IP", "request size ceilings") as the edge's job - true as
+# design intent since that doc was written, but never actually implemented until now. Found live:
+# with the demo publicly reachable, a raw request flood or an oversized body never even reaches an
+# application-level limiter (those only fire on specific operations - message-send, attachment-create,
+# visitor-session-create - not on every request), so nothing between the internet and the cluster was
+# actually enforcing either claim. Demo-overlay-only, not base/ or overlays/local - a local
+# Docker-Desktop cluster has no real attacker on the other side of it to defend against.
+apiVersion: gateway.nginx.org/v1alpha1
+kind: ClientSettingsPolicy
+metadata:
+  name: ago-chat-gateway-body-size
+spec:
+  targetRef:
+    group: gateway.networking.k8s.io
+    kind: Gateway
+    name: ago-chat-gateway
+  body:
+    # Every real JSON body this API accepts is small (a message, a visitor-session request, a
+    # presign request) - attachment *bytes* never flow through here at all (adr/0008, presigned
+    # direct-to-storage uploads). 1Mi is generous headroom for the former and irrelevant to the
+    # latter; anything larger than that hitting this Gateway is not a request this API was ever
+    # going to accept anyway.
+    maxSize: "1m"
+---
+apiVersion: gateway.nginx.org/v1alpha1
+kind: RateLimitPolicy
+metadata:
+  name: ago-chat-gateway-per-ip
+spec:
+  targetRefs:
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+      name: ago-chat-gateway
+  rateLimit:
+    local:
+      rules:
+        # A coarse, per-IP backstop against a raw request flood - deliberately looser than any
+        # single application-level limiter (MessageSendRateLimitOptions etc., caching.md), since
+        # this fires on *every* request to *every* route (including the static demo pages and
+        # Grafana), not just the specific operations those limiters guard. $binary_remote_addr,
+        # not $remote_addr - the binary form keys nginx's shared-memory zone by fewer bytes per
+        # entry, the documented reason to prefer it for this exact use.
+        - key: "$binary_remote_addr"
+          rate: "30r/s"
+          burst: 60
+          zoneSize: "10m"

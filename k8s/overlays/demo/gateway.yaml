@@ -1,0 +1,143 @@
+# adr/0026: the public edge for chat.ago.golyakov.net, auth.ago.golyakov.net, and
+# console.ago.golyakov.net. Same NGINX Gateway Fabric component as overlays/local/ (adr/0014) - only
+# the listeners, hostnames, and TLS wiring differ. demo-shop1/demo-shop2.ago.golyakov.net are not
+# routed here: they have no backend yet (adr/0026's subdomain table - that is 8-02's own work), and an
+# HTTPRoute with no real Service behind it would only be a route this item could not honestly claim
+# was verified.
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: ago-chat-gateway
+spec:
+  gatewayClassName: nginx
+  listeners:
+    # Plain HTTP stays open on every host in this overlay - cert-manager's own gatewayHTTPRoute ACME
+    # solver (adr/0026, tls.yaml) answers Let's Encrypt's HTTP-01 challenge through a temporary
+    # HTTPRoute it creates itself under this same Gateway, and it needs a working :80 listener to do
+    # that. Left un-redirected deliberately: a permanent HTTP->HTTPS redirect is a real, small
+    # addition (Gateway API's RequestRedirect HTTPRoute filter) but this item has no live server to
+    # verify it against, and an unverified redirect rule is worse than an honestly-absent one.
+    - name: http
+      port: 80
+      protocol: HTTP
+      hostname: "*.ago.golyakov.net"
+    - name: https-chat
+      port: 443
+      protocol: HTTPS
+      hostname: chat.ago.golyakov.net
+      tls:
+        mode: Terminate
+        certificateRefs:
+          - name: ago-public-tls
+    - name: https-auth
+      port: 443
+      protocol: HTTPS
+      hostname: auth.ago.golyakov.net
+      tls:
+        mode: Terminate
+        certificateRefs:
+          - name: ago-public-tls
+    # console's own Service does not exist yet (8-02) - the listener and route below are designed now
+    # so 8-02 does not have to touch this layer, per the backlog item's own scope note. Applying this
+    # overlay before 8-02 lands leaves this route permanently un-servable (NGF accepts the HTTPRoute,
+    # backendRef resolution just never succeeds) rather than failing kustomize/kubectl apply itself -
+    # HTTPRoute does not validate that its backendRef Service exists at admission time.
+    - name: https-console
+      port: 443
+      protocol: HTTPS
+      hostname: console.ago.golyakov.net
+      tls:
+        mode: Terminate
+        certificateRefs:
+          - name: ago-public-tls
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: ago-chat-api
+spec:
+  parentRefs:
+    - name: ago-chat-gateway
+      sectionName: https-chat
+  hostnames:
+    - chat.ago.golyakov.net
+  rules:
+    # Same three prefixes as overlays/local/gateway.yaml - unchanged by the public/TLS shift, only the
+    # hostname and parent listener differ.
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /healthz
+      backendRefs:
+        - name: ago-chat-api
+          port: 80
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /api
+      backendRefs:
+        - name: ago-chat-api
+          port: 80
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /hubs
+      backendRefs:
+        - name: ago-chat-api
+          port: 80
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: ago-chat-auth
+spec:
+  parentRefs:
+    - name: ago-chat-gateway
+      sectionName: https-auth
+  hostnames:
+    - auth.ago.golyakov.net
+  rules:
+    # The whole app, not a path prefix - Keycloak owns this entire hostname (its login UI, its
+    # admin console, its OIDC discovery/JWKS/token endpoints all live under one root here).
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+      backendRefs:
+        - name: keycloak
+          port: 8080
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: ago-console
+spec:
+  parentRefs:
+    - name: ago-chat-gateway
+      sectionName: https-console
+  hostnames:
+    - console.ago.golyakov.net
+  rules:
+    # 8-02's own Service - designed here, created there. Port 80 assumed (matching every other
+    # Service in this overlay's own convention, base/*.yaml), not verified against 8-02's actual
+    # manifest since it does not exist yet.
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+      backendRefs:
+        - name: ago-console
+          port: 80
+---
+apiVersion: gateway.nginx.org/v1alpha1
+kind: UpstreamSettingsPolicy
+metadata:
+  name: ago-chat-api-least-conn
+spec:
+  targetRefs:
+    - group: core
+      kind: Service
+      name: ago-chat-api
+  # Same reasoning as overlays/local/gateway.yaml (edge.md): least_conn, not round-robin, for
+  # long-lived WebSocket connections.
+  loadBalancingMethod: least_conn

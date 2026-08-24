@@ -1,0 +1,44 @@
+# adr/0026: cert-manager + Let's Encrypt, HTTP-01 challenge via the Gateway API (no Ingress resource,
+# no DNS-provider credential). cert-manager itself is cluster infrastructure, installed once per
+# cluster the same way NGINX Gateway Fabric is (runbooks/public-deploy.md) - not a resource this
+# overlay's own kustomization.yaml creates, only consumes.
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: letsencrypt-prod
+spec:
+  acme:
+    server: https://acme-v02.api.letsencrypt.org/directory
+    # Placeholder - replace with a real, reachable address before applying (Let's Encrypt sends
+    # certificate-expiry notices here). Never the author's own personal inbox committed to a public
+    # repository (architecture/repositories.md - "no personal or employer data") - an address under
+    # the domain already being deployed here is the natural choice, but this file intentionally ships
+    # with a placeholder, not a real one, exactly like every other credential-shaped value in this
+    # overlay.
+    email: letsencrypt-admin@golyakov.net
+    privateKeySecretRef:
+      name: letsencrypt-prod-account-key
+    solvers:
+      - http01:
+          gatewayHTTPRoute:
+            parentRefs:
+              - name: ago-chat-gateway
+                namespace: ago-chat
+                kind: Gateway
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: ago-public-tls
+spec:
+  # One cert for all three public hostnames - fewer moving parts than one Certificate per host, and
+  # Let's Encrypt's own rate limits (certificates per registered domain per week) are friendlier to a
+  # single multi-SAN cert than three separate ones for a domain this size.
+  secretName: ago-public-tls
+  issuerRef:
+    name: letsencrypt-prod
+    kind: ClusterIssuer
+  dnsNames:
+    - chat.ago.golyakov.net
+    - auth.ago.golyakov.net
+    - console.ago.golyakov.net

@@ -50,18 +50,28 @@ spec:
             limits:
               memory: 1Gi
               cpu: 1000m
+          # Real deadline found live (2026-08-24): Keycloak's first-ever boot on a fresh filesystem
+          # does Quarkus's own build-time augmentation (~23s, measured live), then a Liquibase schema
+          # migration, then --import-realm - well past this probe's original 20s liveness delay, so
+          # Kubernetes killed the pod mid-startup on every attempt (exit 143/SIGTERM, not an internal
+          # crash) before it ever finished. A long-running local-dev pod never re-exercised this path
+          # (it boots once and stays up for weeks), so the gap was never hit until a real fresh-cluster
+          # first boot. Generous initial delays and a wider liveness failureThreshold - a slow first
+          # boot is a one-time cost, not a reason to also make every steady-state health check laxer
+          # (periodSeconds stays the same once past the initial delay).
           readinessProbe:
             httpGet:
               path: /health/ready
               port: 9000
-            initialDelaySeconds: 15
+            initialDelaySeconds: 60
             periodSeconds: 5
           livenessProbe:
             httpGet:
               path: /health/live
               port: 9000
-            initialDelaySeconds: 20
+            initialDelaySeconds: 90
             periodSeconds: 10
+            failureThreshold: 6
       volumes:
         - name: realm-import
           configMap:

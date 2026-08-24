@@ -1,13 +1,18 @@
-# adr/0026: the public edge for chat.reserve-me.ru, auth.reserve-me.ru, console.reserve-me.ru, and
-# grafana.reserve-me.ru. Same NGINX Gateway Fabric component as overlays/local/ (adr/0014) - only
-# the listeners, hostnames, and TLS wiring differ. demo-shop1/demo-shop2.reserve-me.ru are not
-# routed here: they have no backend yet (adr/0026's subdomain table - that is 8-02's own work), and an
-# HTTPRoute with no real Service behind it would only be a route this item could not honestly claim
-# was verified. grafana.reserve-me.ru is different - `grafana` (k8s/base/grafana.yaml, `7-03`) is a
-# real, already-deployed Service, so this route is real and verifiable, not speculative like
+# adr/0026: the public edge for chat.reserve-me.ru, auth.reserve-me.ru, console.reserve-me.ru,
+# grafana.reserve-me.ru, and (as of 8-02) demo-shop1.reserve-me.ru. Same NGINX Gateway Fabric
+# component as overlays/local/ (adr/0014) - only the listeners, hostnames, and TLS wiring differ.
+# demo-shop2.reserve-me.ru stays unrouted here: it has no backend (adr/0026's subdomain table names
+# it reserved, not built - 8-02's own scope note declines building a second demo tenant/page), and
+# an HTTPRoute with no real Service behind it would only be a route this item could not honestly
+# claim was verified. grafana.reserve-me.ru is different - `grafana` (k8s/base/grafana.yaml, `7-03`)
+# is a real, already-deployed Service, so this route is real and verifiable, not speculative like
 # console's own entry below. Author's own call (2026-08-24): public Grafana over an SSH tunnel, for
 # reachability without a live session - gated by Grafana's own login (GRAFANA_ADMIN_PASSWORD, a real
 # generated secret, not the local overlay's throwaway value) plus TLS, not by network topology alone.
+#
+# console.reserve-me.ru's own listener/HTTPRoute below were designed by 8-01 ahead of this item -
+# 8-02 only had to create the `ago-console` Service (console-static.yaml) the existing backendRef
+# already names; nothing in this file needed to change for that route to start working.
 apiVersion: gateway.networking.k8s.io/v1
 kind: Gateway
 metadata:
@@ -41,11 +46,9 @@ spec:
         mode: Terminate
         certificateRefs:
           - name: ago-public-tls
-    # console's own Service does not exist yet (8-02) - the listener and route below are designed now
-    # so 8-02 does not have to touch this layer, per the backlog item's own scope note. Applying this
-    # overlay before 8-02 lands leaves this route permanently un-servable (NGF accepts the HTTPRoute,
-    # backendRef resolution just never succeeds) rather than failing kustomize/kubectl apply itself -
-    # HTTPRoute does not validate that its backendRef Service exists at admission time.
+    # console-static.yaml (8-02) creates the ago-console Service this listener's own HTTPRoute
+    # (below) already names as its backendRef - designed by 8-01 ahead of the Service actually
+    # existing, now real and servable end to end.
     - name: https-console
       port: 443
       protocol: HTTPS
@@ -58,6 +61,18 @@ spec:
       port: 443
       protocol: HTTPS
       hostname: grafana.reserve-me.ru
+      tls:
+        mode: Terminate
+        certificateRefs:
+          - name: ago-public-tls
+    # 8-02: demo-shop1-static.yaml creates the ago-demo-shop1 Service this route's own backendRef
+    # names - the public demo landing page + the widget's own built bundle, served together
+    # (demo-shop1-static.yaml's own header comment has the same-origin reasoning).
+    # demo-shop2.reserve-me.ru stays unrouted (adr/0026: reserved, not this item's own scope).
+    - name: https-demo-shop1
+      port: 443
+      protocol: HTTPS
+      hostname: demo-shop1.reserve-me.ru
       tls:
         mode: Terminate
         certificateRefs:
@@ -130,15 +145,35 @@ spec:
   hostnames:
     - console.reserve-me.ru
   rules:
-    # 8-02's own Service - designed here, created there. Port 80 assumed (matching every other
-    # Service in this overlay's own convention, base/*.yaml), not verified against 8-02's actual
-    # manifest since it does not exist yet.
+    # ago-console Service: console-static.yaml (8-02), port 80 matching every other Service in
+    # this overlay's own convention (base/*.yaml).
     - matches:
         - path:
             type: PathPrefix
             value: /
       backendRefs:
         - name: ago-console
+          port: 80
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: ago-demo-shop1
+spec:
+  parentRefs:
+    - name: ago-chat-gateway
+      sectionName: https-demo-shop1
+  hostnames:
+    - demo-shop1.reserve-me.ru
+  rules:
+    # ago-demo-shop1 Service: demo-shop1-static.yaml (8-02) - the whole app, not a path prefix,
+    # same shape as ago-console above (a single static site, no API path split needed here).
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+      backendRefs:
+        - name: ago-demo-shop1
           port: 80
 ---
 apiVersion: gateway.networking.k8s.io/v1

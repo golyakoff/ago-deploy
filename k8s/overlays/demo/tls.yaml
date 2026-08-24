@@ -31,9 +31,12 @@ kind: Certificate
 metadata:
   name: ago-public-tls
 spec:
-  # One cert for all four public hostnames - fewer moving parts than one Certificate per host, and
-  # Let's Encrypt's own rate limits (certificates per registered domain per week) are friendlier to a
-  # single multi-SAN cert than separate ones for a domain this size.
+  # One cert for all five public hostnames (as of 8-02: chat/auth/console/grafana plus
+  # demo-shop1) - fewer moving parts than one Certificate per host, and Let's Encrypt's own rate
+  # limits (certificates per registered domain per week) are friendlier to a single multi-SAN cert
+  # than separate ones for a domain this size. Re-applying this file adds one more SAN to the
+  # existing certificate (cert-manager re-issues in place); it does not need a from-scratch replay
+  # of every HTTP-01 challenge that already passed for the other four hostnames.
   secretName: ago-public-tls
   issuerRef:
     name: letsencrypt-prod
@@ -43,3 +46,4 @@ spec:
     - auth.reserve-me.ru
     - console.reserve-me.ru
     - grafana.reserve-me.ru
+    - demo-shop1.reserve-me.ru

@@ -1,0 +1,59 @@
+# 8-02: the public demo landing page + the widget's own built bundle, served together from one
+# origin (demo-shop1.reserve-me.ru) - the demo page's <script src="./ago-chat.js" ...> tag depends
+# on both being same-origin, which this single Deployment/Service/image guarantees by construction
+# rather than by convention. demo-shop2.reserve-me.ru stays unrouted (reserved DNS only,
+# adr/0026) - no Deployment/Service/HTTPRoute for it here, matching this item's own scope.
+#
+# Demo-overlay-only, not k8s/base/ - same reasoning as console-static.yaml: nothing in
+# overlays/local ever serves this over a cluster Service, `ago-widget`'s own local-dev.md flow
+# (`npx serve`) already covers the local loop entirely outside Kubernetes.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ago-demo-shop1
+spec:
+  replicas: 1 # same reasoning as ago-console above - a static bundle behind nginx, no state to scale for
+  selector:
+    matchLabels:
+      app: ago-demo-shop1
+  template:
+    metadata:
+      labels:
+        app: ago-demo-shop1
+    spec:
+      containers:
+        - name: ago-demo-shop1
+          image: ago-demo-shop1:local
+          # adr/0026's "no registry" image delivery, same as console-static.yaml above -
+          # k8s/build-static-images.sh builds and imports this tag directly on the VPS.
+          imagePullPolicy: Never
+          ports:
+            - containerPort: 80
+          resources:
+            requests:
+              memory: 32Mi
+              cpu: 25m
+            limits:
+              memory: 64Mi
+              cpu: 100m
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 80
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 80
+            periodSeconds: 10
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ago-demo-shop1
+spec:
+  selector:
+    app: ago-demo-shop1
+  ports:
+    - port: 80
+      targetPort: 80

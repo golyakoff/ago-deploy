@@ -1,0 +1,65 @@
+# 8-02: the ago-console static bundle, behind the Gateway's already-existing
+# console.reserve-me.ru HTTPRoute (gateway.yaml, designed ahead of this file by 8-01 - its own
+# comment says "the Service and bundle are 8-02's job"). This Service's name/port (ago-console:80)
+# match that route's backendRef exactly, so no change to gateway.yaml is needed to wire it up.
+#
+# Demo-overlay-only, not k8s/base/ - local dev never runs this in a cluster (local-dev.md's
+# "Running the console locally" section already serves it with a plain `npm run dev`), so there is
+# no overlays/local counterpart this would need to stay consistent with, unlike the shared
+# Ago.Chat.* Deployments in base/.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ago-console
+spec:
+  replicas: 1 # a static bundle behind nginx - no state, no reason to scale this demo cluster's own dashboard-equivalent beyond one pod
+  selector:
+    matchLabels:
+      app: ago-console
+  template:
+    metadata:
+      labels:
+        app: ago-console
+    spec:
+      containers:
+        - name: ago-console
+          image: ago-console:local
+          # adr/0026's "no registry" image delivery: built directly on the VPS and imported into
+          # k3s's own containerd (k8s/build-static-images.sh) - same imagePullPolicy: Never
+          # reasoning as the three ago-chat-* Deployments (overlays/demo/kustomization.yaml's own
+          # patches), set directly here rather than through a patch since this Deployment has no
+          # overlays/local counterpart to patch from a shared base/.
+          imagePullPolicy: Never
+          ports:
+            - containerPort: 80
+          resources:
+            # Static nginx serving a ~370KB bundle - a small, fixed footprint, nowhere near
+            # api.yaml's own budget (adr/0026's sizing math already accounts for "a lightweight
+            # server, tens of MB, not hundreds").
+            requests:
+              memory: 32Mi
+              cpu: 25m
+            limits:
+              memory: 64Mi
+              cpu: 100m
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 80
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 80
+            periodSeconds: 10
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ago-console
+spec:
+  selector:
+    app: ago-console
+  ports:
+    - port: 80
+      targetPort: 80

@@ -1,8 +1,9 @@
 # 8-02: the public demo landing page + the widget's own built bundle, served together from one
 # origin (demo-shop1.reserve-me.ru) - the demo page's <script src="./ago-chat.js" ...> tag depends
 # on both being same-origin, which this single Deployment/Service/image guarantees by construction
-# rather than by convention. demo-shop2.reserve-me.ru stays unrouted (reserved DNS only,
-# adr/0026) - no Deployment/Service/HTTPRoute for it here, matching this item's own scope.
+# rather than by convention. demo-shop2-static.yaml is a second, independent copy of this same
+# shape (own image tag, own site) - deliberately not parameterized into one shared template, since
+# a second literal file is what a reader compares against this one to see exactly what differs.
 #
 # Demo-overlay-only, not k8s/base/ - same reasoning as console-static.yaml: nothing in
 # overlays/local ever serves this over a cluster Service, `ago-widget`'s own local-dev.md flow

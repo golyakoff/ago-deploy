@@ -1,6 +1,6 @@
-# adr/0026: the public edge for chat.ago.golyakov.net, auth.ago.golyakov.net, and
-# console.ago.golyakov.net. Same NGINX Gateway Fabric component as overlays/local/ (adr/0014) - only
-# the listeners, hostnames, and TLS wiring differ. demo-shop1/demo-shop2.ago.golyakov.net are not
+# adr/0026: the public edge for chat.reserve-me.ru, auth.reserve-me.ru, and
+# console.reserve-me.ru. Same NGINX Gateway Fabric component as overlays/local/ (adr/0014) - only
+# the listeners, hostnames, and TLS wiring differ. demo-shop1/demo-shop2.reserve-me.ru are not
 # routed here: they have no backend yet (adr/0026's subdomain table - that is 8-02's own work), and an
 # HTTPRoute with no real Service behind it would only be a route this item could not honestly claim
 # was verified.
@@ -20,11 +20,11 @@ spec:
     - name: http
       port: 80
       protocol: HTTP
-      hostname: "*.ago.golyakov.net"
+      hostname: "*.reserve-me.ru"
     - name: https-chat
       port: 443
       protocol: HTTPS
-      hostname: chat.ago.golyakov.net
+      hostname: chat.reserve-me.ru
       tls:
         mode: Terminate
         certificateRefs:
@@ -32,7 +32,7 @@ spec:
     - name: https-auth
       port: 443
       protocol: HTTPS
-      hostname: auth.ago.golyakov.net
+      hostname: auth.reserve-me.ru
       tls:
         mode: Terminate
         certificateRefs:
@@ -45,7 +45,7 @@ spec:
     - name: https-console
       port: 443
       protocol: HTTPS
-      hostname: console.ago.golyakov.net
+      hostname: console.reserve-me.ru
       tls:
         mode: Terminate
         certificateRefs:
@@ -60,7 +60,7 @@ spec:
     - name: ago-chat-gateway
       sectionName: https-chat
   hostnames:
-    - chat.ago.golyakov.net
+    - chat.reserve-me.ru
   rules:
     # Same three prefixes as overlays/local/gateway.yaml - unchanged by the public/TLS shift, only the
     # hostname and parent listener differ.
@@ -95,7 +95,7 @@ spec:
     - name: ago-chat-gateway
       sectionName: https-auth
   hostnames:
-    - auth.ago.golyakov.net
+    - auth.reserve-me.ru
   rules:
     # The whole app, not a path prefix - Keycloak owns this entire hostname (its login UI, its
     # admin console, its OIDC discovery/JWKS/token endpoints all live under one root here).
@@ -116,7 +116,7 @@ spec:
     - name: ago-chat-gateway
       sectionName: https-console
   hostnames:
-    - console.ago.golyakov.net
+    - console.reserve-me.ru
   rules:
     # 8-02's own Service - designed here, created there. Port 80 assumed (matching every other
     # Service in this overlay's own convention, base/*.yaml), not verified against 8-02's actual

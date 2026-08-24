@@ -29,7 +29,7 @@ patches:
         value: Never
       # adr/0026: Auth__Keycloak__Authority must be the *public* issuer - the Operator JWT scheme
       # validates a token's iss claim by exact string match (5-05's own documented gotcha), and a
-      # console login (8-02, Authorization Code + PKCE) mints tokens against auth.ago.golyakov.net,
+      # console login (8-02, Authorization Code + PKCE) mints tokens against auth.reserve-me.ru,
       # not the internal `keycloak` Service base/api.yaml points at. Index 6 in base/api.yaml's own
       # env list as of this change - a JSON6902 index patch is fragile against reordering that list;
       # kustomize's strategic-merge patching does not merge corev1.EnvVar lists by name (only
@@ -38,7 +38,7 @@ patches:
       # future change reorders base/api.yaml's env list, this index must be updated to match.
       - op: replace
         path: /spec/template/spec/containers/0/env/6/value
-        value: "https://auth.ago.golyakov.net/realms/ago-chat"
+        value: "https://auth.reserve-me.ru/realms/ago-chat"
   - target:
       kind: Deployment
       name: ago-chat-worker
@@ -65,7 +65,7 @@ patches:
       # Service name. Publicly, NGINX Gateway Fabric terminates TLS in front of it and forwards plain
       # HTTP - without --hostname and --proxy-headers, Keycloak would build its own issuer/redirect
       # URLs from the internal http://keycloak:8080 request it actually receives, not
-      # https://auth.ago.golyakov.net, breaking both the Operator JWT iss-claim check (5-05) and the
+      # https://auth.reserve-me.ru, breaking both the Operator JWT iss-claim check (5-05) and the
       # console's own redirect (8-02). --http-enabled=true is required because Keycloak's own
       # production-mode default (start-dev inherits some of this) refuses plain HTTP once a public
       # --hostname is set, unless told explicitly that TLS is handled upstream. Kept on `start-dev`
@@ -78,7 +78,7 @@ patches:
           - "start-dev"
           - "--import-realm"
           - "--health-enabled=true"
-          - "--hostname=https://auth.ago.golyakov.net"
+          - "--hostname=https://auth.reserve-me.ru"
           - "--hostname-strict=false"
           - "--proxy-headers=xforwarded"
           - "--http-enabled=true"

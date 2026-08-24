@@ -1,0 +1,56 @@
+# The public marketing page at reserve-me.ru's own apex - `ago-landing`, a separate repository
+# from `ago-console`/`ago-widget` (repositories.md: "each deployable surface gets its own repo" -
+# this page is the platform's own front door, not any one product's demo/console surface). Same
+# no-build-step static-file image shape as the other demo-overlay Deployments here.
+#
+# Demo-overlay-only, not k8s/base/ - the apex has no meaning in a local Docker-Desktop cluster.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ago-landing
+spec:
+  replicas: 1 # a static bundle behind nginx, no state to scale for - same reasoning as every other demo-overlay static site
+  selector:
+    matchLabels:
+      app: ago-landing
+  template:
+    metadata:
+      labels:
+        app: ago-landing
+    spec:
+      containers:
+        - name: ago-landing
+          image: ago-landing:local
+          # adr/0026's "no registry" image delivery, same as every other static bundle here -
+          # k8s/build-static-images.sh builds and imports this tag directly on the VPS.
+          imagePullPolicy: Never
+          ports:
+            - containerPort: 80
+          resources:
+            requests:
+              memory: 32Mi
+              cpu: 25m
+            limits:
+              memory: 64Mi
+              cpu: 100m
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 80
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 80
+            periodSeconds: 10
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ago-landing
+spec:
+  selector:
+    app: ago-landing
+  ports:
+    - port: 80
+      targetPort: 80

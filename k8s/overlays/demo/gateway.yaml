@@ -1,10 +1,12 @@
 # adr/0026: the public edge for chat.reserve-me.ru, auth.reserve-me.ru, console.reserve-me.ru,
-# grafana.reserve-me.ru, and (as of 8-02) demo-shop1.reserve-me.ru/demo-shop2.reserve-me.ru - a
-# second, independent tenant seeded specifically to demonstrate tenant isolation live (its own site
-# row, its own operator, its own Keycloak login - `ago-deploy/seed`'s own remarks). Same NGINX
-# Gateway Fabric component as overlays/local/ (adr/0014) - only the listeners, hostnames, and TLS
-# wiring differ. grafana.reserve-me.ru is different from the two demo-shop hosts - `grafana`
-# (k8s/base/grafana.yaml, `7-03`)
+# grafana.reserve-me.ru, demo-shop1.reserve-me.ru/demo-shop2.reserve-me.ru (`8-02`/`8-05` - a
+# second, independent tenant seeded specifically to demonstrate tenant isolation live), and the
+# domain's own apex, reserve-me.ru (the public marketing page, `ago-landing` - a separate
+# repository, repositories.md's "each deployable surface gets its own repo" pattern; a Gateway API
+# wildcard hostname matches subdomains only, never the bare apex, hence its own listener pair rather
+# than a route on the wildcard ones). Same NGINX Gateway Fabric component as overlays/local/
+# (adr/0014) - only the listeners, hostnames, and TLS wiring differ. grafana.reserve-me.ru is
+# different from the two demo-shop hosts - `grafana` (k8s/base/grafana.yaml, `7-03`)
 # is a real, already-deployed Service, so this route is real and verifiable, not speculative like
 # console's own entry below. Author's own call (2026-08-24): public Grafana over an SSH tunnel, for
 # reachability without a live session - gated by Grafana's own login (GRAFANA_ADMIN_PASSWORD, a real
@@ -29,6 +31,13 @@ spec:
       port: 80
       protocol: HTTP
       hostname: "*.reserve-me.ru"
+    # A Gateway API wildcard hostname (`*.reserve-me.ru` above) matches subdomains only, never the
+    # bare apex - the landing page (ago-landing) lives at the apex itself, so it needs its own
+    # listener pair (this one plus `https-landing` below), not just a route on the wildcard ones.
+    - name: http-apex
+      port: 80
+      protocol: HTTP
+      hostname: reserve-me.ru
     - name: https-chat
       port: 443
       protocol: HTTPS
@@ -85,6 +94,16 @@ spec:
         mode: Terminate
         certificateRefs:
           - name: ago-public-tls
+    # The public marketing page (ago-landing, a separate repository - repositories.md's "each
+    # deployable surface gets its own repo" pattern) at the domain's own apex.
+    - name: https-landing
+      port: 443
+      protocol: HTTPS
+      hostname: reserve-me.ru
+      tls:
+        mode: Terminate
+        certificateRefs:
+          - name: ago-public-tls
 ---
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
@@ -94,8 +113,11 @@ spec:
   parentRefs:
     - name: ago-chat-gateway
       sectionName: http
+    - name: ago-chat-gateway
+      sectionName: http-apex
   hostnames:
     - "*.reserve-me.ru"
+    - reserve-me.ru
   rules:
     # cert-manager's own ACME HTTP-01 solver attaches its own temporary HTTPRoute to this same
     # `http` listener with an *exact* hostname (the specific domain being challenged) and an exact
@@ -228,6 +250,27 @@ spec:
             value: /
       backendRefs:
         - name: ago-demo-shop2
+          port: 80
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: landing
+spec:
+  parentRefs:
+    - name: ago-chat-gateway
+      sectionName: https-landing
+  hostnames:
+    - reserve-me.ru
+  rules:
+    # ago-landing Service: landing-static.yaml - the whole app, not a path prefix, same shape as
+    # every other single-static-site route in this overlay.
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+      backendRefs:
+        - name: ago-landing
           port: 80
 ---
 apiVersion: gateway.networking.k8s.io/v1

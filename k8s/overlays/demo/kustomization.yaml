@@ -7,12 +7,13 @@ resources:
   - ../../base
   - gateway.yaml
   - tls.yaml
-  # 8-02: static-file-serving Deployments/Services for the console bundle and the widget's own
-  # public demo pages - demo-overlay-only, see each file's own header comment for why none of these
-  # belong in ../../base.
+  # 8-02: static-file-serving Deployments/Services for the console bundle, the widget's own public
+  # demo pages, and the public marketing page at the apex - demo-overlay-only, see each file's own
+  # header comment for why none of these belong in ../../base.
   - console-static.yaml
   - demo-shop1-static.yaml
   - demo-shop2-static.yaml
+  - landing-static.yaml
 
 # Same shape as overlays/local/kustomization.yaml's own secretGenerator - one Secret, real values
 # this time (adr/0026, .env.example's own header comment: these are NOT the local throwaway

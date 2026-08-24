@@ -1,0 +1,84 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: ago-chat
+
+resources:
+  - ../../base
+  - gateway.yaml
+  - tls.yaml
+
+# Same shape as overlays/local/kustomization.yaml's own secretGenerator - one Secret, real values
+# this time (adr/0026, .env.example's own header comment: these are NOT the local throwaway
+# passwords, generate fresh ones before copying .env.example to .env).
+secretGenerator:
+  - name: infra-credentials
+    envs: [.env]
+
+patches:
+  # adr/0026 "Image delivery": images are built directly on the VPS and imported into k3s's own
+  # containerd store (k3s ctr images import) - no registry exists for these tags on that node either,
+  # so imagePullPolicy: Never is copied verbatim from overlays/local/kustomization.yaml, same
+  # ErrImageNeverPull-not-a-silent-hang reasoning.
+  - target:
+      kind: Deployment
+      name: ago-chat-api
+    patch: |
+      - op: add
+        path: /spec/template/spec/containers/0/imagePullPolicy
+        value: Never
+      # adr/0026: Auth__Keycloak__Authority must be the *public* issuer - the Operator JWT scheme
+      # validates a token's iss claim by exact string match (5-05's own documented gotcha), and a
+      # console login (8-02, Authorization Code + PKCE) mints tokens against auth.ago.golyakov.net,
+      # not the internal `keycloak` Service base/api.yaml points at. Index 6 in base/api.yaml's own
+      # env list as of this change - a JSON6902 index patch is fragile against reordering that list;
+      # kustomize's strategic-merge patching does not merge corev1.EnvVar lists by name (only
+      # Containers/Volumes/Ports carry a patchMergeKey), so an index-based patch is the only option
+      # available, same as overlays/local/kustomization.yaml's own imagePullPolicy patch above. If a
+      # future change reorders base/api.yaml's env list, this index must be updated to match.
+      - op: replace
+        path: /spec/template/spec/containers/0/env/6/value
+        value: "https://auth.ago.golyakov.net/realms/ago-chat"
+  - target:
+      kind: Deployment
+      name: ago-chat-worker
+    patch: |
+      - op: add
+        path: /spec/template/spec/containers/0/imagePullPolicy
+        value: Never
+  - target:
+      kind: Deployment
+      name: ago-chat-webhooks
+    patch: |
+      - op: add
+        path: /spec/template/spec/containers/0/imagePullPolicy
+        value: Never
+  - target:
+      kind: Deployment
+      name: keycloak
+    patch: |
+      - op: add
+        path: /spec/template/spec/containers/0/imagePullPolicy
+        value: Never
+      # adr/0026: base/keycloak.yaml's args (start-dev --import-realm --health-enabled=true) are
+      # correct for a Keycloak that only ever sees requests addressed to localhost/the in-cluster
+      # Service name. Publicly, NGINX Gateway Fabric terminates TLS in front of it and forwards plain
+      # HTTP - without --hostname and --proxy-headers, Keycloak would build its own issuer/redirect
+      # URLs from the internal http://keycloak:8080 request it actually receives, not
+      # https://auth.ago.golyakov.net, breaking both the Operator JWT iss-claim check (5-05) and the
+      # console's own redirect (8-02). --http-enabled=true is required because Keycloak's own
+      # production-mode default (start-dev inherits some of this) refuses plain HTTP once a public
+      # --hostname is set, unless told explicitly that TLS is handled upstream. Kept on `start-dev`
+      # rather than switching to full production `start` mode - adr/0026's own "Consequences" section
+      # names this as a deliberate, stated gap (a demo IdP for one seeded operator), not a silent
+      # shortcut.
+      - op: replace
+        path: /spec/template/spec/containers/0/args
+        value:
+          - "start-dev"
+          - "--import-realm"
+          - "--health-enabled=true"
+          - "--hostname=https://auth.ago.golyakov.net"
+          - "--hostname-strict=false"
+          - "--proxy-headers=xforwarded"
+          - "--http-enabled=true"

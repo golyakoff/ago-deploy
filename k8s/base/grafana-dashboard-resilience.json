@@ -1,0 +1,79 @@
+{
+  "title": "AGO Chat / Resilience",
+  "uid": "ago-chat-resilience",
+  "tags": ["ago-chat", "7-03"],
+  "timezone": "utc",
+  "schemaVersion": 39,
+  "version": 1,
+  "editable": false,
+  "time": { "from": "now-1h", "to": "now" },
+  "panels": [
+    {
+      "id": 1,
+      "title": "Circuit breaker state, by pipeline",
+      "description": "1 for a named pipeline's current state, 0 otherwise, tagged pipeline/state (closed/open/half_open/isolated). ago.platform.resilience.circuit_breaker.state (7-02, Ago.Platform.Resilience).",
+      "type": "state-timeline",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "ago_platform_resilience_circuit_breaker_state == 1",
+          "legendFormat": "{{pipeline}}: {{state}}"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "title": "Bulkhead rejections, by pipeline",
+      "description": "Executions rejected because a named pipeline's concurrency limit and queue were both exhausted. ago.platform.resilience.bulkhead.rejections (7-02).",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "sum(rate(ago_platform_resilience_bulkhead_rejections_total[5m])) by (pipeline)",
+          "legendFormat": "{{pipeline}}"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "title": "DLQ count (cumulative), by event type",
+      "description": "nfr.md: DLQ count. Messages that exhausted retries and were dead-lettered. ago.platform.messaging.rabbitmq.dead_lettered (7-02) - the raw counter value, matching nfr.md's literal 'count' rather than a rate.",
+      "type": "stat",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "sum(ago_platform_messaging_rabbitmq_dead_lettered_total) by (event_type)",
+          "legendFormat": "{{event_type}}"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "title": "DLQ rate, by event type",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 16 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "sum(rate(ago_platform_messaging_rabbitmq_dead_lettered_total[5m])) by (event_type)",
+          "legendFormat": "{{event_type}}"
+        }
+      ]
+    }
+  ]
+}

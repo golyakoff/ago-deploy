@@ -13,13 +13,35 @@ resources:
   - api.yaml
   - worker.yaml
   - webhooks.yaml
+  - jaeger.yaml
+  - prometheus.yaml
+  - grafana.yaml
 
 # `5-05`/`adr/0022`: the demo realm lives inside this directory (keycloak-realm-import.json), not a
 # sibling `keycloak/` folder that would read more naturally - kustomize's configMapGenerator refuses a
 # files: source outside its own kustomization root (the same anti-path-traversal restriction the
 # local overlay's own secretGenerator comment already documents for .env). docker-compose.yml has no
 # such restriction and reaches up into this same file instead, so there is still exactly one copy.
+#
+# `7-03` follows the same shape for its own config files, checked into this directory rather than a
+# sibling `observability/` folder naming-and-structure.md does not name.
 configMapGenerator:
   - name: keycloak-realm-import
     files:
       - ago-chat-realm.json=keycloak-realm-import.json
+  - name: prometheus-config
+    files:
+      - prometheus.yml=prometheus-scrape-config.yml
+  - name: grafana-provisioning-datasources
+    files:
+      - datasources.yml=grafana-datasources.yml
+  - name: grafana-provisioning-dashboard-providers
+    files:
+      - dashboards.yml=grafana-dashboard-providers.yml
+  - name: grafana-dashboards
+    files:
+      - ingest-delivery.json=grafana-dashboard-ingest-delivery.json
+      - pipeline-internals.json=grafana-dashboard-pipeline-internals.json
+      - resilience.json=grafana-dashboard-resilience.json
+      - connections-assignment.json=grafana-dashboard-connections-assignment.json
+      - cache.json=grafana-dashboard-cache.json

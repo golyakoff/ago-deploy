@@ -1,0 +1,103 @@
+{
+  "title": "AGO Chat / Pipeline internals",
+  "uid": "ago-chat-pipeline-internals",
+  "tags": ["ago-chat", "7-03"],
+  "timezone": "utc",
+  "schemaVersion": 39,
+  "version": 1,
+  "editable": false,
+  "time": { "from": "now-1h", "to": "now" },
+  "panels": [
+    {
+      "id": 1,
+      "title": "Channel occupancy vs capacity",
+      "description": "concurrency.md's one bounded channel - queue depth and channel occupancy are the same metric here. ago.chat.pipeline.channel_occupancy, tagged capacity (7-02).",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "ago_chat_pipeline_channel_occupancy",
+          "legendFormat": "occupancy (capacity {{capacity}})"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "title": "Batch size (p50 / p95)",
+      "description": "Row count MessageBatchWriter flushes per batch. ago.chat.pipeline.batch_size (7-02).",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "histogram_quantile(0.5, sum(rate(ago_chat_pipeline_batch_size_bucket[5m])) by (le))",
+          "legendFormat": "p50"
+        },
+        {
+          "refId": "B",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "histogram_quantile(0.95, sum(rate(ago_chat_pipeline_batch_size_bucket[5m])) by (le))",
+          "legendFormat": "p95"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "title": "Enqueue wait (p95)",
+      "description": "Time a message spent in the bounded channel before a worker dequeued it. ago.chat.pipeline.enqueue_wait (7-02).",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "histogram_quantile(0.95, sum(rate(ago_chat_pipeline_enqueue_wait_seconds_bucket[5m])) by (le))",
+          "legendFormat": "p95 enqueue wait"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "title": "Outbox lag",
+      "description": "now - the oldest unpublished outbox row's occurred_at, as of the last dispatch cycle. ago.chat.outbox.lag (7-02).",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "ago_chat_outbox_lag_seconds",
+          "legendFormat": "outbox lag"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "title": "Outbox publish failures",
+      "description": "Rows that failed to publish on an attempt, feeding the DLQ path once retries are exhausted downstream. ago.chat.outbox.publish_failures (7-02).",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 16 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "sum(rate(ago_chat_outbox_publish_failures_total[5m]))",
+          "legendFormat": "publish failures/s"
+        }
+      ]
+    }
+  ]
+}

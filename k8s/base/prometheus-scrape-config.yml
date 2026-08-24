@@ -1,0 +1,57 @@
+# `7-03`: one file, both loops - the same "lives in k8s/base/, compose reaches up into it" convention
+# keycloak-realm-import.json already established in this directory (docker-compose.yml's own keycloak
+# comment has the detail: kustomize's configMapGenerator refuses a files: source outside its own
+# kustomization root, docker-compose.yml has no such restriction).
+#
+# Both the compose-loop target set (host.docker.internal, since the fast loop runs Ago.Chat.* from the
+# IDE on the host - docker/docker-compose.yml's own header comment) and the k8s-loop target set (the
+# Service DNS names k8s/base/{api,worker,webhooks}.yaml already declare) are listed below, in the same
+# job. That is deliberate, not an oversight: whichever loop is actually running has its own targets
+# come up UP, and the other loop's targets simply show DOWN (unreachable host/DNS name) without
+# breaking the scrape config itself - one file stays the single source of truth instead of two nearly-
+# identical ones that would drift.
+#
+# KNOWN GAP (see this change's handback notes and docker-compose.yml's own prometheus service comment):
+# no Ago.Chat.* host currently serves /metrics at all - `7-02` only wired an OTLP push exporter for
+# metrics, sharing Otel:Exporter:Endpoint with `7-01`'s trace exporter, never a Prometheus scrape
+# endpoint. Every target below is expected to show DOWN until that gap is closed on the product side.
+# This file is wired exactly to `7-03`'s own backlog spec regardless, so nothing here needs to change
+# once the gap closes - only the product-side fix does.
+global:
+  scrape_interval: 15s
+
+scrape_configs:
+  - job_name: ago-chat-api
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["host.docker.internal:5009"]
+        labels:
+          loop: compose
+      - targets: ["ago-chat-api.ago-chat.svc.cluster.local:80"]
+        labels:
+          loop: k8s
+
+  # `7-03`: Ago.Chat.Worker has no fixed port in launchSettings.json (no applicationUrl - Kestrel's own
+  # default), and running it alongside Ago.Chat.Webhooks (which is in the same position) the way
+  # local-dev.md's bring-up sequence does would collide on that shared default. runbooks/local-dev.md's
+  # drafted update (this change's handback) fixes both with an explicit ASPNETCORE_URLS - 5010 for
+  # Worker, 5011 for Webhooks - and the targets below match those two fixed ports.
+  - job_name: ago-chat-worker
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["host.docker.internal:5010"]
+        labels:
+          loop: compose
+      - targets: ["ago-chat-worker.ago-chat.svc.cluster.local:80"]
+        labels:
+          loop: k8s
+
+  - job_name: ago-chat-webhooks
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["host.docker.internal:5011"]
+        labels:
+          loop: compose
+      - targets: ["ago-chat-webhooks.ago-chat.svc.cluster.local:80"]
+        labels:
+          loop: k8s

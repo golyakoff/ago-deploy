@@ -1,0 +1,18 @@
+# `7-03`: Grafana's dashboard-provisioning format (https://grafana.com/docs/grafana/latest/administration/provisioning/#dashboards)
+# - points at the directory both loops mount the five dashboard JSON files into
+# (/etc/grafana/provisioning/dashboard-files, docker-compose.yml's grafana service /
+# grafana.yaml's own ConfigMap volume mount below). updateIntervalSeconds only matters if a file
+# changes on disk after Grafana starts - a demo cluster's dashboards are redeployed with the stack,
+# not edited live, so this is a cheap safety net rather than a workflow this repo relies on.
+apiVersion: 1
+
+providers:
+  - name: ago-chat
+    orgId: 1
+    folder: "AGO Chat"
+    type: file
+    disableDeletion: true
+    editable: false
+    updateIntervalSeconds: 30
+    options:
+      path: /etc/grafana/provisioning/dashboard-files

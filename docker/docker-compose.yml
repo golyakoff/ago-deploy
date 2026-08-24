@@ -98,8 +98,92 @@ services:
       timeout: 3s
       retries: 20
 
+  # `7-03`: Jaeger receives OTLP traces directly - adr/0025 rejected an OTel Collector in front of it
+  # ("no second backend to justify one"), so every host's own Otel:Exporter:Endpoint points straight
+  # here. COLLECTOR_OTLP_ENABLED is a no-op on recent Jaeger versions (OTLP is on by default) but kept
+  # explicit rather than relying on a default this file does not otherwise document - the same
+  # "explicit over implicit" instinct start-dev's own flags follow above. In-memory storage only: a
+  # demo cluster restarts often and 7-03's own scope excludes retention/sizing.
+  jaeger:
+    image: jaegertracing/all-in-one:1.65.0
+    restart: unless-stopped
+    environment:
+      COLLECTOR_OTLP_ENABLED: "true"
+    ports:
+      - "4317:4317" # OTLP gRPC - Otel:Exporter:Endpoint (adr/0025)
+      - "4318:4318" # OTLP HTTP
+      - "16686:16686" # Jaeger UI - http://localhost:16686
+    healthcheck:
+      # 14269 is Jaeger's own admin server, separate from the OTLP/UI ports above - same
+      # "health lives on its own port" shape keycloak's own 9000 already follows in this file.
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:14269/"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # `7-03`: scrapes each Ago.Chat.* host's /metrics endpoint (prometheus-scrape-config.yml, reached
+  # from k8s/base/ for the same one-copy reason keycloak's realm import file already documents above).
+  #
+  # KNOWN GAP, found while wiring this up and not fixable from this repository alone: `7-02` wires
+  # metrics through the *same* OTLP push exporter `7-01` already wired for traces
+  # (Ago.Platform.Hosting.AddPlatformObservability, both signals sharing one Otel:Exporter:Endpoint) -
+  # there is no OpenTelemetry.Exporter.Prometheus.AspNetCore package reference and no
+  # MapPrometheusScrapingEndpoint() call anywhere in ago-platform or ago-chat, so no host actually
+  # serves a /metrics HTTP endpoint today. This job is wired exactly as `7-03`'s own backlog item
+  # describes ("Prometheus scrape config targeting each host's /metrics endpoint"), but every target
+  # will show DOWN until that gap is closed on the product side - see this change's own handback notes
+  # for the options considered (a Prometheus exporter alongside the existing OTLP one, a config split
+  # so metrics push to Prometheus's own OTLP receiver directly, or a collector in front of Jaeger that
+  # would reopen adr/0025). Not something this deploy-only item can fix by itself.
+  prometheus:
+    image: prom/prometheus:v3.0.1
+    restart: unless-stopped
+    ports:
+      - "9090:9090" # http://localhost:9090/targets
+    volumes:
+      - ../k8s/base/prometheus-scrape-config.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:9090/-/ready"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # `7-03`: dashboards and datasources are provisioned from files checked into k8s/base/ (below), never
+  # hand-clicked - GF_SECURITY_ADMIN_* mirrors KEYCLOAK_ADMIN_*'s own env-var-driven, no-committed-
+  # secret-value shape in this same file.
+  grafana:
+    image: grafana/grafana-oss:11.3.1
+    restart: unless-stopped
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:?}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?}
+    ports:
+      - "3000:3000" # http://localhost:3000
+    volumes:
+      - ../k8s/base/grafana-datasources.yml:/etc/grafana/provisioning/datasources/datasources.yml:ro
+      - ../k8s/base/grafana-dashboard-providers.yml:/etc/grafana/provisioning/dashboards/dashboards.yml:ro
+      - ../k8s/base/grafana-dashboard-ingest-delivery.json:/etc/grafana/provisioning/dashboard-files/ingest-delivery.json:ro
+      - ../k8s/base/grafana-dashboard-pipeline-internals.json:/etc/grafana/provisioning/dashboard-files/pipeline-internals.json:ro
+      - ../k8s/base/grafana-dashboard-resilience.json:/etc/grafana/provisioning/dashboard-files/resilience.json:ro
+      - ../k8s/base/grafana-dashboard-connections-assignment.json:/etc/grafana/provisioning/dashboard-files/connections-assignment.json:ro
+      - ../k8s/base/grafana-dashboard-cache.json:/etc/grafana/provisioning/dashboard-files/cache.json:ro
+      - grafana-data:/var/lib/grafana
+    depends_on:
+      prometheus:
+        condition: service_healthy
+      jaeger:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:3000/api/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
 volumes:
   postgres-data:
   rabbitmq-data:
   redis-data:
   minio-data:
+  prometheus-data:
+  grafana-data:

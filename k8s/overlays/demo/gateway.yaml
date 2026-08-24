@@ -1,10 +1,10 @@
 # adr/0026: the public edge for chat.reserve-me.ru, auth.reserve-me.ru, console.reserve-me.ru,
-# grafana.reserve-me.ru, and (as of 8-02) demo-shop1.reserve-me.ru. Same NGINX Gateway Fabric
-# component as overlays/local/ (adr/0014) - only the listeners, hostnames, and TLS wiring differ.
-# demo-shop2.reserve-me.ru stays unrouted here: it has no backend (adr/0026's subdomain table names
-# it reserved, not built - 8-02's own scope note declines building a second demo tenant/page), and
-# an HTTPRoute with no real Service behind it would only be a route this item could not honestly
-# claim was verified. grafana.reserve-me.ru is different - `grafana` (k8s/base/grafana.yaml, `7-03`)
+# grafana.reserve-me.ru, and (as of 8-02) demo-shop1.reserve-me.ru/demo-shop2.reserve-me.ru - a
+# second, independent tenant seeded specifically to demonstrate tenant isolation live (its own site
+# row, its own operator, its own Keycloak login - `ago-deploy/seed`'s own remarks). Same NGINX
+# Gateway Fabric component as overlays/local/ (adr/0014) - only the listeners, hostnames, and TLS
+# wiring differ. grafana.reserve-me.ru is different from the two demo-shop hosts - `grafana`
+# (k8s/base/grafana.yaml, `7-03`)
 # is a real, already-deployed Service, so this route is real and verifiable, not speculative like
 # console's own entry below. Author's own call (2026-08-24): public Grafana over an SSH tunnel, for
 # reachability without a live session - gated by Grafana's own login (GRAFANA_ADMIN_PASSWORD, a real
@@ -23,9 +23,8 @@ spec:
     # Plain HTTP stays open on every host in this overlay - cert-manager's own gatewayHTTPRoute ACME
     # solver (adr/0026, tls.yaml) answers Let's Encrypt's HTTP-01 challenge through a temporary
     # HTTPRoute it creates itself under this same Gateway, and it needs a working :80 listener to do
-    # that. Left un-redirected deliberately: a permanent HTTP->HTTPS redirect is a real, small
-    # addition (Gateway API's RequestRedirect HTTPRoute filter) but this item has no live server to
-    # verify it against, and an unverified redirect rule is worse than an honestly-absent one.
+    # that. Everything else on :80 redirects to HTTPS (the `http-to-https-redirect` HTTPRoute below) -
+    # deferred by 8-01 for lack of a live server to verify against; now there is one (8-02).
     - name: http
       port: 80
       protocol: HTTP
@@ -68,7 +67,6 @@ spec:
     # 8-02: demo-shop1-static.yaml creates the ago-demo-shop1 Service this route's own backendRef
     # names - the public demo landing page + the widget's own built bundle, served together
     # (demo-shop1-static.yaml's own header comment has the same-origin reasoning).
-    # demo-shop2.reserve-me.ru stays unrouted (adr/0026: reserved, not this item's own scope).
     - name: https-demo-shop1
       port: 443
       protocol: HTTPS
@@ -77,6 +75,42 @@ spec:
         mode: Terminate
         certificateRefs:
           - name: ago-public-tls
+    # A second, independent demo tenant (demo-shop2-static.yaml) - same shape as demo-shop1's own
+    # listener above, different hostname/Service/site.
+    - name: https-demo-shop2
+      port: 443
+      protocol: HTTPS
+      hostname: demo-shop2.reserve-me.ru
+      tls:
+        mode: Terminate
+        certificateRefs:
+          - name: ago-public-tls
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: http-to-https-redirect
+spec:
+  parentRefs:
+    - name: ago-chat-gateway
+      sectionName: http
+  hostnames:
+    - "*.reserve-me.ru"
+  rules:
+    # cert-manager's own ACME HTTP-01 solver attaches its own temporary HTTPRoute to this same
+    # `http` listener with an *exact* hostname (the specific domain being challenged) and an exact
+    # `/.well-known/acme-challenge/<token>` path - Gateway API's own route-precedence rules (exact
+    # hostname beats this route's wildcard; exact path beats this rule's PathPrefix) mean that route
+    # always wins for its own request without needing to special-case it here.
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+      filters:
+        - type: RequestRedirect
+          requestRedirect:
+            scheme: https
+            statusCode: 301
 ---
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
@@ -174,6 +208,26 @@ spec:
             value: /
       backendRefs:
         - name: ago-demo-shop1
+          port: 80
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: ago-demo-shop2
+spec:
+  parentRefs:
+    - name: ago-chat-gateway
+      sectionName: https-demo-shop2
+  hostnames:
+    - demo-shop2.reserve-me.ru
+  rules:
+    # ago-demo-shop2 Service: demo-shop2-static.yaml - same shape as ago-demo-shop1 above.
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+      backendRefs:
+        - name: ago-demo-shop2
           port: 80
 ---
 apiVersion: gateway.networking.k8s.io/v1

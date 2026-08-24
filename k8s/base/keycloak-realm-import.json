@@ -59,6 +59,23 @@
           "temporary": false
         }
       ]
+    },
+    {
+      "id": "00000000-0000-0000-0000-00000000000b",
+      "username": "demo-operator-2",
+      "email": "demo-operator-2@example.test",
+      "firstName": "Demo",
+      "lastName": "Operator (tenant 2)",
+      "enabled": true,
+      "emailVerified": true,
+      "requiredActions": [],
+      "credentials": [
+        {
+          "type": "password",
+          "value": "demo-operator-2-password",
+          "temporary": false
+        }
+      ]
     }
   ]
 }

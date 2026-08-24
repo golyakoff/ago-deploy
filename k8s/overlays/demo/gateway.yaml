@@ -1,9 +1,13 @@
-# adr/0026: the public edge for chat.reserve-me.ru, auth.reserve-me.ru, and
-# console.reserve-me.ru. Same NGINX Gateway Fabric component as overlays/local/ (adr/0014) - only
+# adr/0026: the public edge for chat.reserve-me.ru, auth.reserve-me.ru, console.reserve-me.ru, and
+# grafana.reserve-me.ru. Same NGINX Gateway Fabric component as overlays/local/ (adr/0014) - only
 # the listeners, hostnames, and TLS wiring differ. demo-shop1/demo-shop2.reserve-me.ru are not
 # routed here: they have no backend yet (adr/0026's subdomain table - that is 8-02's own work), and an
 # HTTPRoute with no real Service behind it would only be a route this item could not honestly claim
-# was verified.
+# was verified. grafana.reserve-me.ru is different - `grafana` (k8s/base/grafana.yaml, `7-03`) is a
+# real, already-deployed Service, so this route is real and verifiable, not speculative like
+# console's own entry below. Author's own call (2026-08-24): public Grafana over an SSH tunnel, for
+# reachability without a live session - gated by Grafana's own login (GRAFANA_ADMIN_PASSWORD, a real
+# generated secret, not the local overlay's throwaway value) plus TLS, not by network topology alone.
 apiVersion: gateway.networking.k8s.io/v1
 kind: Gateway
 metadata:
@@ -46,6 +50,14 @@ spec:
       port: 443
       protocol: HTTPS
       hostname: console.reserve-me.ru
+      tls:
+        mode: Terminate
+        certificateRefs:
+          - name: ago-public-tls
+    - name: https-grafana
+      port: 443
+      protocol: HTTPS
+      hostname: grafana.reserve-me.ru
       tls:
         mode: Terminate
         certificateRefs:
@@ -128,6 +140,25 @@ spec:
       backendRefs:
         - name: ago-console
           port: 80
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: grafana
+spec:
+  parentRefs:
+    - name: ago-chat-gateway
+      sectionName: https-grafana
+  hostnames:
+    - grafana.reserve-me.ru
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+      backendRefs:
+        - name: grafana
+          port: 3000
 ---
 apiVersion: gateway.nginx.org/v1alpha1
 kind: UpstreamSettingsPolicy

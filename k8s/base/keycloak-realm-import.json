@@ -9,8 +9,8 @@
       "publicClient": true,
       "standardFlowEnabled": true,
       "directAccessGrantsEnabled": true,
-      "redirectUris": ["http://localhost:8080/*", "http://localhost:5173/*", "https://console.ago.golyakov.net/*"],
-      "webOrigins": ["http://localhost:8080", "http://localhost:5173", "https://console.ago.golyakov.net"],
+      "redirectUris": ["http://localhost:8080/*", "http://localhost:5173/*", "https://console.reserve-me.ru/*"],
+      "webOrigins": ["http://localhost:8080", "http://localhost:5173", "https://console.reserve-me.ru"],
       "protocolMappers": [
         {
           "name": "ago-console-audience",

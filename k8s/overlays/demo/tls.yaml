@@ -15,7 +15,7 @@ spec:
     # the domain already being deployed here is the natural choice, but this file intentionally ships
     # with a placeholder, not a real one, exactly like every other credential-shaped value in this
     # overlay.
-    email: letsencrypt-admin@golyakov.net
+    email: letsencrypt-admin@reserve-me.ru
     privateKeySecretRef:
       name: letsencrypt-prod-account-key
     solvers:
@@ -39,6 +39,6 @@ spec:
     name: letsencrypt-prod
     kind: ClusterIssuer
   dnsNames:
-    - chat.ago.golyakov.net
-    - auth.ago.golyakov.net
-    - console.ago.golyakov.net
+    - chat.reserve-me.ru
+    - auth.reserve-me.ru
+    - console.reserve-me.ru

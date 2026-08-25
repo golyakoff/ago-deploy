@@ -21,12 +21,12 @@ spec:
     spec:
       containers:
         - name: ago-demo-shop2
+          # `15-07`/`adr/0051`: rewritten by the overlay's `images:` block to
+          # ghcr.io/golyakoff/ago-demo-shop2:<40-char commit SHA>, published by ago-widget's CI from
+          # the same Dockerfile as demo-shop1 with DEMO_PAGE_DIR=public-demo-2. The two images share
+          # a commit and differ in name, never in tag - which is what keeps both SHA tags truthful.
+          # No `imagePullPolicy: Never` any more; see console-static.yaml for the reasoning.
           image: ago-demo-shop2:local
-          # adr/0026's "no registry" image delivery, same as demo-shop1-static.yaml above -
-          # k8s/build-static-images.sh builds and imports this tag directly on the VPS.
-          # `15-06`: still a mutable `:local` tag built on the node - see console-static.yaml's own
-          # note for why the four static bundles did not move to GHCR with the three .NET hosts.
-          imagePullPolicy: Never
           ports:
             - containerPort: 80
           resources:

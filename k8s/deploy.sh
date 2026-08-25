@@ -1,8 +1,13 @@
 #!/usr/bin/env bash
-# Deploy a specific, identifiable build of the three Ago.Chat.* hosts to the demo cluster.
+# Deploy a specific, identifiable build to the demo cluster.
 #
-#   ./deploy.sh <commit-sha>          deploy that commit's images
-#   ./deploy.sh --current             print what is running and stop
+#   ./deploy.sh <commit-sha>            the three Ago.Chat.* hosts, together
+#   ./deploy.sh <frontend> <commit-sha> one frontend: console | demo-shop1 | demo-shop2 | landing
+#   ./deploy.sh --current               print what is running and stop
+#
+# One commit argument for the hosts because all three are built from one repository, and one
+# frontend at a time because the four are built from three repositories that move independently -
+# `15-07`. A single tag applied to all seven would be a lie about at least two of them.
 #
 # `15-06`/`adr/0047`. Before this existed, a deploy meant rebuilding on the node under the mutable
 # tag `:local` - so there was no earlier artifact to go back to, and nothing about a running pod
@@ -30,28 +35,50 @@ step() { printf "\n\033[1m== %s\033[0m\n" "$1"; }
 # deployment:container - `kubectl set image` addresses the container by name, not by position.
 HOSTS=("ago-chat-api:api" "ago-chat-worker:worker" "ago-chat-webhooks:webhooks")
 
-# The commit a running pod reports about itself. The host images are Chiseled - no shell, no curl,
-# nothing to `kubectl exec` - so this goes through the API server's own pod proxy instead of
-# pretending the container has tools it does not, and without starting a helper pod that would need
-# its own image pulled from somewhere.
+# `15-07`: name-as-typed:deployment. The container name equals the Deployment name for all four
+# (overlays/demo/*-static.yaml), so one field is enough here where the hosts needed two.
+FRONTENDS=("console:ago-console" "demo-shop1:ago-demo-shop1" "demo-shop2:ago-demo-shop2" "landing:ago-landing")
+
+# The commit a running pod reports about itself, asked over the API server's own pod proxy. Two
+# shapes, one idea:
+#
+#   - the .NET hosts serve GET /healthz/version on 8080, out of the compiled assembly. They are
+#     Chiseled images - no shell, no curl, nothing to `kubectl exec` - so the proxy is not a
+#     convenience here, it is the only way to ask without starting a helper pod that would itself
+#     need an image pulled from somewhere.
+#   - the four frontends serve /version.json on 80, written into the image at build time (15-07).
+#     A browser bundle has no process to interrogate, so the artifact has to carry the answer as a
+#     file. Same question, same parsing, one column below.
 pod_commit() {
-  local pod
-  pod="$(kc get pod -n "$NS" -l "app=$1" --field-selector=status.phase=Running \
+  local app="$1" port="$2" path="$3" pod
+  pod="$(kc get pod -n "$NS" -l "app=$app" --field-selector=status.phase=Running \
         -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)"
   [ -z "$pod" ] && { echo unreadable; return; }
-  kc get --raw "/api/v1/namespaces/${NS}/pods/${pod}:8080/proxy/healthz/version" 2>/dev/null \
+  kc get --raw "/api/v1/namespaces/${NS}/pods/${pod}:${port}/proxy/${path}" 2>/dev/null \
     | sed -n 's/.*"commit":"\([^"]*\)".*/\1/p' | head -1 | grep . || echo unreadable
+}
+
+show_row() {
+  local d="$1" commit="$2" tag
+  tag="$(kc get deployment "$d" -n "$NS" -o jsonpath='{.spec.template.spec.containers[0].image}' 2>/dev/null)"
+  # The tag is a label somebody chose; the commit comes out of the artifact. Printing both side by
+  # side is the point - they agree until a tag is re-pushed or a manifest edited by hand, and the
+  # first time they disagree is the day this pairing earns its place.
+  printf "  %-20s %-42s %s\n" "$d" "${tag##*:}" "$commit"
 }
 
 show_current() {
   printf "  %-20s %-42s %s\n" DEPLOYMENT "IMAGE TAG (what was asked for)" "COMMIT (what is running)"
   for entry in "${HOSTS[@]}"; do
     d="${entry%%:*}"
-    tag="$(kc get deployment "$d" -n "$NS" -o jsonpath='{.spec.template.spec.containers[0].image}' 2>/dev/null)"
-    # The tag is a label somebody chose; /healthz/version comes out of the compiled binary. Printing
-    # both side by side is the point - they agree until a tag is re-pushed or a manifest edited by
-    # hand, and the first time they disagree is the day this pairing earns its place.
-    printf "  %-20s %-42s %s\n" "$d" "${tag##*:}" "$(pod_commit "$d")"
+    show_row "$d" "$(pod_commit "$d" 8080 healthz/version)"
+  done
+  # `15-07`: the frontends are here for the same reason the hosts are, and it is not symmetry for
+  # its own sake - the 2026-08-25 stale bundle was a *console*, so this half of the table is the
+  # half that would have caught the incident this whole mechanism exists for.
+  for entry in "${FRONTENDS[@]}"; do
+    d="${entry##*:}"
+    show_row "$d" "$(pod_commit "$d" 80 version.json)"
   done
 }
 
@@ -61,10 +88,27 @@ if [ "${1:-}" = "--current" ]; then
   exit 0
 fi
 
-TAG="${1:-}"
-if [ -z "$TAG" ]; then
-  echo "usage: $0 <commit-sha> | --current" >&2
+usage() {
+  echo "usage: $0 <commit-sha> | $0 <console|demo-shop1|demo-shop2|landing> <commit-sha> | $0 --current" >&2
   exit 2
+}
+
+# One argument means the three hosts (unchanged from 15-06). Two means a single frontend.
+COMPONENT=""
+if [ "$#" -eq 2 ]; then
+  COMPONENT="$1"; TAG="$2"
+  DEPLOYMENT=""
+  for entry in "${FRONTENDS[@]}"; do
+    [ "${entry%%:*}" = "$COMPONENT" ] && DEPLOYMENT="${entry##*:}"
+  done
+  if [ -z "$DEPLOYMENT" ]; then
+    echo "unknown component '$COMPONENT'." >&2
+    usage
+  fi
+elif [ "$#" -eq 1 ]; then
+  TAG="$1"
+else
+  usage
 fi
 
 # A tag that cannot name a commit cannot be rolled back to, which is the whole reason this script
@@ -73,20 +117,39 @@ fi
 # build.
 if ! printf '%s' "$TAG" | grep -qE '^[0-9a-f]{40}$'; then
   echo "refusing '$TAG': the tag must be a full 40-character commit SHA (adr/0047)." >&2
-  echo "  ago-chat's CI publishes exactly that on every push to main; 'main' and 'latest' move and" >&2
-  echo "  therefore cannot be deployed or rolled back to." >&2
+  echo "  Every repository's CI publishes exactly that on every push to main; 'main' and 'latest'" >&2
+  echo "  move and therefore cannot be deployed or rolled back to." >&2
   exit 2
+fi
+
+# The set of Deployments this invocation moves, and the image name each takes. The two paths differ
+# only in what goes in these two arrays, so everything below - rollout waiting, failure handling,
+# the manifest reminder, smoke - is written once (`15-07`).
+TARGETS=()   # deployment names
+IMAGES=()    # deployment=image, for `kubectl set image`
+if [ -n "$COMPONENT" ]; then
+  TARGETS=("$DEPLOYMENT")
+  IMAGES=("$DEPLOYMENT=${REGISTRY}/${DEPLOYMENT}:${TAG}")
+  DESCRIPTION="${REGISTRY}/${DEPLOYMENT}:${TAG}"
+  MANIFEST_HINT="the newTag for ${DEPLOYMENT} in"
+else
+  for entry in "${HOSTS[@]}"; do
+    d="${entry%%:*}"; c="${entry##*:}"
+    TARGETS+=("$d")
+    IMAGES+=("${c}=${REGISTRY}/${d}:${TAG}")
+  done
+  DESCRIPTION="${REGISTRY}/ago-chat-{api,worker,webhooks}:${TAG}"
+  MANIFEST_HINT="all three ago-chat-* newTag values in"
 fi
 
 step "Deploying $TAG"
 show_current
 echo
-echo "  -> ${REGISTRY}/ago-chat-{api,worker,webhooks}:${TAG}"
+echo "  -> ${DESCRIPTION}"
 
 step "Setting images"
-for entry in "${HOSTS[@]}"; do
-  d="${entry%%:*}"; c="${entry##*:}"
-  kc set image "deployment/$d" "${c}=${REGISTRY}/${d}:${TAG}" -n "$NS"
+for i in "${!TARGETS[@]}"; do
+  kc set image "deployment/${TARGETS[$i]}" "${IMAGES[$i]}" -n "$NS"
 done
 
 # The API first and on its own, matching redeploy.sh's own ordering note: the console calls the API,
@@ -94,8 +157,7 @@ done
 # ordering only decides which failure surfaces first - and the API is the one worth learning about
 # first, because it is the one a rollback has to save.
 step "Waiting for rollouts"
-for entry in "${HOSTS[@]}"; do
-  d="${entry%%:*}"
+for d in "${TARGETS[@]}"; do
   # A pull failure (wrong tag, package still private) never terminates the old pod: the rolling
   # update simply stalls with maxUnavailable respected, so service continues while this times out.
   # That is the safety property worth knowing - a broken *image reference* cannot take the site
@@ -104,7 +166,7 @@ for entry in "${HOSTS[@]}"; do
     echo
     echo "  $d did not become ready. The previous ReplicaSet is still serving." >&2
     kc get pods -n "$NS" -l "app=$d" >&2
-    echo "  Roll back with: $HERE/rollback.sh" >&2
+    echo "  Roll back with: $HERE/rollback.sh ${COMPONENT}" >&2
     exit 1
   fi
 done
@@ -117,7 +179,7 @@ cat <<EOF
   This script used 'kubectl set image', which does not edit any file. A 'kubectl apply -k
   overlays/demo' will therefore reset the cluster to whatever tag that overlay records.
 
-  If this deploy is meant to stick, set all three newTag values in
+  If this deploy is meant to stick, set ${MANIFEST_HINT}
   k8s/overlays/demo/kustomization.yaml to:
 
       $TAG

@@ -23,19 +23,23 @@ spec:
     spec:
       containers:
         - name: ago-console
-          image: ago-console:local
-          # `15-06` moved the three Ago.Chat.* hosts to GHCR under an immutable commit-SHA tag;
-          # the four static bundles here did NOT move with them, and that is a named gap, not an
-          # oversight. Their Dockerfiles and CI live in ago-console/ago-widget/ago-landing, which
-          # 15-06 could not touch, so they are still built on the node under a mutable `:local` tag
-          # imported into k3s's own containerd (k8s/build-static-images.sh, adr/0026's original
-          # mechanism). imagePullPolicy: Never is therefore still correct *here* and only here -
-          # nothing has ever pushed an `ago-console:local` anywhere a pull could reach.
+          # `15-07`/`adr/0051`: the overlay's `images:` block rewrites this to
+          # ghcr.io/golyakoff/ago-console:<40-char commit SHA>. The bare name stays here, and stays
+          # `:local`, so that overlays built without that block - and a plain `docker build` loop -
+          # still resolve to something meaningful.
           #
-          # This is the exact shape of the 2026-08-25 failure 15-06 exists for: the console served a
-          # week-old bundle and nothing about the running pod could say so. The backend can now say
-          # so; this cannot, until adr/0047's follow-up lands in those repositories.
-          imagePullPolicy: Never
+          # The `imagePullPolicy: Never` that used to sit on this line is gone, and with it the
+          # comment explaining that the four static bundles could not name their commits. That
+          # comment was the honest record of 15-06's own gap: **the 2026-08-25 incident was this
+          # bundle** - the console served a week-old page and nothing about the running pod could
+          # say so. It can now: the image is published by ago-console's CI under its commit, and the
+          # container serves that commit at /version.json, which smoke.sh checks on every run.
+          #
+          # The default policy for a non-`:latest` tag is IfNotPresent, which is exactly right for
+          # an immutable SHA tag: present in containerd it is used with no network call - so a node
+          # that built its own image behaves as it always did - and absent, it is pulled. `Never`
+          # cannot do the second half, and the second half is what lets a rebuilt cluster start.
+          image: ago-console:local
           ports:
             - containerPort: 80
           resources:

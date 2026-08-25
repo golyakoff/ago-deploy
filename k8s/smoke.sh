@@ -9,9 +9,10 @@
 #     while every page still returned 200, because nginx was serving files perfectly well. A page
 #     check alone is why this went unnoticed; `visitor-sessions` is what catches it.
 #   - 2026-08-25: the console served a stale bundle for a day - shipped code and deployed code drift
-#     silently while the image tag stays `:local` (ago-root's `15-06`). The backend half of that is
-#     closed: the API now reports the commit it was built from and this script checks it. The four
-#     static bundles still carry `:local` and still cannot, which is why that check is not here yet.
+#     silently while the image tag stays `:local` (ago-root's `15-06`). Both halves are closed now:
+#     the API reports the commit it was built from, and since `15-07` each of the four static
+#     bundles serves the same answer at /version.json. The "Frontends" section below is that check,
+#     and it is the one aimed squarely at the incident - which was a *console* bundle.
 #   - 2026-08-25: Grafana was taken off the public edge; a re-apply of an old manifest would put it
 #     back without anyone noticing.
 #
@@ -102,18 +103,49 @@ fi
 
 echo
 echo "Frontends"
-css=$(curl -s --max-time 20 "https://console.${DOMAIN}/" | grep -oE '/assets/index-[^"]+\.css' | head -1)
-if [ -n "$css" ]; then
-  body=$(curl -s --max-time 20 "https://console.${DOMAIN}${css}")
-  if echo "$body" | grep -q -- '--ago-'; then ok "console serves the design system (its tokens are present)"
-  else bad "console CSS carries no --ago- token - a pre-11-05 bundle is deployed"; fi
-else
-  bad "could not find the console's stylesheet"
+# `15-07`: the check that would have caught the 2026-08-25 stale *console* bundle, which is the
+# incident all of this exists for. Every frontend image writes the commit it was built from into
+# /version.json, so this asks the served origin itself rather than sniffing the bundle for a string
+# that happens to have been added in some known release. The old checks did the latter - "does the
+# CSS carry an --ago- token", "does the JS mention configureLogging" - and they could only ever
+# catch drift older than one specific named change, never drift in general.
+#
+# url:deployment. The landing page is at the apex, not a subdomain.
+for entry in "console.${DOMAIN}:ago-console" "demo-shop1.${DOMAIN}:ago-demo-shop1" \
+             "demo-shop2.${DOMAIN}:ago-demo-shop2" "${DOMAIN}:ago-landing"; do
+  host="${entry%%:*}"; deploy="${entry##*:}"
+  commit=$(curl -s --max-time 20 "https://${host}/version.json" \
+           | sed -n 's/.*"commit":"\([^"]*\)".*/\1/p' | head -1)
+  if [ -z "$commit" ]; then
+    bad "${host} serves no usable /version.json - a pre-15-07 bundle is deployed, and it cannot name its own commit"
+    continue
+  fi
+  if [ "$commit" = "unknown" ]; then
+    bad "${host} reports commit=unknown - built without GIT_COMMIT, so this deploy is unidentifiable"
+    continue
+  fi
+  ok "${host} reports commit ${commit:0:7}"
+  tag=$(kubectl get deployment "$deploy" -n "$NS" \
+        -o jsonpath='{.spec.template.spec.containers[0].image}' 2>/dev/null | sed 's/.*://')
+  if [ -z "$tag" ]; then
+    skip "${host} image-tag comparison (needs cluster access)"
+  elif [ "$tag" = "$commit" ]; then
+    ok "${host}'s image tag matches the commit inside the bundle"
+  else
+    bad "${host} image tag ${tag:0:12} but the bundle reports ${commit:0:12} - the tag is lying about its contents"
+  fi
+done
+# The widget bundle carries the same commit inside itself (window.AgoChat.commit), which is the copy
+# that survives being embedded on a tenant's page where none of our files sit beside it. Checked
+# against demo-shop1's own /version.json above, so a mismatch means the image was assembled from a
+# bundle and a version.json that did not come from one build.
+wcommit=$(curl -s --max-time 20 "https://demo-shop1.${DOMAIN}/version.json" \
+          | sed -n 's/.*"commit":"\([^"]*\)".*/\1/p' | head -1)
+if [ -n "$wcommit" ] && [ "$wcommit" != "unknown" ]; then
+  curl -s --max-time 20 "https://demo-shop1.${DOMAIN}/ago-chat.js" | grep -q "$wcommit" \
+    && ok "the widget bundle itself carries that same commit" \
+    || bad "the widget bundle does not contain ${wcommit:0:12} - either a pre-15-07 bundle, or the bundle and the version.json beside it did not come from one build"
 fi
-w=$(curl -s --max-time 20 "https://demo-shop1.${DOMAIN}/ago-chat.js")
-echo "$w" | grep -qi configureLogging \
-  && ok "widget bundle carries the 5-14 logging fix" \
-  || bad "widget bundle predates 5-14 - it will print access tokens to the browser console"
 
 echo
 echo "Edge"

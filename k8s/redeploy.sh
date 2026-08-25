@@ -20,7 +20,6 @@ set -euo pipefail
 AGO_ROOT="${AGO_ROOT:-$HOME/ago}"
 DOMAIN="${DOMAIN:-reserve-me.ru}"
 NS="${NS:-ago-chat}"
-API_BASE="${API_BASE:-https://chat.${DOMAIN}}"
 # 15-06/adr/0047: the same registry path CI publishes to, so an image built here and an image
 # pulled from there are interchangeable by name.
 REGISTRY="${REGISTRY:-ghcr.io/golyakoff}"
@@ -67,16 +66,25 @@ dotnet pack Ago.Platform.slnx -c Release -o "$AGO_ROOT/ago-deploy/.nuget-feed" -
 step "3. Build images"
 # 15-06: the three .NET hosts are built under the commit they came from, with the registry name CI
 # would have used, so the artifact is the same shape whichever route it took - and so a rollback has
-# something to go back to. The four static bundles are still `:local`; their repositories could not
-# be changed in 15-06 and adr/0047 names the follow-up.
+# something to go back to. `15-07` gave the four static bundles the same treatment: IMAGE_TAG=commit
+# means each one is tagged with *its own repository's* HEAD, because the four come out of three
+# repositories that move independently and one tag would be a lie about at least two of them.
+#
+# Note what is no longer passed: AGO_API_BASE_URL. Each frontend Dockerfile carries the deployment's
+# own value as a committed default, so an image is a function of its commit alone (adr/0051) - and an
+# image built here is byte-comparable with the one CI publishes for the same commit.
 CHAT_SHA="$(git -C "$AGO_ROOT/ago-chat" rev-parse HEAD)"
+CONSOLE_SHA="$(git -C "$AGO_ROOT/ago-console" rev-parse HEAD)"
+WIDGET_SHA="$(git -C "$AGO_ROOT/ago-widget" rev-parse HEAD)"
+LANDING_SHA="$(git -C "$AGO_ROOT/ago-landing" rev-parse HEAD)"
 echo "   ago-chat at $CHAT_SHA"
+echo "   ago-console at ${CONSOLE_SHA:0:7}, ago-widget at ${WIDGET_SHA:0:7}, ago-landing at ${LANDING_SHA:0:7}"
 cd "$AGO_ROOT/ago-chat"
 CHAT_REPO=. NUGET_FEED=../ago-deploy/.nuget-feed DOCKER_BUILDKIT=1 \
   IMAGE_REPO="$REGISTRY" IMAGE_TAG="$CHAT_SHA" ../ago-deploy/k8s/build-images.sh
 cd "$AGO_ROOT/ago-deploy/k8s"
-CONSOLE_REPO=../../ago-console WIDGET_REPO=../../ago-widget AGO_API_BASE_URL="$API_BASE" \
-  ./build-static-images.sh
+CONSOLE_REPO=../../ago-console WIDGET_REPO=../../ago-widget LANDING_REPO=../../ago-landing \
+  IMAGE_REPO="$REGISTRY" IMAGE_TAG=commit ./build-static-images.sh
 
 step "4. Import into containerd"
 # -n k8s.io is not optional: k3s's embedded containerd keeps kubelet-visible images in that
@@ -90,9 +98,9 @@ for img in ago-chat-api ago-chat-worker ago-chat-webhooks; do
   printf "   %-18s " "$img"
   docker save "${REGISTRY}/${img}:${CHAT_SHA}" | sudo k3s ctr -n k8s.io images import - >/dev/null && echo "imported"
 done
-for img in ago-console ago-demo-shop1 ago-demo-shop2 ago-landing; do
-  printf "   %-18s " "$img"
-  docker save "${img}:local" | sudo k3s ctr -n k8s.io images import - >/dev/null && echo "imported"
+for entry in "ago-console:$CONSOLE_SHA" "ago-demo-shop1:$WIDGET_SHA" "ago-demo-shop2:$WIDGET_SHA" "ago-landing:$LANDING_SHA"; do
+  printf "   %-18s " "${entry%%:*}"
+  docker save "${REGISTRY}/${entry}" | sudo k3s ctr -n k8s.io images import - >/dev/null && echo "imported"
 done
 
 step "5. Migrations"
@@ -131,8 +139,14 @@ for d in ago-chat-api ago-chat-worker ago-chat-webhooks; do
   kc rollout status "deployment/$d" -n "$NS" --timeout=180s
 done
 
-step "7. Restart frontends"
-kc rollout restart deployment/ago-console deployment/ago-demo-shop1 deployment/ago-demo-shop2 deployment/ago-landing -n "$NS"
+step "7. Move the frontends onto their own commits"
+# `15-07`: `set image`, not `rollout restart`, for exactly the reason step 6 gives for the hosts - a
+# restart re-reads a tag that has not changed and records nothing a rollback can return to. Four
+# images, three commits, because these come out of three repositories.
+for entry in "ago-console:$CONSOLE_SHA" "ago-demo-shop1:$WIDGET_SHA" "ago-demo-shop2:$WIDGET_SHA" "ago-landing:$LANDING_SHA"; do
+  d="${entry%%:*}"
+  kc set image "deployment/$d" "${d}=${REGISTRY}/${entry}" -n "$NS"
+done
 for d in ago-console ago-demo-shop1 ago-demo-shop2 ago-landing; do
   kc rollout status "deployment/$d" -n "$NS" --timeout=180s
 done
@@ -151,7 +165,12 @@ and to move to a build CI already published, without building anything here:
 
     ./deploy.sh <commit-sha>
 
-k8s/overlays/demo/kustomization.yaml still names an older tag unless somebody updates it; a
-'kubectl apply -k overlays/demo' would move the cluster back to that tag. Set its three newTag
-values to $CHAT_SHA and commit if this deploy is meant to stick.
+k8s/overlays/demo/kustomization.yaml still names older tags unless somebody updates it; a
+'kubectl apply -k overlays/demo' would move the cluster back to them. If this deploy is meant to
+stick, set the seven newTag values and commit:
+
+    ago-chat-{api,worker,webhooks}   $CHAT_SHA
+    ago-console                      $CONSOLE_SHA
+    ago-demo-shop{1,2}               $WIDGET_SHA
+    ago-landing                      $LANDING_SHA
 EOF

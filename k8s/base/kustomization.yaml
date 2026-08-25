@@ -31,12 +31,26 @@ resources:
 # lifetimes. Until `17-06` every one of them was absent, so Keycloak's upstream defaults applied to a
 # realm that has been open to public self-registration since Stage 10 (`adr/0028`). JSON cannot carry
 # a comment, so the reasoning for each chosen value lives in `adr/0034` and nowhere else - read it
-# before changing a number here. Two Keycloak facts that make this file misleading if taken at face
-# value: `--import-realm` is skip-if-exists for a realm that already exists, so editing this file does
-# not reconfigure a running Keycloak whose realm survived (this overlay's Keycloak has no persistent
-# volume, so its realm does not survive a pod restart and a re-import really does apply); and a
-# brand-new top-level entity added here *is* created on the next restart even when the realm itself is
-# skipped.
+# before changing a number here.
+#
+# `15-01`/`adr/0036` changed what happens to an edit of this file, and corrected a claim this comment
+# used to make. Keycloak now keeps its realm in Postgres, so the realm survives a restart, and
+# `--import-realm` picks its strategy from what it finds - verified live on 2026-08-25 by reading
+# Keycloak's own startup log on both paths:
+#   empty database:      Strategy: OVERWRITE_EXISTING   ->  Realm 'ago-chat' imported
+#   realm already there: Strategy: IGNORE_EXISTING      ->  Realm 'ago-chat' already exists. Import skipped
+# "Import skipped" means the *whole* import is skipped. The previous version of this comment claimed a
+# brand-new top-level entity added here would still be created on the next restart; it is not. Tested
+# directly: a new realm role and a changed accessTokenLifespan were both added to this file, the pod
+# was restarted, and neither reached the realm.
+#
+# So editing this file alone no longer changes a Keycloak that is already running. Realm-*level*
+# settings (everything `adr/0034` chose) are applied with `k8s/apply-realm-settings.sh`, which PUTs
+# this same file's realm-level fields onto the live realm and leaves users and clients alone. A new or
+# changed client, realm role or group is not covered by that script either - it needs its own
+# `kcadm.sh` call, in the same change that edits this file. Do not reach for `kc.sh import
+# --override true` instead: it applies everything by replacing the realm, which deletes every
+# self-registered user with it.
 configMapGenerator:
   - name: keycloak-realm-import
     files:

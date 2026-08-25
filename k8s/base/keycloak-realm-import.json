@@ -40,8 +40,16 @@
       "publicClient": true,
       "standardFlowEnabled": true,
       "directAccessGrantsEnabled": true,
-      "redirectUris": ["http://localhost:8080/*", "http://localhost:5173/*", "https://console.reserve-me.ru/*"],
-      "webOrigins": ["http://localhost:8080", "http://localhost:5173", "https://console.reserve-me.ru"],
+      "redirectUris": [
+        "http://localhost:8080/*",
+        "http://localhost:5173/*",
+        "https://console.reserve-me.ru/*"
+      ],
+      "webOrigins": [
+        "http://localhost:8080",
+        "http://localhost:5173",
+        "https://console.reserve-me.ru"
+      ],
       "protocolMappers": [
         {
           "name": "ago-console-audience",
@@ -108,5 +116,6 @@
         }
       ]
     }
-  ]
+  ],
+  "loginTheme": "ago"
 }

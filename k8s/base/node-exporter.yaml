@@ -1,0 +1,94 @@
+# `15-05` needs to know how fast the node's disk fills, and `15-03` needs something to alert on when
+# it does. Neither was possible: `7-03` deployed Prometheus and wired it to the three Ago.Chat.*
+# hosts, and nothing anywhere collected a single metric about the machine those hosts run on. A
+# measurement taken by hand on 2026-08-25 gave one point - 79G total, 60G free - and one point is not
+# a slope.
+#
+# This is the smallest thing that closes that: node-exporter, reading the host's own /proc, /sys and
+# root filesystem through read-only mounts. A DaemonSet rather than a Deployment because it belongs
+# to the node rather than to the workload, which stays true if this cluster ever gains a second one.
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: node-exporter
+spec:
+  selector:
+    matchLabels:
+      app: node-exporter
+  template:
+    metadata:
+      labels:
+        app: node-exporter
+    spec:
+      # `17-05`'s direction, applied here rather than deferred: this workload reads the host's
+      # filesystem, so it is exactly the one that should not run as root or keep capabilities it does
+      # not use. Everything it needs comes through read-only mounts, so nobody (65534) is enough.
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        runAsGroup: 65534
+      containers:
+        - name: node-exporter
+          image: quay.io/prometheus/node-exporter:v1.8.2
+          args:
+            - --path.procfs=/host/proc
+            - --path.sysfs=/host/sys
+            - --path.rootfs=/host/root
+            # Only what this cluster has a use for. Every enabled collector is surface and noise;
+            # the question being answered is "how full is the disk, and how fast is it filling".
+            - --collector.disable-defaults
+            - --collector.filesystem
+            - --collector.diskstats
+            - --collector.meminfo
+            - --collector.loadavg
+            # k3s mounts a great many ephemeral overlay/tmpfs paths; without this the filesystem
+            # collector reports dozens of them and the one series that matters is lost among them.
+            - --collector.filesystem.mount-points-exclude=^/(dev|proc|sys|run|var/lib/kubelet/.+|var/lib/rancher/k3s/agent/.+)($|/)
+            - --collector.filesystem.fs-types-exclude=^(autofs|binfmt_misc|cgroup2?|configfs|debugfs|devpts|devtmpfs|fusectl|hugetlbfs|mqueue|nsfs|overlay|proc|procfs|pstore|securityfs|selinuxfs|squashfs|sysfs|tracefs)$
+          ports:
+            - name: metrics
+              containerPort: 9100
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            requests:
+              memory: 32Mi
+              cpu: 10m
+            limits:
+              memory: 96Mi
+              cpu: 200m
+          volumeMounts:
+            - name: proc
+              mountPath: /host/proc
+              readOnly: true
+            - name: sys
+              mountPath: /host/sys
+              readOnly: true
+            - name: root
+              mountPath: /host/root
+              readOnly: true
+      volumes:
+        - name: proc
+          hostPath:
+            path: /proc
+        - name: sys
+          hostPath:
+            path: /sys
+        - name: root
+          hostPath:
+            path: /
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: node-exporter
+spec:
+  selector:
+    app: node-exporter
+  ports:
+    - name: metrics
+      port: 9100
+      targetPort: 9100

@@ -46,6 +46,16 @@ scrape_configs:
         labels:
           loop: k8s
 
+  # `15-05`: the machine itself. Unlike the three jobs below this one has no compose-loop twin - the
+  # fast loop runs the hosts on the developer's own machine, where a node-exporter reading that
+  # machine's disk would be measuring the wrong thing entirely. k8s loop only, deliberately.
+  - job_name: node
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["node-exporter.ago-chat.svc.cluster.local:9100"]
+        labels:
+          loop: k8s
+
   - job_name: ago-chat-webhooks
     metrics_path: /metrics
     static_configs:

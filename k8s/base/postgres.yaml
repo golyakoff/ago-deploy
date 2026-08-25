@@ -13,6 +13,15 @@ kind: Deployment
 metadata:
   name: postgres
 spec:
+  # Recreate, not the default RollingUpdate: this Deployment owns a ReadWriteOnce PVC, and on a
+  # single node that claim does not stop two pods mounting the same directory - the *application's*
+  # own single-writer lock is what fails instead. Found live 2026-08-25, when a config change to
+  # Prometheus produced a new pod crash-looping on "lock DB directory: resource temporarily
+  # unavailable" while the old one held it, and the old one was never terminated because the new one
+  # never became ready. A rollout that can never complete. Recreate accepts a moment of downtime,
+  # which is the honest cost of one node and one copy of the data.
+  strategy:
+    type: Recreate
   replicas: 1 # the source of truth is never scaled out here - a single local instance is the point
   selector:
     matchLabels:

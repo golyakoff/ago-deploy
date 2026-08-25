@@ -31,8 +31,14 @@ kind: Certificate
 metadata:
   name: ago-public-tls
 spec:
-  # One cert for all seven public hostnames (chat/auth/console/grafana, both demo shops, and the
-  # apex itself) - fewer moving parts than one Certificate per host, and Let's Encrypt's own rate
+  # One cert for seven hostnames. Six are served; `grafana.reserve-me.ru` is deliberately kept as a
+  # SAN after its listener and route were removed 2026-08-25 (gateway.yaml has the reasoning). Taking
+  # a name *out* of a Certificate makes cert-manager re-issue the whole thing, which means fresh
+  # HTTP-01 challenges for the six that are still working - a real operation with a real failure mode,
+  # bought for no security gain, since a SAN is not an exposure and every one of these names has been
+  # in public Certificate Transparency logs since the day it was first issued. Left in on purpose; if
+  # this certificate is ever re-issued for some other reason, drop the name then.
+  # One cert for all of them (rather than one per host) - fewer moving parts than one Certificate per host, and Let's Encrypt's own rate
   # limits (certificates per registered domain per week) are friendlier to a single multi-SAN cert
   # than separate ones for a domain this size. Re-applying this file adds one more SAN to the
   # existing certificate (cert-manager re-issues in place); it does not need a from-scratch replay

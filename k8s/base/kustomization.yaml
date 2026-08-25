@@ -16,6 +16,7 @@ resources:
   - jaeger.yaml
   - prometheus.yaml
   - grafana.yaml
+  - node-exporter.yaml
 
 # `5-05`/`adr/0022`: the demo realm lives inside this directory (keycloak-realm-import.json), not a
 # sibling `keycloak/` folder that would read more naturally - kustomize's configMapGenerator refuses a

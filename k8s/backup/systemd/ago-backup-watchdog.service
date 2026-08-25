@@ -1,0 +1,9 @@
+[Unit]
+Description=AGO: check that backups are being taken and collected, and mail a person when they are not
+Documentation=https://github.com/golyakoff/ago-root/blob/main/docs/runbooks/backup-and-restore.md
+
+[Service]
+Type=oneshot
+User=ago
+ExecStart=/home/ago/ago/ago-deploy/k8s/backup/backup-watchdog.sh
+TimeoutStartSec=120

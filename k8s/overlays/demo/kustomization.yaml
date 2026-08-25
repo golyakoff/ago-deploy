@@ -14,6 +14,12 @@ resources:
   - demo-shop1-static.yaml
   - demo-shop2-static.yaml
   - landing-static.yaml
+  # `15-03`: alerting. Demo-overlay-only, deliberately - see alertmanager.yaml's own header for why
+  # this is not in ../../base alongside prometheus.yaml and grafana.yaml, and for why Alertmanager
+  # was chosen over Grafana's built-in alerting. Not routed through gateway.yaml and never will be:
+  # it holds no data worth reaching from outside, and the same reasoning that removed Grafana's
+  # public route applies.
+  - alertmanager.yaml
 
 # Same shape as overlays/local/kustomization.yaml's own secretGenerator - one Secret, real values
 # this time (adr/0026, .env.example's own header comment: these are NOT the local throwaway
@@ -21,6 +27,28 @@ resources:
 secretGenerator:
   - name: infra-credentials
     envs: [.env]
+
+# `15-03`. NOTE THAT NOTHING WAS ADDED TO .env OR .env.example BY THIS ITEM, and the absence is the
+# point rather than an omission: the notification channel is the node's own Postfix over the cluster
+# bridge, which takes no SMTP AUTH and no TLS (`adr/0040`'s amendment, and .env.example's own
+# KEYCLOAK_SMTP_* block records the identical hop for Keycloak). There is no credential to keep out
+# of git. The one value that genuinely must not be committed - the human mailbox alerts are forwarded
+# to - is not a deployment setting at all: it lives in the node's /etc/aliases, which is neither a
+# repository nor a Secret.
+configMapGenerator:
+  # behavior: merge, not a new generator. The base already declares `prometheus-config` with
+  # prometheus.yml in it; merging adds one more key to that same ConfigMap so the rules land in
+  # /etc/prometheus next to the config, where base/prometheus-scrape-config.yml's
+  # `rule_files: [/etc/prometheus/*.rules.yml]` glob finds them. No second volume, no patch to the
+  # Prometheus Deployment, and the ConfigMap hash still changes when the rules change - which is what
+  # makes `kubectl apply -k` actually roll the pod instead of leaving it on stale rules.
+  - name: prometheus-config
+    behavior: merge
+    files:
+      - demo.rules.yml=prometheus-alert-rules.yml
+  - name: alertmanager-config
+    files:
+      - alertmanager.yml=alertmanager-config.yml
 
 patches:
   # adr/0026 "Image delivery": images are built directly on the VPS and imported into k3s's own

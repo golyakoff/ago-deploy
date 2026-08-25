@@ -1,0 +1,76 @@
+# `15-03`: where an alert goes. Mounted at /etc/alertmanager/alertmanager.yml (overlays/demo/
+# kustomization.yaml's configMapGenerator).
+#
+# THE CHANNEL IS EMAIL THROUGH THE NODE'S OWN POSTFIX, and the reason is `adr/0040`'s amendment
+# (2026-08-25): the author had just chosen to self-host mail entirely - outbound and inbound, no
+# third-party mail service in either direction, not even a free tier - after weighing a hosted
+# provider and rejecting it. A notification vendor (Telegram, Slack, ntfy, an uptime service with
+# push) is the same decision again, and every reason that produced that answer applies unchanged
+# here: `adr/0026`'s payment constraint, `personal-data.md`'s residency constraint, and an account
+# that can lapse, change terms, or be discontinued under a deployment expected to sit unattended.
+# A Telegram bot would additionally mean a real bot token - a credential this deployment does not
+# currently have and would have to carry - to reach a channel no more reliable than the mail path
+# that already exists and is already proven. Email costs nothing new: Postfix is already running,
+# already signs with DKIM, and Keycloak already sends through exactly this hop.
+#
+# WHAT THIS CHANNEL DOES NOT COVER, stated because it is structural and not a gap to be closed later:
+# the mail path runs on the node it is watching. If the node is gone, so is the alert. That is
+# `15-03`'s own "Two mechanisms, not one" - the external check answering "is the whole thing gone" is
+# a separate mechanism and this is not a substitute for it.
+global:
+  # `adr/0040`: `10.42.0.1` is the k3s flannel bridge (`cni0`) gateway - the node's address as seen
+  # from inside a pod. Postfix has `inet_interfaces = all` and trusts `10.42.0.0/16` in `mynetworks`.
+  # A cluster-internal address, identical on any k3s install with the default pod CIDR, therefore not
+  # a secret - unlike the node's public address, which must never appear in this repository.
+  smtp_smarthost: "10.42.0.1:25"
+  smtp_from: "alerts@reserve-me.ru"
+  # No STARTTLS and no SMTP AUTH, for the reason overlays/demo/.env.example already records for
+  # Keycloak's identical hop: this connection crosses a bridge interface on the same machine and
+  # never leaves the node. STARTTLS would need a certificate for an RFC 1918 address; AUTH would mean
+  # inventing a credential to protect a path already reachable only from inside the cluster.
+  # THIS IS WHY THERE IS NO NEW KEY IN overlays/demo/.env: the channel has no credential at all.
+  smtp_require_tls: false
+  # How long after the last firing evaluation an alert is considered resolved. 5m against the rule
+  # file's 30s evaluation interval - ten missed evaluations, not one, so a single scrape hiccup does
+  # not produce a spurious "RESOLVED" mail.
+  resolve_timeout: 5m
+
+route:
+  receiver: author-email
+  # One person, one deployment (`15-03` Out of scope: no rotation, no escalation). Grouping by
+  # alertname only means "the disk is filling" is one mail however many filesystems match, while two
+  # different problems never hide behind one subject line.
+  group_by: ["alertname"]
+  # 30s: long enough that a rule which fires for several targets in the same evaluation arrives as
+  # one message rather than three, short enough that the delay is not itself part of the incident.
+  group_wait: 30s
+  # 5m before a *new* member of an existing group produces a second mail.
+  group_interval: 5m
+  # 24h before an unresolved alert is repeated. This is the number that decides whether this channel
+  # survives contact with a real incident: at Alertmanager's own 4h default, one unfixable condition
+  # (a disk that is genuinely 85% full and staying there) produces six mails a day, and a channel
+  # that produces six mails a day for something you already know about is a channel you stop reading.
+  # Once a day is a reminder; every four hours is training to ignore it.
+  repeat_interval: 24h
+
+receivers:
+  - name: author-email
+    email_configs:
+      # `alerts@reserve-me.ru` is an alias on the node, not a mailbox. Postfix's /etc/aliases expands
+      # it to two destinations: the local `ago` mbox (a copy that survives even when outbound mail is
+      # broken, and the only copy this repository can name) and the author's real mailbox.
+      #
+      # WHY THE REAL ADDRESS IS NOT HERE: `CLAUDE.md` - "never write a secret, a token, a real
+      # endpoint or anyone's data into any of these repositories". A personal mailbox is a person's
+      # data. Keeping it in /etc/aliases on the node rather than in a `.env` key is also the smaller
+      # mechanism: changing who gets alerted is `sudo nano /etc/aliases && sudo newaliases`, with no
+      # Secret to regenerate, no `kubectl apply`, and no pod to restart.
+      - to: "alerts@reserve-me.ru"
+        # A RESOLVED mail is half the value of an alert: without it the only way to learn that the
+        # disk stopped filling is to go and look, which is the habit this whole item is trying to
+        # replace.
+        send_resolved: true
+        headers:
+          # Plain ASCII on purpose - a header that needs RFC 2047 encoding renders as mojibake in
+          # more clients than it should.
+          Subject: '[{{ .Status | toUpper }}] {{ .GroupLabels.alertname }} - AGO demo'

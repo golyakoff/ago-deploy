@@ -37,6 +37,12 @@ spec:
           ports:
             - containerPort: 5672 # AMQP
             - containerPort: 15672 # management UI
+            # `15-03`: `rabbitmq_prometheus` is enabled by default in this image (verified on the
+            # live broker: `rabbitmq-plugins list -e` shows `[E*] rabbitmq_prometheus`), so the
+            # endpoint was already listening here and nothing but this declaration was missing.
+            # Scraped for the dead-letter-queue alert - see base/prometheus-scrape-config.yml's
+            # `rabbitmq` job for why it reads /metrics/detailed rather than /metrics.
+            - containerPort: 15692 # Prometheus metrics
           env:
             # The image expects RABBITMQ_DEFAULT_*; the shared secret carries RABBITMQ_* (same
             # names docker-compose.yml uses), so these two are remapped rather than dumped in raw
@@ -106,3 +112,6 @@ spec:
     - name: management
       port: 15672
       targetPort: 15672
+    - name: metrics
+      port: 15692
+      targetPort: 15692

@@ -1,0 +1,177 @@
+# `15-03`: unit tests for prometheus-alert-rules.yml.
+#
+#   promtool test rules prometheus-alert-rules.test.yml
+#
+# WHY THIS FILE EXISTS. `15-03` says an alert rule that has never fired is a rule that has never been
+# tested, and the item is verified by firing rules against the live cluster. But two of the five
+# conditions cannot be forced on a healthy public deployment without breaking it - the node's disk
+# cannot be filled to 85% to see what happens, and a certificate cannot be aged three weeks - so the
+# live drill proves those two only with their thresholds relaxed to match today's real values. These
+# tests are the other half: they pin the *thresholds* against synthetic series, one step below and one
+# step above, offline and repeatably. Neither half is sufficient alone, which is why both are here.
+#
+# Every test also asserts a near-miss that must stay silent. Those are the load-bearing assertions:
+# a rule that fires when it should is easy, and a rule that fires when it should not is what makes a
+# channel unreadable.
+rule_files:
+  - prometheus-alert-rules.yml
+
+evaluation_interval: 30s
+
+tests:
+  # ------------------------------------------------------------------------------------------------
+  - name: ScrapeTargetDown fires for a k8s target and never for a compose target
+    interval: 30s
+    input_series:
+      - series: 'up{job="ago-chat-api", instance="ago-chat-api.ago-chat.svc.cluster.local:80", loop="k8s"}'
+        values: "0x40"
+      # The near-miss that matters most. base/prometheus-scrape-config.yml lists both loops' targets
+      # in one job, so this series is 0 on the demo deployment permanently and by design. If the rule
+      # ever loses its loop="k8s" matcher, this assertion fails instead of the author's inbox.
+      - series: 'up{job="ago-chat-api", instance="host.docker.internal:5009", loop="compose"}'
+        values: "0x40"
+      - series: 'up{job="node", instance="node-exporter.ago-chat.svc.cluster.local:9100", loop="k8s"}'
+        values: "1x40"
+    alert_rule_test:
+      - eval_time: 4m
+        alertname: ScrapeTargetDown
+        exp_alerts: []
+      - eval_time: 6m
+        alertname: ScrapeTargetDown
+        exp_alerts:
+          - exp_labels:
+              severity: page
+              job: ago-chat-api
+              instance: ago-chat-api.ago-chat.svc.cluster.local:80
+              loop: k8s
+            exp_annotations:
+              summary: "ago-chat-api has had no reachable instance for 5 minutes"
+              meaning: "The Service behind this job has no ready endpoint: a crashed pod, a failed rollout, or a dependency failing readiness."
+              first_check: "kubectl get pods -n ago-chat, then kubectl logs deploy/<name> --previous"
+              runbook: "ago-root docs/runbooks/alerting.md#scrapetargetdown"
+
+  # ------------------------------------------------------------------------------------------------
+  - name: OutboxLagGrowing fires above 60s and stays silent below it
+    interval: 30s
+    input_series:
+      - series: 'ago_chat_outbox_lag_seconds{job="ago-chat-worker", instance="ago-chat-worker.ago-chat.svc.cluster.local:80"}'
+        values: "300x40"
+      # A lag that exists but is well inside nfr.md's budget. Must never page.
+      - series: 'ago_chat_outbox_lag_seconds{job="ago-chat-api", instance="ago-chat-api.ago-chat.svc.cluster.local:80"}'
+        values: "2x40"
+    alert_rule_test:
+      - eval_time: 9m
+        alertname: OutboxLagGrowing
+        exp_alerts: []
+      - eval_time: 11m
+        alertname: OutboxLagGrowing
+        exp_alerts:
+          - exp_labels:
+              severity: page
+              job: ago-chat-worker
+            exp_annotations:
+              summary: "Oldest unpublished outbox row is 300s old on ago-chat-worker"
+              meaning: "Acknowledged writes have stopped being published. nfr.md budgets outbox dispatch inside a 300 ms p99; 60 s sustained is a stopped dispatcher, not a slow one."
+              first_check: "kubectl logs deploy/ago-chat-worker, and check whether ScrapeTargetDown is firing for rabbitmq"
+              runbook: "ago-root docs/runbooks/alerting.md#outboxlaggrowing"
+
+  # ------------------------------------------------------------------------------------------------
+  - name: DeadLetterQueueNotEmpty fires for a .dlq queue and ignores a deliberately deep working queue
+    interval: 30s
+    input_series:
+      - series: 'rabbitmq_detailed_queue_messages{job="rabbitmq", instance="rabbitmq.ago-chat.svc.cluster.local:15692", loop="k8s", vhost="/", queue="unread-counter.dlq"}'
+        values: "3x40"
+      # The real reason the rule matches only .dlq queues: this queue holds its backlog on purpose -
+      # the operator disconnect grace period is implemented by holding messages - and was sitting at
+      # 130 on the live cluster while everything was healthy.
+      - series: 'rabbitmq_detailed_queue_messages{job="rabbitmq", instance="rabbitmq.ago-chat.svc.cluster.local:15692", loop="k8s", vhost="/", queue="OperatorPresenceLost.operator-disconnect-grace"}'
+        values: "130x40"
+      - series: 'rabbitmq_detailed_queue_messages{job="rabbitmq", instance="rabbitmq.ago-chat.svc.cluster.local:15692", loop="k8s", vhost="/", queue="connection-fanout.dlq"}'
+        values: "0x40"
+    alert_rule_test:
+      - eval_time: 14m
+        alertname: DeadLetterQueueNotEmpty
+        exp_alerts: []
+      - eval_time: 16m
+        alertname: DeadLetterQueueNotEmpty
+        exp_alerts:
+          - exp_labels:
+              severity: page
+              job: rabbitmq
+              instance: rabbitmq.ago-chat.svc.cluster.local:15692
+              loop: k8s
+              vhost: "/"
+              queue: unread-counter.dlq
+            exp_annotations:
+              summary: "3 message(s) dead-lettered in unread-counter.dlq"
+              meaning: "A message failed every retry and is parked. Nothing will retry it; it stays until someone looks."
+              first_check: "port-forward svc/rabbitmq 15672, read the message and its x-death header, then that consumer's logs"
+              runbook: "ago-root docs/runbooks/alerting.md#deadletterqueuenotempty"
+
+  # ------------------------------------------------------------------------------------------------
+  - name: NodeDiskFilling watches the root filesystem only
+    interval: 30s
+    input_series:
+      - series: 'node_filesystem_avail_bytes{job="node", instance="node-exporter.ago-chat.svc.cluster.local:9100", loop="k8s", mountpoint="/", device="/dev/vda1", fstype="ext4"}'
+        values: "8e9x70"
+      - series: 'node_filesystem_size_bytes{job="node", instance="node-exporter.ago-chat.svc.cluster.local:9100", loop="k8s", mountpoint="/", device="/dev/vda1", fstype="ext4"}'
+        values: "80e9x70"
+      # /boot on Ubuntu is small and routinely near-full after a few kernel upgrades. It is not an
+      # incident, and pinning mountpoint="/" is what keeps it out of the inbox.
+      - series: 'node_filesystem_avail_bytes{job="node", instance="node-exporter.ago-chat.svc.cluster.local:9100", loop="k8s", mountpoint="/boot", device="/dev/vda2", fstype="ext4"}'
+        values: "1e8x70"
+      - series: 'node_filesystem_size_bytes{job="node", instance="node-exporter.ago-chat.svc.cluster.local:9100", loop="k8s", mountpoint="/boot", device="/dev/vda2", fstype="ext4"}'
+        values: "2e9x70"
+    alert_rule_test:
+      - eval_time: 29m
+        alertname: NodeDiskFilling
+        exp_alerts: []
+      - eval_time: 31m
+        alertname: NodeDiskFilling
+        exp_alerts:
+          - exp_labels:
+              severity: page
+              job: node
+              instance: node-exporter.ago-chat.svc.cluster.local:9100
+              loop: k8s
+              mountpoint: "/"
+              device: /dev/vda1
+              fstype: ext4
+            exp_annotations:
+              summary: "Node root filesystem is 10% free"
+              meaning: "Under 15% free on the one filesystem holding every PVC and the image store. nfr.md sets no disk target, so this is a headroom choice (about 12 GB of 79 GB), not a derived limit."
+              first_check: "on the node: df -h /, then du -xh --max-depth=2 / | sort -rh | head, then k3s crictl images"
+              runbook: "ago-root docs/runbooks/alerting.md#nodediskfilling"
+
+  # ------------------------------------------------------------------------------------------------
+  - name: TlsCertificateRenewalOverdue fires at 20 days remaining and not at 25
+    interval: 30s
+    input_series:
+      # promtool's clock starts at epoch 0, so an absolute expiry timestamp of 20 days is "20 days
+      # from the start of the test".
+      - series: 'certmanager_certificate_expiration_timestamp_seconds{job="cert-manager", instance="cert-manager.cert-manager.svc.cluster.local:9402", loop="k8s", namespace="ago-chat", name="ago-public-tls", issuer_name="letsencrypt-prod", issuer_kind="ClusterIssuer"}'
+        values: "1728000x150"
+      - series: 'certmanager_certificate_expiration_timestamp_seconds{job="cert-manager", instance="cert-manager.cert-manager.svc.cluster.local:9402", loop="k8s", namespace="ago-chat", name="some-healthy-cert", issuer_name="letsencrypt-prod", issuer_kind="ClusterIssuer"}'
+        values: "2160000x150"
+    alert_rule_test:
+      # The condition is already true here; `for: 1h` is what keeps it out of the inbox.
+      - eval_time: 30m
+        alertname: TlsCertificateRenewalOverdue
+        exp_alerts: []
+      - eval_time: 61m
+        alertname: TlsCertificateRenewalOverdue
+        exp_alerts:
+          - exp_labels:
+              severity: page
+              job: cert-manager
+              instance: cert-manager.cert-manager.svc.cluster.local:9402
+              loop: k8s
+              namespace: ago-chat
+              name: ago-public-tls
+              issuer_name: letsencrypt-prod
+              issuer_kind: ClusterIssuer
+            exp_annotations:
+              summary: "TLS certificate ago-chat/ago-public-tls expires in 19d 22h 59m 0s"
+              meaning: "cert-manager renews 30 days before expiry; under 21 days left means renewal has been failing for over a week. Nothing is broken yet - everything public breaks on the expiry date."
+              first_check: "kubectl describe certificate -n ago-chat ago-public-tls, then the challenge/order objects, then cert-manager's logs"
+              runbook: "ago-root docs/runbooks/alerting.md#tlscertificaterenewaloverdue"

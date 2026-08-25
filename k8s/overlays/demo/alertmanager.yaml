@@ -1,0 +1,130 @@
+# `15-03`: the last mile. Prometheus decides *that* something is wrong; this is the only component in
+# the deployment whose job is to tell a person, and it exists because a rule that fires into a
+# dashboard nobody has open is not alerting.
+#
+# WHY THIS IS IN overlays/demo/ AND NOT IN base/, unlike prometheus.yaml and grafana.yaml. `15-03`'s
+# own Out of scope: "Alerting on the local development cluster - a developer watching their own
+# terminal is the notification channel there." A base/ Alertmanager would also appear in
+# overlays/local, where it would evaluate nothing (the rule file ships in this overlay too) and, if it
+# ever did fire, would try to reach a Postfix at `10.42.0.1` that exists only on the VPS. An alerting
+# component that cannot deliver is worse than none: it looks like coverage.
+#
+# WHY ALERTMANAGER AND NOT GRAFANA'S OWN ALERTING - `15-03` asks for the choice and the reason.
+# Grafana is already deployed, so "no new pod" was the argument for it, and it lost on three counts:
+#   1. Rules stay plain PromQL in a rule file (prometheus-alert-rules.yml), which is reviewable in a
+#      diff and unit-testable offline with `promtool test rules` - and this change commits those unit
+#      tests (prometheus-alert-rules.test.yml). Grafana's provisioned rules are a UI-shaped model of
+#      uids, refIds and reduce/threshold stages with no offline test harness; nobody reviews that.
+#   2. Grafana is the thing you look at. Putting the notifier inside the dashboard app means an
+#      outage of the dashboard is also an outage of the alerting - and this deployment deliberately
+#      removed Grafana's public route (`15-03`, gateway.yaml, 2026-08-25) precisely to stop "I can
+#      open the dashboard" from being treated as a health check.
+#   3. The "less machinery" count is not actually in Grafana's favour: one small static binary and
+#      one config file here, against provisioning YAML plus contact points plus notification policies
+#      plus SMTP env vars on Grafana there.
+# The honest cost of this choice: one more Deployment and one more PVC on a single 6 GB node, and a
+# second web UI nobody will open. Counted, and accepted.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: alertmanager-data
+spec:
+  accessModes: ["ReadWriteOnce"]
+  resources:
+    requests:
+      # Silences and the notification log, nothing else. Alertmanager stores no time series.
+      storage: 128Mi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: alertmanager
+spec:
+  # Recreate, for the reason base/prometheus.yaml's own comment records at length: this Deployment
+  # owns a ReadWriteOnce PVC, and on a single node that claim does not stop two pods mounting the same
+  # directory - the application's own single-writer lock fails instead, producing a rollout that can
+  # never complete. Copied deliberately rather than by pattern: Alertmanager does hold a lock on its
+  # storage path.
+  strategy:
+    type: Recreate
+  replicas: 1
+  selector:
+    matchLabels:
+      app: alertmanager
+  template:
+    metadata:
+      labels:
+        app: alertmanager
+    spec:
+      securityContext:
+        # `17-05`'s direction, applied here rather than deferred - same reasoning as
+        # base/node-exporter.yaml. fsGroup is the load-bearing one: local-path creates the PVC
+        # directory owned by root, and without it a non-root Alertmanager cannot write its own
+        # notification log.
+        runAsNonRoot: true
+        runAsUser: 65534
+        runAsGroup: 65534
+        fsGroup: 65534
+      containers:
+        - name: alertmanager
+          image: prom/alertmanager:v0.27.0
+          args:
+            - --config.file=/etc/alertmanager/alertmanager.yml
+            - --storage.path=/alertmanager
+            # Deliberately an in-cluster URL, not a public one. Alertmanager has no Gateway route and
+            # is not going to get one (same reasoning that removed Grafana's), so the "Silence" links
+            # in a notification point at an address reachable only through `kubectl port-forward`.
+            # Setting it anyway beats the default, which would put this pod's own random hostname in
+            # every email and change on every restart.
+            - --web.external-url=http://alertmanager.ago-chat.svc.cluster.local:9093
+          ports:
+            - name: web
+              containerPort: 9093
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            requests:
+              memory: 32Mi
+              cpu: 10m
+            limits:
+              memory: 128Mi
+              cpu: 200m
+          volumeMounts:
+            - name: config
+              mountPath: /etc/alertmanager
+              readOnly: true
+            - name: data
+              mountPath: /alertmanager
+          readinessProbe:
+            httpGet:
+              path: /-/ready
+              port: 9093
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /-/healthy
+              port: 9093
+            initialDelaySeconds: 10
+            periodSeconds: 10
+      volumes:
+        - name: config
+          configMap:
+            name: alertmanager-config
+        - name: data
+          persistentVolumeClaim:
+            claimName: alertmanager-data
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: alertmanager
+spec:
+  selector:
+    app: alertmanager
+  ports:
+    - name: web
+      port: 9093
+      targetPort: 9093

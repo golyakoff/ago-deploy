@@ -73,17 +73,67 @@ services:
       timeout: 3s
       retries: 10
 
+  # `15-01`/`adr/0036`: creates Keycloak's own logical database and role inside the Postgres container
+  # above, before Keycloak is allowed to start. Same script and same reasoning as
+  # k8s/base/keycloak.yaml's initContainer (read that file's comment for why an initdb.d script is not
+  # an option): the official Postgres image only ever creates POSTGRES_DB, and only on the first
+  # initialisation of an empty volume, so an existing postgres-data volume would never grow a second
+  # database. A one-shot service rather than an init container because compose has no such concept -
+  # service_completed_successfully is the equivalent, and keycloak waits on it below.
+  keycloak-db-init:
+    image: postgres:17-alpine
+    restart: "no"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:?}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?}
+      KEYCLOAK_DB_PASSWORD: ${KEYCLOAK_DB_PASSWORD:?}
+    entrypoint: ["sh", "-c"]
+    # A one-item sequence, not a plain string: compose word-splits a string `command:` the way a shell
+    # would, so the block below would arrive as `sh -c set -eu export ...` - which runs the builtin
+    # `set` with no arguments, prints the environment, and exits 0. That is worse than a failure,
+    # because `service_completed_successfully` then reports a step that did nothing as a success and
+    # Keycloak fails later with an unexplained "password authentication failed for user keycloak".
+    # Found exactly that way while verifying `15-01`. A sequence item is passed through as one argument.
+    command:
+      - |
+        set -eu
+        export PGPASSWORD="$$POSTGRES_PASSWORD"
+        psql -h postgres -U "$$POSTGRES_USER" -d postgres -v ON_ERROR_STOP=1 \
+             -v pw="$$KEYCLOAK_DB_PASSWORD" <<'SQL'
+        SELECT 'CREATE ROLE keycloak LOGIN' WHERE NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'keycloak')\gexec
+        ALTER ROLE keycloak WITH LOGIN PASSWORD :'pw';
+        SELECT 'CREATE DATABASE keycloak OWNER keycloak' WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'keycloak')\gexec
+        SQL
+        echo "keycloak database ready"
+
   # `5-05`/`adr/0022`: the operator IdP. `start-dev` (never `start`, which demands a real TLS/hostname
-  # setup this local loop has no use for) plus `--import-realm` to bring in the demo realm/client/
-  # operator on every boot - idempotent, matching `create-demo-tenant.sh`'s own fixed-id precedent, so
-  # a container recreate never produces a second copy.
+  # setup this local loop has no use for - `adr/0036` re-examined that choice once a real database was
+  # under Keycloak and kept it, deliberately and in writing) plus `--import-realm` to bring in the demo
+  # realm/client/operator.
+  #
+  # `15-01`: KC_DB* is what makes a user created at runtime survive a `docker compose restart`. Before
+  # this, Keycloak kept everything in an embedded H2 file inside the container's writable layer, and
+  # recreating the container - which `docker compose up` does on any change to this file - destroyed
+  # every account that did not come from the realm import. Read `adr/0036` before assuming the import
+  # still runs on every boot: it is skip-if-exists, and now that the realm survives, it is skipped.
+  # k8s/apply-realm-settings.sh is how a changed realm file reaches a realm that already exists.
   keycloak:
     image: quay.io/keycloak/keycloak:26.0
     restart: unless-stopped
     command: start-dev --import-realm --health-enabled=true
+    depends_on:
+      keycloak-db-init:
+        condition: service_completed_successfully
     environment:
       KEYCLOAK_ADMIN: ${KEYCLOAK_ADMIN_USER:?}
       KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:?}
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://postgres:5432/keycloak
+      KC_DB_USERNAME: keycloak
+      KC_DB_PASSWORD: ${KEYCLOAK_DB_PASSWORD:?}
     ports:
       - "8081:8080" # OIDC - Ago.Chat.Api's Auth:Keycloak:Authority points here
       - "8082:9000" # health/management, separate from the OIDC port as of recent Keycloak versions

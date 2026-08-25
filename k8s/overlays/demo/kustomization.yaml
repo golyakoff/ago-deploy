@@ -82,7 +82,15 @@ patches:
       # --hostname is set, unless told explicitly that TLS is handled upstream. Kept on `start-dev`
       # rather than switching to full production `start` mode - adr/0026's own "Consequences" section
       # names this as a deliberate, stated gap (a demo IdP for one seeded operator), not a silent
-      # shortcut.
+      # shortcut. `15-01`/`adr/0036` re-opened that choice on purpose, since "start-dev keeps its data
+      # in H2" was one of the reasons the gap mattered, and kept `start-dev` anyway with the reasoning
+      # written down there - the remaining blocker is that `sslRequired: "none"` cannot be raised until
+      # proxy-header trust is verified end to end through the Gateway, which needs the real node.
+      #
+      # This patch replaces `args` only. base/keycloak.yaml's `env` (KC_DB*, `15-01`) and its
+      # `initContainers` (the one that creates Keycloak's own database) are inherited unchanged, so the
+      # demo deployment gets a persistent user store from the same base manifest the local overlay uses
+      # - which is the point: this class of bug survived because local and demo agreed on being wrong.
       - op: replace
         path: /spec/template/spec/containers/0/args
         value:

@@ -4,15 +4,14 @@ metadata:
   name: keycloak
 spec:
   replicas: 1 # local dev IdP only - never scaled out here, same reasoning as postgres.yaml
-  # Keycloak's start-dev mode defaults to its embedded H2 database, which only ever allows one
-  # process to hold the file open (exclusive-mode lock) - a real deadlock found live (2026-08-24):
-  # the default RollingUpdate strategy briefly runs the old and new pod together during any rollout,
-  # and with a single-writer embedded DB backing a PVC, both pods then fight over the same exclusive
-  # lock and neither ever becomes Ready. Recreate (old pod terminated before the new one starts) is
-  # the correct strategy for any single-replica Deployment backed by an exclusive-lock store - the
-  # same reasoning postgres.yaml/redis.yaml/rabbitmq.yaml/minio.yaml already apply implicitly by
-  # virtue of Postgres/Redis/RabbitMQ/MinIO each managing their own multi-writer safety internally,
-  # which Keycloak's embedded H2 specifically does not.
+  # `15-01`: Recreate is kept, but the reason changed with this item. It was originally chosen because
+  # `start-dev` defaults to an embedded H2 file that only one process may hold open - a real deadlock
+  # found live (2026-08-24) where RollingUpdate briefly ran two pods against one exclusive lock and
+  # neither ever became Ready. Keycloak no longer runs on H2 (KC_DB below), and Postgres is perfectly
+  # happy with two writers, so that specific deadlock is gone. Recreate stays anyway for the *next*
+  # single-writer moment in this deployment's life: a Keycloak image version bump runs a Liquibase
+  # schema migration on boot, and two pods migrating the same schema concurrently is a race worth not
+  # having on a single-replica Deployment that gains nothing from a rolling update in the first place.
   strategy:
     type: Recreate
   selector:
@@ -23,12 +22,59 @@ spec:
       labels:
         app: keycloak
     spec:
+      # `15-01`/`adr/0036`: Keycloak's own rows live in a separate logical database (`keycloak`) inside
+      # the *same* Postgres Deployment the application uses - one database server on a one-node cluster
+      # (`adr/0026`), two databases that never see each other's schema. Postgres's official image only
+      # creates POSTGRES_DB, and only on the very first initialisation of an empty data directory, so a
+      # cluster whose PVC already holds data (which is every cluster this change will ever be applied
+      # to) would never get a second database from an initdb script. This initContainer creates the role
+      # and the database instead: idempotent, runs on every boot, works identically on a fresh cluster
+      # and on one that has been up for weeks. It doubles as the startup-ordering dependency - Keycloak
+      # cannot boot before Postgres accepts connections, and the pod simply stays in Init until it does,
+      # which also means the readiness clock below does not start ticking against a Postgres that is
+      # still coming up.
+      initContainers:
+        - name: create-keycloak-database
+          image: postgres:17-alpine # already on every node that runs postgres.yaml - no new image
+          envFrom:
+            - secretRef:
+                name: infra-credentials
+          command: ["sh", "-c"]
+          args:
+            - |
+              set -eu
+              : "${KEYCLOAK_DB_PASSWORD:?not set - add it to the overlay .env feeding infra-credentials}"
+              until pg_isready -h postgres -p 5432 -U "$POSTGRES_USER" -d "$POSTGRES_DB" >/dev/null 2>&1; do
+                echo "waiting for postgres..."
+                sleep 2
+              done
+              export PGPASSWORD="$POSTGRES_PASSWORD"
+              # The password is passed as a psql variable, not interpolated into SQL text, so it never
+              # reaches argv. ALTER ROLE runs unconditionally on purpose: rotating KEYCLOAK_DB_PASSWORD
+              # in the .env and restarting the pod is then all a rotation takes.
+              psql -h postgres -U "$POSTGRES_USER" -d postgres -v ON_ERROR_STOP=1 \
+                   -v pw="$KEYCLOAK_DB_PASSWORD" <<'SQL'
+              SELECT 'CREATE ROLE keycloak LOGIN' WHERE NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'keycloak')\gexec
+              ALTER ROLE keycloak WITH LOGIN PASSWORD :'pw';
+              SELECT 'CREATE DATABASE keycloak OWNER keycloak' WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'keycloak')\gexec
+              SQL
+              echo "keycloak database ready"
+          resources:
+            requests:
+              memory: 32Mi
+              cpu: 50m
+            limits:
+              memory: 128Mi
+              cpu: 200m
       containers:
         - name: keycloak
           image: quay.io/keycloak/keycloak:26.0
-          # `5-05`/`adr/0022`: start-dev, never start (which demands real TLS/hostname config this
-          # local overlay has no use for) - --import-realm brings in the demo realm/client/operator
-          # on every boot, idempotently (docker-compose's own comment has the detail).
+          # `5-05`/`adr/0022`: start-dev, never start - `adr/0036` re-examined that choice once a real
+          # database was under Keycloak and kept it deliberately, with the reasoning written down there
+          # rather than assumed. --import-realm brings in the demo realm/client/operator on first boot.
+          # Read `adr/0036` before reading that as "on every boot": with a persistent database the realm
+          # survives, and --import-realm is skip-if-exists, so a *changed* realm file does not reach a
+          # realm that already exists. k8s/apply-realm-settings.sh is how such a change is applied.
           args: ["start-dev", "--import-realm", "--health-enabled=true"]
           ports:
             - containerPort: 8080 # OIDC - Ago.Chat.Api's Auth:Keycloak:Authority points here
@@ -37,8 +83,22 @@ spec:
             - secretRef:
                 name: infra-credentials
           env:
+            # $(VAR) here expands against the envFrom Secret above - verified live on this cluster,
+            # and the pattern KEYCLOAK_ADMIN has been using since `5-05`.
             - name: KEYCLOAK_ADMIN
               value: "$(KEYCLOAK_ADMIN_USER)"
+            # `15-01`/`adr/0036`: the whole point of this item. Without these four, Keycloak keeps its
+            # users in an H2 file inside the container's ephemeral writable layer, and every restart,
+            # redeploy, eviction and node reboot destroys every account created at runtime - which is
+            # every account `10-01`'s self-registration flow exists to create.
+            - name: KC_DB
+              value: postgres
+            - name: KC_DB_URL
+              value: jdbc:postgresql://postgres:5432/keycloak
+            - name: KC_DB_USERNAME
+              value: keycloak
+            - name: KC_DB_PASSWORD
+              value: "$(KEYCLOAK_DB_PASSWORD)"
           volumeMounts:
             - name: realm-import
               mountPath: /opt/keycloak/data/import
@@ -59,6 +119,18 @@ spec:
           # first boot. Generous initial delays and a wider liveness failureThreshold - a slow first
           # boot is a one-time cost, not a reason to also make every steady-state health check laxer
           # (periodSeconds stays the same once past the initial delay).
+          #
+          # `15-01` re-measured rather than assuming those numbers carry over, since Liquibase now runs
+          # against Postgres over the network instead of a local H2 file (measured on the Docker Desktop
+          # cluster, 2026-08-25, from this pod's own logs and its Ready condition):
+          #   first boot, empty `keycloak` database: schema creation plus the realm import took ~19s of
+          #     the boot; Quarkus logged `started in 29.253s`; HTTP listening ~40s after container start.
+          #   restart against the populated database: import skipped in <1s; `started in 10.852s`;
+          #     listening 35s after container start; pod Ready 61s after container start.
+          # In other words the readiness initialDelaySeconds below is now the binding constraint, not
+          # Keycloak - both boots finish inside these delays with room to spare, so they are left
+          # unchanged. The init container above absorbs a slow Postgres separately: the pod waits in
+          # Init rather than burning readiness attempts against a database that is not up yet.
           readinessProbe:
             httpGet:
               path: /health/ready

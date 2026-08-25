@@ -4,6 +4,17 @@ metadata:
   name: ago-chat-gateway
 spec:
   gatewayClassName: nginx
+  # `17-02`: the access-log format below is this Gateway's own, not the NGF install's default -
+  # see the NginxProxy at the bottom of this file for why the default was leaking a live bearer
+  # token to disk. A Gateway-scoped NginxProxy is merged field-by-field over the GatewayClass-scoped
+  # one the NGF install ships (`nginx-gateway/nginx-gateway-proxy-config`), so setting one field here
+  # does not discard that one's image/replicas/Service settings - verified live, the data-plane
+  # Service stayed `LoadBalancer` after this was attached.
+  infrastructure:
+    parametersRef:
+      group: gateway.nginx.org
+      kind: NginxProxy
+      name: ago-chat-gateway-proxy
   listeners:
     - name: http
       port: 80
@@ -58,3 +69,47 @@ spec:
   # least_conn, not round-robin: with long-lived WebSockets, round-robin distributes connection
   # *events* evenly but leaves connection *counts* skewed after any partial outage (edge.md).
   loadBalancingMethod: least_conn
+---
+# `17-02`: an access-log format that does not contain the query string.
+#
+# Found live on this cluster, not inferred from the defaults: with no access-log configuration
+# anywhere in this repository, NGINX's compiled-in default applied - `access_log
+# /var/log/nginx/access.log combined`, and in the NGF data-plane image that path is a symlink to
+# /dev/stdout, so every request line landed in the container log and from there on the node's disk.
+# `combined` logs `$request`, which is the *full original request line*, query string included. A
+# SignalR client in a browser cannot set a header on a WebSocket handshake, so it puts the bearer
+# token in the query string instead (realtime.md) - which meant every hub connect wrote a live,
+# unexpired token to disk. `coding-style.md`: "Never log message bodies, tokens, presigned URLs..."
+# ago-root's `backlog/17-02` has the observation, with the token redacted, and the before/after.
+#
+# `$uri` rather than `$request`: `$uri` is the normalised request path with the query string already
+# stripped, so the line keeps the shape of `combined` and loses only the part that carried the
+# secret. No route in either overlay uses a URLRewrite filter, so `$uri` is the path the client
+# actually asked for and not something rewritten out from under the reader.
+#
+# The whole query string goes, not just `access_token`. Redacting one named parameter is a denylist:
+# it protects the value we already know about and fails open for the next one (a presigned URL, a
+# password-reset token, a cursor carrying an id). Nothing in this API's design needs the query string
+# in an access log - the path, the status and the client address are what a request log is for, and
+# anything finer is a trace, where the same value is redacted already (see 17-02 on the OTel side).
+#
+# Not demo-overlay-only, unlike the RateLimitPolicy/ClientSettingsPolicy in overlays/demo: those are
+# hardening against an attacker a local Docker-Desktop cluster does not have, while this one is about
+# not writing a secret down, and a local disk is a disk.
+#
+# One residual this does not close, and cannot from here: nginx's **error** log prints
+# `request: "..."` plus the full upstream URI, both with the query string intact, and neither string
+# is configurable (the access-log format has no effect on error-log lines). Measured deliberately
+# while verifying this change - a forced 502 through this Gateway logged the query string twice on
+# one line. So a *failing* hub connect still writes the token to disk. Lowering `logging.errorLevel`
+# past `error` would hide it and would also hide every upstream failure worth seeing, which is a
+# worse trade; the real close is moving the token out of the query string, which both `5-14` and
+# `17-02` scope out on purpose. ago-root's `backlog/17-02` records it as an open residual.
+apiVersion: gateway.nginx.org/v1alpha2
+kind: NginxProxy
+metadata:
+  name: ago-chat-gateway-proxy
+spec:
+  logging:
+    accessLog:
+      format: '$remote_addr - $remote_user [$time_local] "$request_method $uri $server_protocol" $status $body_bytes_sent "$http_referer" "$http_user_agent"'

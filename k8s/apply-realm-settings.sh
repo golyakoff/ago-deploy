@@ -32,6 +32,13 @@
 #   - Deleting a realm-level setting by removing it from the JSON - NO. Absent fields are left alone
 #     rather than reset to their default, so a setting that has ever been applied has to be set back
 #     explicitly, not deleted from the file.
+#   - The realm's `smtpServer` (`10-05`) - NO, and on purpose. It is the one realm-level setting that
+#     is not in keycloak-realm-import.json, because it carries a credential and because its correct
+#     value differs between the local sink and the real provider. It comes from KEYCLOAK_SMTP_* in the
+#     `infra-credentials` Secret instead, applied by k8s/apply-smtp-settings.sh. Since it is absent
+#     from the file, the rule above applies and this script leaves the live SMTP configuration alone.
+#     Run apply-smtp-settings.sh *after* this script rather than before, and re-run it if in doubt -
+#     it is idempotent, and it is always the safe direction.
 #
 # What it deliberately is not: `kc.sh import --override true`. That would apply the whole file, and it
 # does so by replacing the realm - taking every runtime-created user with it. Never run it against a
@@ -81,7 +88,7 @@ KCADM=/opt/keycloak/bin/kcadm.sh
   --user \"\$KEYCLOAK_ADMIN\" --password \"\$KEYCLOAK_ADMIN_PASSWORD\" >/dev/null
 \$KCADM update realms/$REALM -f $IMPORT_FILE
 echo '-- realm now reports:'
-\$KCADM get realms/$REALM --fields registrationAllowed,verifyEmail,bruteForceProtected,failureFactor,passwordPolicy,accessTokenLifespan,ssoSessionIdleTimeout,ssoSessionMaxLifespan,offlineSessionIdleTimeout,actionTokenGeneratedByUserLifespan
+\$KCADM get realms/$REALM --fields registrationAllowed,resetPasswordAllowed,verifyEmail,bruteForceProtected,failureFactor,passwordPolicy,accessTokenLifespan,ssoSessionIdleTimeout,ssoSessionMaxLifespan,offlineSessionIdleTimeout,actionTokenGeneratedByUserLifespan
 "
 
 echo "== done. Users and clients were not touched - see this script's own header for what it does not cover."

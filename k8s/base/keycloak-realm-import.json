@@ -4,6 +4,7 @@
   "sslRequired": "none",
   "registrationAllowed": true,
   "registrationEmailAsUsername": false,
+  "resetPasswordAllowed": true,
   "verifyEmail": true,
   "bruteForceProtected": true,
   "permanentLockout": false,

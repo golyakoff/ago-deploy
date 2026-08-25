@@ -44,6 +44,13 @@ resources:
 # directly: a new realm role and a changed accessTokenLifespan were both added to this file, the pod
 # was restarted, and neither reached the realm.
 #
+# `10-05`: one realm-level setting is deliberately *not* in that file - `smtpServer`. It carries a
+# credential (which must never be committed) and its correct value differs between the local mail sink
+# and the demo deployment's real sending provider, so it travels the `.env` -> secretGenerator ->
+# `infra-credentials` road every other credential here already travels and is applied by
+# `k8s/apply-smtp-settings.sh`. Keeping it out of the JSON also means `apply-realm-settings.sh` cannot
+# reset the demo's mail configuration to a local sink by accident.
+#
 # So editing this file alone no longer changes a Keycloak that is already running. Realm-*level*
 # settings (everything `adr/0034` chose) are applied with `k8s/apply-realm-settings.sh`, which PUTs
 # this same file's realm-level fields onto the live realm and leaves users and clients alone. A new or

@@ -6,6 +6,9 @@ namespace: ago-chat
 resources:
   - ../../base
   - gateway.yaml
+  # `10-05`: the local mail sink Keycloak's realm points at, local-overlay-only on purpose - that
+  # file's own header says why a sink must never reach base/ or the demo overlay.
+  - mailpit.yaml
 
 # Same shape as docker/.env (copy the values across so both loops use the same local dev
 # passwords) - kustomize refuses to read a secretGenerator source from outside its own directory

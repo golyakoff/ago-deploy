@@ -22,7 +22,10 @@ DOMAIN="${DOMAIN:-reserve-me.ru}"
 NS="${NS:-ago-chat}"
 API_BASE="${API_BASE:-https://chat.${DOMAIN}}"
 
-kc() { if command -v kubectl >/dev/null 2>&1; then kubectl "$@"; else sudo k3s kubectl "$@"; fi; }
+# A bare `kubectl` on the PATH is not proof that it works: k3s keeps its kubeconfig root-only, so a
+# wrapper that forgets sudo passes `command -v` and then fails on every call. Prove it can reach the
+# cluster before trusting it.
+kc() { if kubectl version >/dev/null 2>&1; then kubectl "$@"; else sudo k3s kubectl "$@"; fi; }
 step() { printf "\n\033[1m== %s\033[0m\n" "$1"; }
 
 step "1. Checkouts"
@@ -43,14 +46,28 @@ fi
 chmod +x "$AGO_ROOT/ago-deploy/k8s/build-images.sh" "$AGO_ROOT/ago-deploy/k8s/build-static-images.sh" \
          "$AGO_ROOT/ago-deploy/k8s/smoke.sh" 2>/dev/null || true
 
-step "2. Build images"
+step "2. Pack the platform into the local feed"
+# ago-chat restores Ago.Platform.* from this file feed by version. A platform release bumps the
+# version in its CHANGELOG and every consuming .csproj, so a redeploy that skips this step fails at
+# image build with NU1102 "Unable to find package ... version (>= x)" - which is exactly how the
+# first real run of this script ended. The runbook had this step; the script did not.
+export PATH="$PATH:$HOME/.dotnet/tools"
+cd "$AGO_ROOT/ago-platform"
+# Parsed without a bracket regex on purpose: the line is `## [0.15.0] - 2026-08-25`, and stripping
+# the punctuation is both shorter and immune to the escaping that quoting a regex through layers of
+# shell keeps mangling.
+PLATFORM_VERSION=$(grep -m1 '^## ' CHANGELOG.md | tr -d '#[]' | awk '{print $1}')
+echo "   packing Ago.Platform.* $PLATFORM_VERSION"
+dotnet pack Ago.Platform.slnx -c Release -o "$AGO_ROOT/ago-deploy/.nuget-feed" -p:Version="$PLATFORM_VERSION" >/dev/null
+
+step "3. Build images"
 cd "$AGO_ROOT/ago-chat"
 CHAT_REPO=. NUGET_FEED=../ago-deploy/.nuget-feed DOCKER_BUILDKIT=1 ../ago-deploy/k8s/build-images.sh
 cd "$AGO_ROOT/ago-deploy/k8s"
 CONSOLE_REPO=../../ago-console WIDGET_REPO=../../ago-widget AGO_API_BASE_URL="$API_BASE" \
   ./build-static-images.sh
 
-step "3. Import into containerd"
+step "4. Import into containerd"
 # -n k8s.io is not optional: k3s's embedded containerd keeps kubelet-visible images in that
 # namespace, and an import without it lands somewhere the kubelet never looks.
 for img in ago-chat-api ago-chat-worker ago-chat-webhooks ago-console ago-demo-shop1 ago-demo-shop2 ago-landing; do
@@ -58,7 +75,7 @@ for img in ago-chat-api ago-chat-worker ago-chat-webhooks ago-console ago-demo-s
   docker save "${img}:local" | sudo k3s ctr -n k8s.io images import - >/dev/null && echo "imported"
 done
 
-step "4. Migrations"
+step "5. Migrations"
 # Before the restart, deliberately. Migrations here are additive, so the currently-running old code
 # is unaffected by columns it does not know about - whereas new code meeting an old schema fails on
 # every query that touches the new columns, which is the failure this whole script exists to prevent.
@@ -70,13 +87,16 @@ dotnet restore src/Ago.Chat.Infrastructure.Postgres/Ago.Chat.Infrastructure.Post
 kc port-forward "svc/postgres" 15432:5432 -n "$NS" >/tmp/redeploy-pf.log 2>&1 &
 PF=$!; trap 'kill $PF 2>/dev/null || true' EXIT
 sleep 4
-SECRET_NAME=$(kc get secret -n "$NS" -o name | grep infra-credentials | cut -d/ -f2)
+# Ask the running Postgres which secret it actually uses rather than pattern-matching the namespace.
+# kustomize hash-suffixes the name, so an edit to .env leaves the previous secret behind and a grep
+# returns two - which is exactly what happened on the first real run of this script.
+SECRET_NAME=$(kc get deployment postgres -n "$NS" -o jsonpath='{.spec.template.spec.containers[0].envFrom[0].secretRef.name}')
 PGPW=$(kc get secret "$SECRET_NAME" -n "$NS" -o jsonpath='{.data.POSTGRES_PASSWORD}' | base64 -d)
 AGO_CHAT_CONNECTION_STRING="Host=localhost;Port=15432;Database=ago_chat;Username=ago;Password=${PGPW}" \
   dotnet ef database update -p src/Ago.Chat.Infrastructure.Postgres -s src/Ago.Chat.Infrastructure.Postgres
 kill $PF 2>/dev/null || true; trap - EXIT
 
-step "5. Restart, backend first"
+step "6. Restart, backend first"
 # The API before the frontends: 12-03's owner view calls 12-02's endpoint, and a console that is
 # newer than the API it talks to shows a screen wired to something that does not exist yet.
 kc rollout restart deployment/ago-chat-api deployment/ago-chat-worker deployment/ago-chat-webhooks -n "$NS"
@@ -84,12 +104,12 @@ for d in ago-chat-api ago-chat-worker ago-chat-webhooks; do
   kc rollout status "deployment/$d" -n "$NS" --timeout=180s
 done
 
-step "6. Restart frontends"
+step "7. Restart frontends"
 kc rollout restart deployment/ago-console deployment/ago-demo-shop1 deployment/ago-demo-shop2 deployment/ago-landing -n "$NS"
 for d in ago-console ago-demo-shop1 ago-demo-shop2 ago-landing; do
   kc rollout status "deployment/$d" -n "$NS" --timeout=180s
 done
 
-step "7. Smoke"
+step "8. Smoke"
 sleep 5
 CHAT_REPO="$AGO_ROOT/ago-chat" "$AGO_ROOT/ago-deploy/k8s/smoke.sh" "$DOMAIN"

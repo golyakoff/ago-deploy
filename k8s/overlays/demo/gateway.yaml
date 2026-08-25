@@ -30,6 +30,15 @@ metadata:
   name: ago-chat-gateway
 spec:
   gatewayClassName: nginx
+  # `17-02`: same access-log format as overlays/local/gateway.yaml, and for the same reason - the
+  # NginxProxy at the bottom of this file has it. It matters more here: this is the Gateway a real
+  # visitor's hub connection actually crosses, and the token in that request's query string was being
+  # written to this node's disk in full on every connect.
+  infrastructure:
+    parametersRef:
+      group: gateway.nginx.org
+      kind: NginxProxy
+      name: ago-chat-gateway-proxy
   listeners:
     # Plain HTTP stays open on every host in this overlay - cert-manager's own gatewayHTTPRoute ACME
     # solver (adr/0026, tls.yaml) answers Let's Encrypt's HTTP-01 challenge through a temporary
@@ -334,3 +343,29 @@ spec:
           rate: "30r/s"
           burst: 60
           zoneSize: "10m"
+---
+# `17-02`: an access-log format that does not contain the query string. Identical to
+# overlays/local/gateway.yaml's own NginxProxy, which carries the full reasoning - in short, with no
+# access-log configuration anywhere in this repository NGINX's compiled-in `combined` default
+# applied, `combined` logs `$request` (the full original request line, query string included), and a
+# browser SignalR client has nowhere but the query string to put its bearer token on a WebSocket
+# handshake (realtime.md). Every hub connect therefore wrote a live token to this node's disk.
+# Verified live on the local cluster before and after; `$uri` drops the query string and keeps the
+# rest of `combined`'s shape.
+#
+# Unlike the two policies above, this one is *not* demo-only reasoning - it is in overlays/local too,
+# because the point is not to defend against an attacker but not to write a secret down.
+#
+# One residual this does not close, and cannot: nginx's **error** log prints `request: "..."` and the
+# full upstream URI with the query string intact, and that string is not configurable. So a *failing*
+# hub connect (a 502 during a rolling deploy, an upstream timeout) still puts the token on disk.
+# ago-root's `backlog/17-02` records it with the measurement; closing it means moving the token out
+# of the query string, which both `5-14` and `17-02` scope out on purpose.
+apiVersion: gateway.nginx.org/v1alpha2
+kind: NginxProxy
+metadata:
+  name: ago-chat-gateway-proxy
+spec:
+  logging:
+    accessLog:
+      format: '$remote_addr - $remote_user [$time_local] "$request_method $uri $server_protocol" $status $body_bytes_sent "$http_referer" "$http_user_agent"'

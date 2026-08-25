@@ -1,0 +1,78 @@
+# `10-05`: the local mail sink, and deliberately **only** in this overlay.
+#
+# Keycloak's "Verify Email" required action (`10-01`/`adr/0028`) and its password-reset flow both send
+# through the realm's `smtpServer`. Until this item there was none, anywhere - a registration was
+# accepted and then died at `SEND_VERIFY_EMAIL_ERROR ... error="email_send_failed"` with the required
+# action permanently unliftable. Mailpit accepts every message on 1025, forwards none of them, and
+# shows them in a web UI, so the real browser flow (register -> read the mail -> click the link ->
+# verified) is exercisable locally without the admin-API shortcut in `runbooks/local-dev.md`.
+#
+# Why not in base/: a mail sink on the demo deployment would accept a real visitor's verification mail
+# and silently drop it, which is strictly worse than the current failure - at least a failure to send
+# is visible in Keycloak's own log. The demo overlay points the same realm setting at a real sending
+# provider instead (ago-root `adr/0040`), through the same KEYCLOAK_SMTP_* keys and the same
+# `k8s/apply-smtp-settings.sh` script. base/ therefore holds neither, which also means neither
+# `keycloak-realm-import.json` nor `apply-realm-settings.sh` carries an SMTP host that could be applied
+# to the wrong environment by accident.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mailpit
+spec:
+  replicas: 1 # a sink, with in-memory-by-default storage - scaling it out would only split the inbox
+  selector:
+    matchLabels:
+      app: mailpit
+  template:
+    metadata:
+      labels:
+        app: mailpit
+    spec:
+      containers:
+        - name: mailpit
+          image: axllent/mailpit:v1.31.0
+          # No imagePullPolicy: Never here, unlike this overlay's ago-chat-* patches - this is an
+          # upstream image that has to be pulled, the same reasoning the demo overlay's own Keycloak
+          # patch already spells out after that exact mistake produced a live ErrImageNeverPull.
+          ports:
+            - containerPort: 1025 # SMTP
+            - containerPort: 8025 # web UI - reach it with `kubectl port-forward svc/mailpit 8025:8025`
+          env:
+            # Keep the captured mail out of a volume: this is a throwaway local inbox, and a restart
+            # emptying it is wanted rather than a loss. Explicit because Mailpit's own default has
+            # changed across versions, and a silent switch to a file store inside the container's
+            # writable layer is the sort of thing `15-01` just spent an item cleaning up.
+            - name: MP_DATABASE
+              value: "" # empty = in-memory
+          resources:
+            requests:
+              memory: 32Mi
+              cpu: 25m
+            limits:
+              memory: 128Mi
+              cpu: 200m
+          readinessProbe:
+            exec:
+              command: ["/mailpit", "readyz"] # the image has no curl or wget; this is its own probe
+            initialDelaySeconds: 3
+            periodSeconds: 5
+          livenessProbe:
+            exec:
+              command: ["/mailpit", "readyz"]
+            initialDelaySeconds: 10
+            periodSeconds: 10
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mailpit
+spec:
+  selector:
+    app: mailpit
+  ports:
+    - name: smtp
+      port: 1025
+      targetPort: 1025
+    - name: http
+      port: 8025
+      targetPort: 8025

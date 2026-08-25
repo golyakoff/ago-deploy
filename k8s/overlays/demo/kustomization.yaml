@@ -50,49 +50,46 @@ configMapGenerator:
     files:
       - alertmanager.yml=alertmanager-config.yml
 
+# `15-06`/`adr/0047`: the three host images come from GHCR under an immutable, identifying tag - the
+# full commit SHA - instead of the mutable `:local` tag adr/0026 imported straight into containerd.
+#
+# **This block is the record of what this environment is meant to be running.** `deploy.sh <sha>`
+# changes the live Deployments with `kubectl set image` and does not edit this file, so the two drift
+# on purpose and in one direction only: a `kubectl apply -k` of this overlay resets the cluster to
+# the tag written here. That is a trap if it is forgotten and a feature if it is not, so the rule is
+# explicit - after a deploy that is meant to stick, update these three tags and commit. deploy.sh
+# prints the exact lines to change, and smoke.sh compares what is running against what is here.
+#
+# No `imagePullPolicy` patch any more (there were three, one per host, all removed here). The
+# default for a non-`:latest` tag is IfNotPresent, which is exactly right for an immutable SHA tag:
+# present in containerd, it is used without a network call - so a node that built its own image, or
+# imported one, behaves as it always did - and absent, it is pulled from GHCR. `Never` cannot do the
+# second half, and the second half is what makes a rebuilt cluster (15-02) able to start at all.
+images:
+  - name: ago-chat-api
+    newName: ghcr.io/golyakoff/ago-chat-api
+    newTag: f3ecc0d87bb20d3de467a1aeeb5c4d636bc48a65
+  - name: ago-chat-worker
+    newName: ghcr.io/golyakoff/ago-chat-worker
+    newTag: f3ecc0d87bb20d3de467a1aeeb5c4d636bc48a65
+  - name: ago-chat-webhooks
+    newName: ghcr.io/golyakoff/ago-chat-webhooks
+    newTag: f3ecc0d87bb20d3de467a1aeeb5c4d636bc48a65
+
 patches:
-  # adr/0026 "Image delivery": images are built directly on the VPS and imported into k3s's own
-  # containerd store (k3s ctr images import) - no registry exists for these tags on that node either,
-  # so imagePullPolicy: Never is copied verbatim from overlays/local/kustomization.yaml, same
-  # ErrImageNeverPull-not-a-silent-hang reasoning.
-  - target:
-      kind: Deployment
-      name: ago-chat-api
-    patch: |
-      - op: add
-        path: /spec/template/spec/containers/0/imagePullPolicy
-        value: Never
-      # adr/0026: Auth__Keycloak__Authority must be the *public* issuer - the Operator JWT scheme
-      # validates a token's iss claim by exact string match (5-05's own documented gotcha), and a
-      # console login (8-02, Authorization Code + PKCE) mints tokens against auth.reserve-me.ru,
-      # not the internal `keycloak` Service base/api.yaml points at. Index 6 in base/api.yaml's own
-      # env list as of this change - a JSON6902 index patch is fragile against reordering that list;
-      # kustomize's strategic-merge patching does not merge corev1.EnvVar lists by name (only
-      # Containers/Volumes/Ports carry a patchMergeKey), so an index-based patch is the only option
-      # available, same as overlays/local/kustomization.yaml's own imagePullPolicy patch above. If a
-      # future change reorders base/api.yaml's env list, this index must be updated to match.
-      - op: replace
-        path: /spec/template/spec/containers/0/env/6/value
-        value: "https://auth.reserve-me.ru/realms/ago-chat"
-  - target:
-      kind: Deployment
-      name: ago-chat-worker
-    patch: |
-      - op: add
-        path: /spec/template/spec/containers/0/imagePullPolicy
-        value: Never
-  - target:
-      kind: Deployment
-      name: ago-chat-webhooks
-    patch: |
-      - op: add
-        path: /spec/template/spec/containers/0/imagePullPolicy
-        value: Never
+  # `15-06`: the three `imagePullPolicy: Never` patches that used to open this list are gone - see the
+  # `images:` block above for why the default is now correct. What adr/0026 reasoned about here (a node
+  # that builds its own images and imports them into containerd) is still true; what changed is that an
+  # immutable tag makes `IfNotPresent` behave the same way locally *and* able to pull on a rebuilt node.
+
+
+
   - target:
       kind: Deployment
       name: keycloak
     patch: |
-      # No imagePullPolicy patch here, deliberately - unlike the three ago-chat-* Deployments above,
+      # No imagePullPolicy patch here, deliberately - and this stays true now that the three
+      # ago-chat-* patches are gone (`15-06`):
       # keycloak runs the real upstream `quay.io/keycloak/keycloak` image (base/keycloak.yaml), never
       # built locally, so it needs its own default pull policy to actually reach the registry. Copying
       # the Never patch here by pattern-matching the ago-chat-* entries above was a real bug, caught

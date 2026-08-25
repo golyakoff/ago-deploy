@@ -9,7 +9,9 @@
 #     while every page still returned 200, because nginx was serving files perfectly well. A page
 #     check alone is why this went unnoticed; `visitor-sessions` is what catches it.
 #   - 2026-08-25: the console served a stale bundle for a day - shipped code and deployed code drift
-#     silently while the image tag stays `:local` (ago-root's `15-06`).
+#     silently while the image tag stays `:local` (ago-root's `15-06`). The backend half of that is
+#     closed: the API now reports the commit it was built from and this script checks it. The four
+#     static bundles still carry `:local` and still cannot, which is why that check is not here yet.
 #   - 2026-08-25: Grafana was taken off the public edge; a re-apply of an old manifest would put it
 #     back without anyone noticing.
 #
@@ -61,6 +63,28 @@ echo
 echo "API"
 c=$(code "https://chat.${DOMAIN}/healthz/ready")
 [ "$c" = "200" ] && ok "healthz/ready 200 (Postgres, RabbitMQ, Redis all answered)" || bad "healthz/ready returned $c"
+
+# 15-06: the check that would have caught the 2026-08-25 stale deploy. The commit comes out of the
+# compiled binary (BuildInfoResponse / -p:SourceRevisionId), not out of a manifest, so this says what
+# is running rather than what was asked for.
+version=$(curl -s --max-time 20 "https://chat.${DOMAIN}/healthz/version")
+commit=$(echo "$version" | sed -n 's/.*"commit":"\([^"]*\)".*/\1/p')
+if [ -z "$commit" ]; then
+  bad "healthz/version answered nothing usable - a pre-15-06 image is deployed, and it cannot name its own commit"
+elif [ "$commit" = "unknown" ]; then
+  bad "healthz/version reports commit=unknown - built without GIT_COMMIT, so this deploy is unidentifiable"
+else
+  ok "API reports commit ${commit:0:7} (built from a known source tree)"
+  tag=$(kubectl get deployment ago-chat-api -n "$NS" \
+        -o jsonpath='{.spec.template.spec.containers[0].image}' 2>/dev/null | sed 's/.*://')
+  if [ -z "$tag" ]; then
+    skip "image-tag comparison (needs cluster access)"
+  elif [ "$tag" = "$commit" ]; then
+    ok "the image tag matches the commit inside the binary"
+  else
+    bad "image tag ${tag:0:12} but the binary reports ${commit:0:12} - the tag is lying about its contents"
+  fi
+fi
 
 session=$(curl -s --max-time 20 -w '\n%{http_code}' -X POST "https://chat.${DOMAIN}/api/v1/visitor-sessions" \
   -H 'Content-Type: application/json' -d "{\"publicKey\":\"${PUBLIC_KEY}\"}")

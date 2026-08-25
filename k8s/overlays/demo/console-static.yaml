@@ -24,11 +24,17 @@ spec:
       containers:
         - name: ago-console
           image: ago-console:local
-          # adr/0026's "no registry" image delivery: built directly on the VPS and imported into
-          # k3s's own containerd (k8s/build-static-images.sh) - same imagePullPolicy: Never
-          # reasoning as the three ago-chat-* Deployments (overlays/demo/kustomization.yaml's own
-          # patches), set directly here rather than through a patch since this Deployment has no
-          # overlays/local counterpart to patch from a shared base/.
+          # `15-06` moved the three Ago.Chat.* hosts to GHCR under an immutable commit-SHA tag;
+          # the four static bundles here did NOT move with them, and that is a named gap, not an
+          # oversight. Their Dockerfiles and CI live in ago-console/ago-widget/ago-landing, which
+          # 15-06 could not touch, so they are still built on the node under a mutable `:local` tag
+          # imported into k3s's own containerd (k8s/build-static-images.sh, adr/0026's original
+          # mechanism). imagePullPolicy: Never is therefore still correct *here* and only here -
+          # nothing has ever pushed an `ago-console:local` anywhere a pull could reach.
+          #
+          # This is the exact shape of the 2026-08-25 failure 15-06 exists for: the console served a
+          # week-old bundle and nothing about the running pod could say so. The backend can now say
+          # so; this cannot, until adr/0047's follow-up lands in those repositories.
           imagePullPolicy: Never
           ports:
             - containerPort: 80

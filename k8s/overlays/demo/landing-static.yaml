@@ -23,6 +23,8 @@ spec:
           image: ago-landing:local
           # adr/0026's "no registry" image delivery, same as every other static bundle here -
           # k8s/build-static-images.sh builds and imports this tag directly on the VPS.
+          # `15-06`: still a mutable `:local` tag built on the node - see console-static.yaml's own
+          # note for why the four static bundles did not move to GHCR with the three .NET hosts.
           imagePullPolicy: Never
           ports:
             - containerPort: 80

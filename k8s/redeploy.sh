@@ -21,6 +21,9 @@ AGO_ROOT="${AGO_ROOT:-$HOME/ago}"
 DOMAIN="${DOMAIN:-reserve-me.ru}"
 NS="${NS:-ago-chat}"
 API_BASE="${API_BASE:-https://chat.${DOMAIN}}"
+# 15-06/adr/0047: the same registry path CI publishes to, so an image built here and an image
+# pulled from there are interchangeable by name.
+REGISTRY="${REGISTRY:-ghcr.io/golyakoff}"
 
 # A bare `kubectl` on the PATH is not proof that it works: k3s keeps its kubeconfig root-only, so a
 # wrapper that forgets sudo passes `command -v` and then fails on every call. Prove it can reach the
@@ -44,7 +47,8 @@ fi
 # lose it. This bit them during the first bring-up and again on 2026-08-25; restoring it every run
 # costs nothing and removes a failure that looks like a permissions mystery.
 chmod +x "$AGO_ROOT/ago-deploy/k8s/build-images.sh" "$AGO_ROOT/ago-deploy/k8s/build-static-images.sh" \
-         "$AGO_ROOT/ago-deploy/k8s/smoke.sh" 2>/dev/null || true
+         "$AGO_ROOT/ago-deploy/k8s/smoke.sh" "$AGO_ROOT/ago-deploy/k8s/deploy.sh" \
+         "$AGO_ROOT/ago-deploy/k8s/rollback.sh" 2>/dev/null || true
 
 step "2. Pack the platform into the local feed"
 # ago-chat restores Ago.Platform.* from this file feed by version. A platform release bumps the
@@ -61,8 +65,15 @@ echo "   packing Ago.Platform.* $PLATFORM_VERSION"
 dotnet pack Ago.Platform.slnx -c Release -o "$AGO_ROOT/ago-deploy/.nuget-feed" -p:Version="$PLATFORM_VERSION" >/dev/null
 
 step "3. Build images"
+# 15-06: the three .NET hosts are built under the commit they came from, with the registry name CI
+# would have used, so the artifact is the same shape whichever route it took - and so a rollback has
+# something to go back to. The four static bundles are still `:local`; their repositories could not
+# be changed in 15-06 and adr/0047 names the follow-up.
+CHAT_SHA="$(git -C "$AGO_ROOT/ago-chat" rev-parse HEAD)"
+echo "   ago-chat at $CHAT_SHA"
 cd "$AGO_ROOT/ago-chat"
-CHAT_REPO=. NUGET_FEED=../ago-deploy/.nuget-feed DOCKER_BUILDKIT=1 ../ago-deploy/k8s/build-images.sh
+CHAT_REPO=. NUGET_FEED=../ago-deploy/.nuget-feed DOCKER_BUILDKIT=1 \
+  IMAGE_REPO="$REGISTRY" IMAGE_TAG="$CHAT_SHA" ../ago-deploy/k8s/build-images.sh
 cd "$AGO_ROOT/ago-deploy/k8s"
 CONSOLE_REPO=../../ago-console WIDGET_REPO=../../ago-widget AGO_API_BASE_URL="$API_BASE" \
   ./build-static-images.sh
@@ -70,7 +81,16 @@ CONSOLE_REPO=../../ago-console WIDGET_REPO=../../ago-widget AGO_API_BASE_URL="$A
 step "4. Import into containerd"
 # -n k8s.io is not optional: k3s's embedded containerd keeps kubelet-visible images in that
 # namespace, and an import without it lands somewhere the kubelet never looks.
-for img in ago-chat-api ago-chat-worker ago-chat-webhooks ago-console ago-demo-shop1 ago-demo-shop2 ago-landing; do
+#
+# Importing under the registry's own name is what lets imagePullPolicy: IfNotPresent (15-06 removed
+# the Never patches) find these locally and never reach out: the kubelet matches on the full
+# reference, so `ghcr.io/.../ago-chat-api:<sha>` present in containerd is used as-is. Building here
+# is now the exception - a hotfix, or a rebuilt cluster ahead of CI - not the normal path.
+for img in ago-chat-api ago-chat-worker ago-chat-webhooks; do
+  printf "   %-18s " "$img"
+  docker save "${REGISTRY}/${img}:${CHAT_SHA}" | sudo k3s ctr -n k8s.io images import - >/dev/null && echo "imported"
+done
+for img in ago-console ago-demo-shop1 ago-demo-shop2 ago-landing; do
   printf "   %-18s " "$img"
   docker save "${img}:local" | sudo k3s ctr -n k8s.io images import - >/dev/null && echo "imported"
 done
@@ -96,10 +116,17 @@ AGO_CHAT_CONNECTION_STRING="Host=localhost;Port=15432;Database=ago_chat;Username
   dotnet ef database update -p src/Ago.Chat.Infrastructure.Postgres -s src/Ago.Chat.Infrastructure.Postgres
 kill $PF 2>/dev/null || true; trap - EXIT
 
-step "6. Restart, backend first"
+step "6. Move the backend onto this commit, backend first"
 # The API before the frontends: 12-03's owner view calls 12-02's endpoint, and a console that is
 # newer than the API it talks to shows a screen wired to something that does not exist yet.
-kc rollout restart deployment/ago-chat-api deployment/ago-chat-worker deployment/ago-chat-webhooks -n "$NS"
+#
+# `set image`, not `rollout restart` (15-06). A restart was the only option while every image wore
+# the same mutable `:local` tag - the manifest never changed, so only a restart re-read what that
+# tag now pointed at. Now the tag *is* the commit, so the manifest changes and Kubernetes records a
+# revision: which is precisely what makes `rollback.sh` have something to go back to.
+for entry in ago-chat-api:api ago-chat-worker:worker ago-chat-webhooks:webhooks; do
+  kc set image "deployment/${entry%%:*}" "${entry##*:}=${REGISTRY}/${entry%%:*}:${CHAT_SHA}" -n "$NS"
+done
 for d in ago-chat-api ago-chat-worker ago-chat-webhooks; do
   kc rollout status "deployment/$d" -n "$NS" --timeout=180s
 done
@@ -113,3 +140,18 @@ done
 step "8. Smoke"
 sleep 5
 CHAT_REPO="$AGO_ROOT/ago-chat" "$AGO_ROOT/ago-deploy/k8s/smoke.sh" "$DOMAIN"
+
+cat <<EOF
+
+Deployed ago-chat $CHAT_SHA. To go back to whatever was running before this:
+
+    ./rollback.sh
+
+and to move to a build CI already published, without building anything here:
+
+    ./deploy.sh <commit-sha>
+
+k8s/overlays/demo/kustomization.yaml still names an older tag unless somebody updates it; a
+'kubectl apply -k overlays/demo' would move the cluster back to that tag. Set its three newTag
+values to $CHAT_SHA and commit if this deploy is meant to stick.
+EOF

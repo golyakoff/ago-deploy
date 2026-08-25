@@ -1,0 +1,173 @@
+# `15-03`: the first rule set. Mounted into Prometheus as /etc/prometheus/demo.rules.yml, which is
+# what base/prometheus-scrape-config.yml's `rule_files: [/etc/prometheus/*.rules.yml]` glob picks up.
+# The glob matches nothing in overlays/local, which is how "alerting on the local development cluster
+# is out of scope" is enforced by construction rather than by a note.
+#
+# Unit tests for every rule below: prometheus-alert-rules.test.yml, run with
+#   promtool test rules prometheus-alert-rules.test.yml
+# Each rule is asserted both ways - silent one step below its threshold, firing one step above - so
+# the thresholds are covered offline and not only by the live fire drill.
+#
+# FIVE RULES, AND THE SHORTNESS IS THE DESIGN. `15-03` lists candidates; promoting every dashboard
+# panel to an alert is exactly what it says not to do. Each rule below names the failure it exists
+# for, and every failure is one that has already cost this project something or is the single-node
+# failure mode that takes everything down at once.
+#
+# ANNOTATIONS ARE SHORT ON PURPOSE. They are the body of an email read on a phone. The reasoning for
+# every threshold lives in the comments here, where a reviewer reads it once, not in the notification,
+# where the reader would scroll past it every time.
+#
+# WHAT IS DELIBERATELY NOT HERE, so the absence reads as a decision rather than an oversight:
+#   * Latency against `nfr.md`'s p95/p99 targets. Those are *targets to validate* under load
+#     (`nfr.md`'s own first paragraph), not promises to a user, and the demo carries no load. An
+#     alert on a number nobody promised, measured on traffic that does not exist, fires on noise.
+#   * SLO burn rate. There is no SLO (`nfr.md`, "Availability behaviour", restated for Stage 15).
+#   * Consumer error rate (`ago_platform_messaging_rabbitmq_consumer_count_total{outcome="error"}`).
+#     A single transient error is normal at-least-once behaviour and self-heals through the retry
+#     queue; an error that does *not* self-heal ends up in a DLQ, which is DeadLetterQueueNotEmpty
+#     below. Alerting on both means alerting twice for one incident and once for no incident.
+#   * Queue depth in general. `OperatorPresenceLost.operator-disconnect-grace` legitimately holds a
+#     hundred-plus messages at rest - the grace period is implemented by holding them - so a generic
+#     depth threshold would fire on correct behaviour. Only `.dlq` queues are alerted on, because a
+#     DLQ is the one queue whose correct depth is zero.
+#   * Redis being unavailable as its own rule. `realtime.md`'s failure table calls it a documented,
+#     acceptable degradation (cross-node delivery degrades; nothing is lost), and `15-03` is explicit
+#     that an alert must not blur that line. It is still caught, one level up: the API's
+#     `/healthz/ready` has a `ready`-tagged Redis check, so an unreachable Redis takes the API's
+#     endpoints out of its Service and ScrapeTargetDown fires.
+#   * A watchdog / dead-man's-switch alert that fires constantly so that its silence is the alarm.
+#     It answers "is the alerting pipeline alive", which is a real question - but as a channel that
+#     mails the author every repeat_interval forever, it is precisely the thing that trains a reader
+#     to filter this sender. `15-03`'s external checker (still an open question there) answers the
+#     same question from outside, which is where it belongs.
+groups:
+  - name: ago-chat-demo
+    # 30s, not the 15s scrape interval: every rule below has a `for:` measured in minutes, so a
+    # faster evaluation buys nothing and costs a query per rule per tick.
+    interval: 30s
+    rules:
+      # --------------------------------------------------------------------------------------------
+      # The broadest rule, broad on purpose: it covers CrashLoopBackOff, an OOM-killed pod, a
+      # Deployment with no ready replica, and - because the API's readiness probe is `/healthz/ready`
+      # with `ready`-tagged checks for Postgres, RabbitMQ and Redis - any of those three dependencies
+      # being unreachable. `up == 0` on the `node` job additionally means node-exporter is gone and
+      # NodeDiskFilling below is blind, which is the case worth catching explicitly: an alert whose
+      # data source has quietly stopped is the failure this whole item exists to prevent.
+      - alert: ScrapeTargetDown
+        # `loop="k8s"` is load-bearing, not decoration. base/prometheus-scrape-config.yml lists both
+        # loops' targets in one job by design, so the three `loop="compose"` targets are *permanently*
+        # down on this deployment - they point at a developer's own machine. Without this matcher the
+        # rule would fire immediately and forever, which is how an alerting system dies on day one.
+        expr: up{loop="k8s"} == 0
+        # 5m. The three Ago.Chat.* Deployments use the default RollingUpdate, so a normal redeploy
+        # never leaves a Service with zero ready endpoints; 5m is comfortably longer than any blip a
+        # rollout can produce and short enough to matter.
+        for: 5m
+        labels:
+          severity: page
+        annotations:
+          summary: "{{ $labels.job }} has had no reachable instance for 5 minutes"
+          meaning: "The Service behind this job has no ready endpoint: a crashed pod, a failed rollout, or a dependency failing readiness."
+          first_check: "kubectl get pods -n ago-chat, then kubectl logs deploy/<name> --previous"
+          runbook: "ago-root docs/runbooks/alerting.md#scrapetargetdown"
+
+      # --------------------------------------------------------------------------------------------
+      # `7-02` instrumented this gauge and `15-03` names it as the signal nobody was watching: the
+      # age of the oldest unpublished outbox row. Non-zero and growing means a state change was
+      # committed and acknowledged to a client while its integration event never left the database -
+      # `CLAUDE.md` rule 4's whole guarantee, failing quietly.
+      - alert: OutboxLagGrowing
+        # WHERE 60s COMES FROM, since `CLAUDE.md` forbids invented numbers: `nfr.md`'s latency table
+        # gives "Send -> delivered to a recipient on another node" a p99 of 300 ms, and the note under
+        # that table says that number "carries one broker hop plus the outbox dispatch interval by
+        # design". The dispatch interval therefore lives inside a 300 ms budget. Sixty seconds is two
+        # hundred times that budget - far outside anything the stated target admits, so it cannot be
+        # read as slowness. It is a dispatcher that has stopped.
+        expr: max by (job) (ago_chat_outbox_lag_seconds) > 60
+        # 10m, and the length is deliberate. `realtime.md`'s failure table: "Broker unavailable ->
+        # sends fail fast with a retryable error; outbox rows accumulate and drain when it returns."
+        # A broker restart is a documented, self-healing degradation, and a shorter window would page
+        # for one. Ten minutes of unbroken lag is not a restart.
+        for: 10m
+        labels:
+          severity: page
+        annotations:
+          summary: "Oldest unpublished outbox row is {{ $value }}s old on {{ $labels.job }}"
+          meaning: "Acknowledged writes have stopped being published. nfr.md budgets outbox dispatch inside a 300 ms p99; 60 s sustained is a stopped dispatcher, not a slow one."
+          first_check: "kubectl logs deploy/ago-chat-worker, and check whether ScrapeTargetDown is firing for rabbitmq"
+          runbook: "ago-root docs/runbooks/alerting.md#outboxlaggrowing"
+
+      # --------------------------------------------------------------------------------------------
+      # `15-03`: "DLQ count rising - a message is failing repeatedly and nobody knows." The threshold
+      # is zero because that is the only correct depth for a dead-letter queue; there is no judgement
+      # call to make and therefore no number to invent. `nfr.md`'s correctness invariants are binary -
+      # "zero acknowledged-but-lost messages" - and a DLQ entry is the observable form of one at risk.
+      - alert: DeadLetterQueueNotEmpty
+        expr: rabbitmq_detailed_queue_messages{queue=~".+\\.dlq"} > 0
+        # 15m. A message reaches a DLQ only after exhausting its retries, so anything here is already
+        # permanent - but the retry queues drain on their own schedule and a 15-minute window keeps
+        # the alert describing a settled state rather than a cycle still in progress.
+        for: 15m
+        labels:
+          severity: page
+        annotations:
+          summary: "{{ $value }} message(s) dead-lettered in {{ $labels.queue }}"
+          meaning: "A message failed every retry and is parked. Nothing will retry it; it stays until someone looks."
+          first_check: "port-forward svc/rabbitmq 15672, read the message and its x-death header, then that consumer's logs"
+          runbook: "ago-root docs/runbooks/alerting.md#deadletterqueuenotempty"
+
+      # --------------------------------------------------------------------------------------------
+      # `15-03` names this first among the candidates, and `15-05` owns the capacity work. On a single
+      # node every local-path PVC - Postgres, RabbitMQ, MinIO, Prometheus, Grafana, and now
+      # Alertmanager - plus the containerd image store all live on this one filesystem. It is the only
+      # failure mode here that takes every component down simultaneously.
+      - alert: NodeDiskFilling
+        # THE NUMBER IS A CHOICE, NOT A DERIVATION, AND SAYING SO IS THE POINT. `nfr.md` has resource
+        # budgets for pods and no disk target at all, so there is no stated SLO to read 15% off. What
+        # 15% is: roughly 12 GB of the node's 79 GB - enough headroom to take a Postgres dump and
+        # rebuild the images without the cluster wedging while someone works out what to delete. A
+        # "you still have room to fix this" line, deliberately not a "you are out of room" one.
+        #
+        # DELIBERATELY NOT predict_linear(). The obvious better rule is "the disk will be full within
+        # N days at the current rate", and it is absent because `15-05`'s own starting note applies: a
+        # single measurement taken by hand on 2026-08-25 is the entire growth history, and one point
+        # is not a slope. A prediction window chosen today would be an invented number wearing a
+        # function call. It becomes the right rule once there is a baseline to fit.
+        expr: >-
+          node_filesystem_avail_bytes{job="node", mountpoint="/"}
+            / node_filesystem_size_bytes{job="node", mountpoint="/"} < 0.15
+        # 30m: disk pressure that resolves itself inside half an hour was a build or an image import,
+        # not a trend.
+        for: 30m
+        labels:
+          severity: page
+        annotations:
+          summary: "Node root filesystem is {{ $value | humanizePercentage }} free"
+          meaning: "Under 15% free on the one filesystem holding every PVC and the image store. nfr.md sets no disk target, so this is a headroom choice (about 12 GB of 79 GB), not a derived limit."
+          first_check: "on the node: df -h /, then du -xh --max-depth=2 / | sort -rh | head, then k3s crictl images"
+          runbook: "ago-root docs/runbooks/alerting.md#nodediskfilling"
+
+      # --------------------------------------------------------------------------------------------
+      # `15-03`: "cert-manager renews automatically; an alert is how you find out when it silently did
+      # not." Everything public - widget, console, API, Keycloak - is behind this one certificate, and
+      # an expiry is a total outage that arrives on a date known weeks in advance.
+      - alert: TlsCertificateRenewalOverdue
+        # WHERE 21 DAYS COMES FROM - read off cert-manager's own schedule for this certificate, not
+        # picked. `certmanager_certificate_renewal_timestamp_seconds` for ago-public-tls sits exactly
+        # 30 days before `certmanager_certificate_not_after_timestamp_seconds` (verified against the
+        # live exporter on 2026-08-25: renewal 1792779714, not_after 1795371714, difference 2592000s =
+        # 30d). cert-manager therefore intends to renew with 30 days left. Under 21 days remaining
+        # means renewal has been failing for over a week, and still leaves three weeks to fix it
+        # before a visitor sees anything.
+        expr: (certmanager_certificate_expiration_timestamp_seconds - time()) < 21 * 24 * 3600
+        # 1h. cert-manager's exporter briefly reports nothing while a Certificate is being replaced;
+        # an hour of continuous agreement removes that window without meaningfully delaying an alert
+        # that already carries three weeks of lead time.
+        for: 1h
+        labels:
+          severity: page
+        annotations:
+          summary: "TLS certificate {{ $labels.namespace }}/{{ $labels.name }} expires in {{ $value | humanizeDuration }}"
+          meaning: "cert-manager renews 30 days before expiry; under 21 days left means renewal has been failing for over a week. Nothing is broken yet - everything public breaks on the expiry date."
+          first_check: "kubectl describe certificate -n ago-chat ago-public-tls, then the challenge/order objects, then cert-manager's logs"
+          runbook: "ago-root docs/runbooks/alerting.md#tlscertificaterenewaloverdue"

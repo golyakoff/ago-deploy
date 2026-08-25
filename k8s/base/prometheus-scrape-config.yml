@@ -11,14 +11,37 @@
 # breaking the scrape config itself - one file stays the single source of truth instead of two nearly-
 # identical ones that would drift.
 #
-# KNOWN GAP (see this change's handback notes and docker-compose.yml's own prometheus service comment):
-# no Ago.Chat.* host currently serves /metrics at all - `7-02` only wired an OTLP push exporter for
-# metrics, sharing Otel:Exporter:Endpoint with `7-01`'s trace exporter, never a Prometheus scrape
-# endpoint. Every target below is expected to show DOWN until that gap is closed on the product side.
-# This file is wired exactly to `7-03`'s own backlog spec regardless, so nothing here needs to change
-# once the gap closes - only the product-side fix does.
+# The KNOWN GAP this header used to describe - "no Ago.Chat.* host currently serves /metrics at all",
+# because `7-02` wired an OTLP push exporter and never a scrape endpoint - is CLOSED. The product side
+# added AddPrometheusExporter()/MapPrometheusScrapingEndpoint() per host (runbooks/k8s-local.md
+# records the fix), and all three k8s-loop targets were verified UP against the live demo on
+# 2026-08-25 while wiring `15-03`. The note is corrected rather than deleted: a stale "expect
+# everything to be DOWN" is how a real outage gets read as the known gap.
+#
+# `15-03` added the alerting half. Prometheus now evaluates rules and hands anything firing to an
+# Alertmanager. Both of those lines are in this base file while the rules and the Alertmanager itself
+# live only in overlays/demo - see the rule_files comment below for why that split is deliberate.
 global:
   scrape_interval: 15s
+
+# `15-03`: the glob, not a fixed filename. overlays/demo/kustomization.yaml merges
+# `demo.rules.yml` into this same ConfigMap, so the rules land beside prometheus.yml in
+# /etc/prometheus and this pattern picks them up; in overlays/local the pattern matches nothing and
+# Prometheus starts with zero rules. That is `15-03`'s "alerting on the local development cluster is
+# out of scope" enforced by construction rather than by a comment nobody reads - a developer watching
+# their own terminal is the notification channel there.
+rule_files:
+  - /etc/prometheus/*.rules.yml
+
+# `15-03`: Alertmanager is an overlays/demo resource, so this Service name does not resolve in the
+# compose loop or in overlays/local. That is harmless rather than merely tolerable: with no rule files
+# loaded there is never an alert to send, and a static_configs alertmanager target is not resolved
+# until Prometheus actually has something to deliver. Nothing logs an error on a cluster that has no
+# alerting.
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: ["alertmanager:9093"]
 
 scrape_configs:
   - job_name: ago-chat-api
@@ -63,5 +86,44 @@ scrape_configs:
         labels:
           loop: compose
       - targets: ["ago-chat-webhooks.ago-chat.svc.cluster.local:80"]
+        labels:
+          loop: k8s
+
+  # `15-03`: the broker's own metrics, for one question only - is anything sitting in a dead-letter
+  # queue. `rabbitmq_prometheus` is already enabled in the `rabbitmq:4-management` image (verified
+  # with `rabbitmq-plugins list -e` on the live broker: `[E*] rabbitmq_prometheus 4.3.5`), so this
+  # needed no plugin change, only a port on the Service and this job.
+  #
+  # WHY /metrics/detailed AND NOT /metrics. The default endpoint is aggregated across all queues -
+  # it reports 181 messages without saying in which queue, which cannot answer "is a DLQ non-empty".
+  # `queue_coarse_metrics` is the one detailed family that carries a per-queue label, and asking for
+  # exactly that family keeps the added cardinality to roughly three series per queue instead of
+  # everything the detailed endpoint can produce.
+  - job_name: rabbitmq
+    metrics_path: /metrics/detailed
+    params:
+      family: [queue_coarse_metrics]
+    static_configs:
+      - targets: ["host.docker.internal:15692"]
+        labels:
+          loop: compose
+      - targets: ["rabbitmq.ago-chat.svc.cluster.local:15692"]
+        labels:
+          loop: k8s
+
+  # `15-03`: cert-manager's own exporter, for the certificate-expiry rule. Cross-namespace on
+  # purpose - cert-manager is installed from its own upstream manifests (runbooks/public-deploy.md
+  # step 11), not from this repository, so there is nothing here to add a port to; the Service it
+  # already publishes on 9402 is scraped where it stands.
+  #
+  # Like the `node` job above, k8s loop only - a compose loop has no cert-manager and no public TLS
+  # to renew. Unlike `node`, this one is also expected DOWN on overlays/local unless the developer
+  # has installed cert-manager there, which is the same "the other loop's targets show DOWN" property
+  # this file's header already describes, and it alerts on nothing because overlays/local loads no
+  # rules.
+  - job_name: cert-manager
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["cert-manager.cert-manager.svc.cluster.local:9402"]
         labels:
           loop: k8s

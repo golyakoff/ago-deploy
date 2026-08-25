@@ -31,6 +31,12 @@ services:
     ports:
       - "5672:5672" # AMQP
       - "15672:15672" # management UI - http://localhost:15672
+      # `15-03`: the rabbitmq_prometheus plugin's endpoint, already enabled in this image. Published
+      # so the compose loop's Prometheus can scrape it through host.docker.internal, the same way it
+      # reaches the three Ago.Chat.* hosts running from the IDE. The alert *rules* that read these
+      # metrics ship only in k8s/overlays/demo - alerting on a developer's own machine is out of
+      # scope for `15-03` - but the queue-depth data is worth having in Grafana on both loops.
+      - "15692:15692" # Prometheus metrics
     volumes:
       - rabbitmq-data:/var/lib/rabbitmq
     healthcheck:

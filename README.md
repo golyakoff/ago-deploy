@@ -8,6 +8,12 @@ Docker Desktop cluster - the same four dependencies plus the three `Ago.Chat.*` 
 and `seed/` (the MinIO bucket, and the demo site + operator - `create-demo-tenant.sh`, idempotent,
 Stage 1).
 
+`k8s/backup/` is the odd one out and is deliberately so: **systemd units on the node, not Kubernetes
+objects.** Neither `redeploy.sh` nor `kubectl apply -k` reaches it - `install-node.sh` is what installs
+it, and has to be re-run after a pull that touches that directory. `../ago-root/docs/runbooks/backup-
+and-restore.md` is the procedure, including the restore drill that was actually performed; `../ago-
+root/docs/adr/0050-*` is why the scope, the destination and the encryption are what they are.
+
 Getting started: `../ago-root/docs/runbooks/local-dev.md` (compose loop) and
 `../ago-root/docs/runbooks/k8s-local.md` (cluster loop, including the NGINX Gateway Fabric install -
 `../ago-root/docs/adr/0014-*`).

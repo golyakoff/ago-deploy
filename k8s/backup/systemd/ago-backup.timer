@@ -1,0 +1,19 @@
+[Unit]
+Description=AGO: daily encrypted backup of the node's durable state
+
+[Timer]
+# Daily, and the reason is the pull rather than the dump. The dump itself costs seconds and a few tens
+# of megabytes, so running it hourly would be nearly free - but an artifact that has not been pulled
+# is not a backup, and the pull happens from a personal machine that is not always on. Backing up more
+# often than it can be collected buys nothing except a fuller staging directory. If the destination
+# ever becomes something always-on, this is the line to revisit first.
+#
+# 02:30 UTC: outside the hours this deployment sees any traffic at all, and not on the hour, where
+# every other cron on a Linux box already is.
+OnCalendar=*-*-* 02:30:00 UTC
+# The node is a VPS that does get rebooted. Without this, a reboot spanning 02:30 silently skips a day.
+Persistent=true
+RandomizedDelaySec=300
+
+[Install]
+WantedBy=timers.target

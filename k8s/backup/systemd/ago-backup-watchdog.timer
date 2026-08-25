@@ -1,0 +1,17 @@
+[Unit]
+Description=AGO: hourly check that the backup arrangement is still working
+
+[Timer]
+# Hourly, deliberately more often than the thing it watches. The thresholds inside the script (30h for
+# an artifact, 72h for a pull) are what decide whether anything is wrong; checking often just means the
+# mail arrives soon after the threshold is crossed rather than up to a day later.
+#
+# It sends nothing when everything is fine, so an hourly run is silent by default. That is also its
+# weakness, and the honest statement of it: this watchdog cannot report that the node is dead. An
+# external check is `15-03`'s subject and it already exists.
+OnCalendar=hourly
+Persistent=true
+RandomizedDelaySec=600
+
+[Install]
+WantedBy=timers.target

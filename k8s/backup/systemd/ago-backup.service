@@ -1,0 +1,18 @@
+[Unit]
+Description=AGO: take one encrypted backup of the node's durable state
+Documentation=https://github.com/golyakoff/ago-root/blob/main/docs/runbooks/backup-and-restore.md
+After=network-online.target k3s.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=ago
+# backup.sh calls `sudo k3s kubectl` and `sudo docker`; the ago user has NOPASSWD:ALL on this box
+# (public-deploy.md step 1), so no sudoers change is needed here.
+ExecStart=/home/ago/ago/ago-deploy/k8s/backup/backup.sh
+# A backup that hangs is worse than one that fails, because the watchdog reads the age of the newest
+# artifact and a hung run produces neither an artifact nor a failure. Measured full run on 2026-08-25
+# was 12 seconds; ten minutes is three orders of magnitude of headroom and still bounded.
+TimeoutStartSec=600
+Nice=10
+IOSchedulingClass=idle

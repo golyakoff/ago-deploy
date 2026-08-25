@@ -62,6 +62,15 @@ configMapGenerator:
   - name: keycloak-realm-import
     files:
       - ago-chat-realm.json=keycloak-realm-import.json
+  # `11-07`: the login theme. Two files, mounted into the theme directory Keycloak reads - CSS only,
+  # extending the stock theme rather than replacing it, so no FreeMarker template is overridden and a
+  # Keycloak upgrade has one less thing of ours to break. A ConfigMap rather than a derived image
+  # because the whole theme is two text files; that stops being true the moment it carries a font or
+  # an image, and the item says so.
+  - name: keycloak-login-theme
+    files:
+      - theme.properties=keycloak-theme/theme.properties
+      - ago.css=keycloak-theme/ago.css
   - name: prometheus-config
     files:
       - prometheus.yml=prometheus-scrape-config.yml

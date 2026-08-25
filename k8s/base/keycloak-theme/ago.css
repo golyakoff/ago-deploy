@@ -1,0 +1,210 @@
+/* ==========================================================================================
+   AGO login theme - `11-07`.
+
+   Every value below is a token from ago-console/src/design/tokens.css, copied deliberately and
+   listed in one block so the copy is visible rather than scattered. That file is the single source
+   (`11-05`); this is the second consumer, and `11-07` names keeping the two from drifting as part
+   of its own scope - a generated or checked copy, not a promise to remember. Until that exists,
+   this block is the whole surface to compare.
+
+   Selectors are doubled on purpose: Keycloak's login markup moved from Bootstrap-shaped class names
+   to PatternFly ones across recent majors, and a theme that names only one set silently stops
+   applying on an upgrade. Both are cheap; a login page that quietly reverts to stock is not.
+   ========================================================================================== */
+
+:root {
+  --ago-font-sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --ago-ink: #14141f;
+  --ago-ink-soft: #57546f;
+  --ago-paper: #fbfaf7;
+  --ago-surface: #ffffff;
+  --ago-surface-sunken: #f1efe9;
+  --ago-line: #e5e2da;
+  --ago-brand: #4b3aff;
+  --ago-brand-deep: #3324c9;
+  --ago-brand-tint: #ecebff;
+  --ago-danger: #9f1d17;
+  --ago-danger-tint: #fdecea;
+  --ago-success: #12684a;
+  --ago-mint: #eafffb;
+  --ago-radius-sm: 0.5rem;
+  --ago-radius-md: 0.75rem;
+  --ago-radius-lg: 1rem;
+  --ago-shadow-lg: 0 1px 1px rgba(20, 20, 31, 0.05), 0 20px 44px -24px rgba(20, 20, 31, 0.45);
+}
+
+/* --- The page ---------------------------------------------------------------------------- */
+
+body,
+.login-pf body,
+.login-pf-page {
+  background: var(--ago-paper) !important;
+  font-family: var(--ago-font-sans);
+  color: var(--ago-ink);
+}
+
+/* Keycloak's stock background image and its dark overlay both go - the identity here is the warm
+   paper the rest of the product sits on, not a photograph. */
+.login-pf,
+.login-pf-page {
+  background-image: none !important;
+}
+
+/* --- The card ---------------------------------------------------------------------------- */
+
+.card-pf,
+.login-pf-page .card-pf,
+.pf-v5-c-login__main {
+  background: var(--ago-surface);
+  border: 1px solid var(--ago-line);
+  border-radius: var(--ago-radius-lg);
+  box-shadow: var(--ago-shadow-lg);
+  padding: 2rem;
+}
+
+#kc-header-wrapper,
+.pf-v5-c-login__header {
+  color: var(--ago-ink);
+  font-size: 1.375rem;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  padding: 1rem 0 1.25rem;
+  text-transform: none;
+}
+
+#kc-page-title,
+.pf-v5-c-login__main-header-desc,
+.login-pf-page h1 {
+  color: var(--ago-ink);
+  font-size: 1.25rem;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+/* --- Fields ------------------------------------------------------------------------------ */
+
+.pf-c-form-control,
+.pf-v5-c-form-control,
+.pf-v5-c-form-control > input,
+input.form-control,
+input[type="text"],
+input[type="password"],
+input[type="email"] {
+  background: var(--ago-surface);
+  border: 1px solid var(--ago-line);
+  border-radius: var(--ago-radius-sm);
+  color: var(--ago-ink);
+  font-family: inherit;
+  font-size: 0.9375rem;
+  padding: 0.625rem 0.75rem;
+}
+
+.pf-c-form-control:focus,
+.pf-v5-c-form-control:focus-within,
+input.form-control:focus,
+input[type="text"]:focus,
+input[type="password"]:focus,
+input[type="email"]:focus {
+  border-color: var(--ago-brand);
+  box-shadow: 0 0 0 3px var(--ago-brand-tint);
+  outline: none;
+}
+
+label,
+.pf-v5-c-form__label-text,
+.control-label {
+  color: var(--ago-ink-soft);
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+
+/* --- Buttons ----------------------------------------------------------------------------- */
+
+.btn-primary,
+input[type="submit"].btn-primary,
+.pf-c-button.pf-m-primary,
+.pf-v5-c-button.pf-m-primary {
+  background: var(--ago-brand);
+  border: 1px solid var(--ago-brand);
+  border-radius: var(--ago-radius-md);
+  color: #ffffff;
+  font-family: inherit;
+  font-size: 0.9375rem;
+  font-weight: 700;
+  padding: 0.625rem 1rem;
+}
+
+.btn-primary:hover,
+.pf-c-button.pf-m-primary:hover,
+.pf-v5-c-button.pf-m-primary:hover {
+  background: var(--ago-brand-deep);
+  border-color: var(--ago-brand-deep);
+}
+
+.btn-primary:focus-visible,
+.pf-v5-c-button.pf-m-primary:focus-visible {
+  outline: 2px solid var(--ago-brand-deep);
+  outline-offset: 2px;
+}
+
+/* --- Links ------------------------------------------------------------------------------- */
+
+a,
+#kc-registration a,
+#kc-info-message a,
+.login-pf-page a {
+  color: var(--ago-brand-deep);
+  font-weight: 600;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
+}
+
+/* --- Messages ---------------------------------------------------------------------------- */
+
+.alert-error,
+.pf-c-alert.pf-m-danger,
+.pf-v5-c-alert.pf-m-danger {
+  background: var(--ago-danger-tint);
+  border: 1px solid var(--ago-danger);
+  border-radius: var(--ago-radius-md);
+  color: var(--ago-danger);
+}
+
+.alert-success,
+.pf-c-alert.pf-m-success,
+.pf-v5-c-alert.pf-m-success {
+  background: var(--ago-mint);
+  border: 1px solid var(--ago-success);
+  border-radius: var(--ago-radius-md);
+  color: var(--ago-success);
+}
+
+.alert-info,
+.pf-v5-c-alert.pf-m-info {
+  background: var(--ago-brand-tint);
+  border: 1px solid var(--ago-brand);
+  border-radius: var(--ago-radius-md);
+  color: var(--ago-ink);
+}
+
+/* --- The strip under the form ------------------------------------------------------------ */
+
+#kc-form-options,
+#kc-form-buttons,
+#kc-registration,
+#kc-info-message {
+  color: var(--ago-ink-soft);
+  font-size: 0.8125rem;
+}
+
+.checkbox label,
+#kc-form-options label {
+  font-weight: 400;
+}
+
+/* Keycloak's own footer/locale strip sits on the sunken tone rather than floating on paper. */
+#kc-locale-dropdown,
+.login-pf-page .login-pf-signup {
+  background: transparent;
+  color: var(--ago-ink-soft);
+}

@@ -5,6 +5,14 @@
   "registrationAllowed": true,
   "registrationEmailAsUsername": false,
   "verifyEmail": true,
+  "roles": {
+    "realm": [
+      {
+        "name": "platform-owner",
+        "description": "12-01/adr/0032: platform owner - operator of the service itself, not of any one tenant. Defined here, never assigned here (this file also provisions the public demo realm). Grant by hand: Realm roles > platform-owner > Users in role."
+      }
+    ]
+  },
   "clients": [
     {
       "clientId": "ago-console",

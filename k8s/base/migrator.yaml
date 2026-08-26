@@ -14,6 +14,20 @@
 # The hosts wait a bounded 60s (SchemaGuard:WaitTimeout) before refusing, so applying this Job and the
 # Deployments together is a supported deploy rather than a race: a host that starts first waits for
 # this Job instead of crash-looping while it finishes.
+#
+# `8-10`: AND SO DOES THIS JOB, for Postgres. The first deploy carrying `8-08` applied everything at
+# once, this Job started while the Postgres pod was still restarting, and it failed on
+# `Connection refused` - correctly, loudly, and in a way that needed a person to delete and re-apply
+# the Job by hand. It now waits 90s for Postgres to accept an authenticated connection before it
+# begins. `backoffLimit: 0` below deliberately did NOT change: retrying the Job would also retry a
+# genuinely broken migration, which is the thing `8-08` argued must not happen. What changed is that
+# "the database is not there yet" stopped counting as a failure at all.
+#
+# The wait wraps only the connection, never the migration, and it is not credulous: a wrong password,
+# a missing database or a missing grant is reported on the first attempt rather than waited out, so a
+# credential mistake does not read as a timeout. A failed run's first line says which of three things
+# happened - MIGRATION FAILED / WAITING FOR DATABASE FAILED / CANNOT CONNECT TO DATABASE - and
+# ago-root `runbooks/redeploy.md` says what to do about each.
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -60,9 +74,11 @@ spec:
             - secretRef:
                 name: infra-credentials
           env:
-            # The only configuration this deployable has. It reads no broker, no cache and no object
-            # store - it does not use ChatModule at all - which is why this env block is six lines
-            # where api.yaml's is sixty, and why a migration can be applied while RabbitMQ is down.
+            # The only configuration this deployable *requires*. It reads no broker, no cache and no
+            # object store - it does not use ChatModule at all - which is why this env block is six
+            # lines where api.yaml's is sixty, and why a migration can be applied while RabbitMQ is
+            # down. (`8-10` added one *optional* variable, AGO_CHAT_DB_WAIT_TIMEOUT, which is not set
+            # here: unset means the chosen 90s default, so the required set is still exactly one.)
             #
             # `17-03` is where this becomes a *different* credential from the one the hosts use: a DDL
             # role here, a DML role there. `adr/0056` names that as this item's strongest consequence

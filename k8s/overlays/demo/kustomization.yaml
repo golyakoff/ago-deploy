@@ -72,19 +72,19 @@ configMapGenerator:
 images:
   - name: ago-chat-api
     newName: ghcr.io/golyakoff/ago-chat-api
-    newTag: 58d26b440980915658f4e7d627dc819d97026279
+    newTag: 170b83f9bc0a5228a07d9d2ad1e09ff2323f818e
   - name: ago-chat-worker
     newName: ghcr.io/golyakoff/ago-chat-worker
-    newTag: 58d26b440980915658f4e7d627dc819d97026279
+    newTag: 170b83f9bc0a5228a07d9d2ad1e09ff2323f818e
   - name: ago-chat-webhooks
     newName: ghcr.io/golyakoff/ago-chat-webhooks
-    newTag: 58d26b440980915658f4e7d627dc819d97026279
+    newTag: 170b83f9bc0a5228a07d9d2ad1e09ff2323f818e
   # `8-08`: the migrator moves with the three hosts and never independently - it applies the
   # migrations *that commit* carries, so a migrator on a different SHA from the hosts is the exact
   # mismatch this item exists to prevent. deploy.sh sets all four from one argument for that reason.
   - name: ago-chat-migrator
     newName: ghcr.io/golyakoff/ago-chat-migrator
-    newTag: 58d26b440980915658f4e7d627dc819d97026279
+    newTag: 170b83f9bc0a5228a07d9d2ad1e09ff2323f818e
   # `15-07`/`adr/0051`: the four static bundles, which `15-06` could not reach - and the one it did
   # not reach is the one the 2026-08-25 incident happened to. Their four `imagePullPolicy: Never`
   # patches are gone from *-static.yaml for the same reason the three above went.
@@ -102,13 +102,13 @@ images:
   # publishes real GHCR images, and these four values should be updated to those commits then.
   - name: ago-console
     newName: ghcr.io/golyakoff/ago-console
-    newTag: 292634f1c2e622a6da5b8de8103171ed774c9c46
+    newTag: c8b1ce644f2a1000146bf8dbbe691a7a7b393993
   - name: ago-demo-shop1
     newName: ghcr.io/golyakoff/ago-demo-shop1
-    newTag: 360727e5760eb18df20e0bf143f6da9a3bb92585
+    newTag: 8759873c9887cc93d40cc98d17573f9f9a767783
   - name: ago-demo-shop2
     newName: ghcr.io/golyakoff/ago-demo-shop2
-    newTag: 360727e5760eb18df20e0bf143f6da9a3bb92585
+    newTag: 8759873c9887cc93d40cc98d17573f9f9a767783
   - name: ago-landing
     newName: ghcr.io/golyakoff/ago-landing
     newTag: 467634530e7482eebcf770765b1b5d75c3ef9880

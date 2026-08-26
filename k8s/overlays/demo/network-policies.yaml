@@ -99,7 +99,15 @@ spec:
                 operator: In
                 # keycloak is here because `15-01`/`adr/0036` moved its user store into this same
                 # Postgres. Its init container opens a connection too, from the same pod.
-                values: [ago-chat-api, ago-chat-worker, ago-chat-webhooks, keycloak]
+                #
+                # ago-chat-migrator was missing until 2026-08-26 and this policy is why the first
+                # deploy carrying `8-08` failed: the Job answered "Connection refused" against a
+                # Postgres that was accepting connections, because the drop happens before the
+                # listener is reached. This file was written by `17-05` and the fourth host arrived
+                # in `8-08` after it - neither item was wrong on its own, and nothing either of them
+                # could run would have noticed. Adding a workload that talks to Postgres means adding
+                # it here, and that sentence is the whole lesson.
+                values: [ago-chat-api, ago-chat-worker, ago-chat-webhooks, ago-chat-migrator, keycloak]
         - ipBlock:
             cidr: 10.42.0.1/32
         - ipBlock:

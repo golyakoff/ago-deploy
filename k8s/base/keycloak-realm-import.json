@@ -62,6 +62,18 @@
           }
         }
       ]
+    },
+    {
+      "clientId": "ago-demo-provisioner",
+      "name": "AGO demo tenant provisioner (8-07)",
+      "description": "Service account used by Ago.Chat.Api and Ago.Chat.Worker to create and delete minted demo users. Holds realm-management:manage-users on this realm and nothing else - see ago-root/docs/adr/0058. The secret is supplied from infra-credentials, never from this file.",
+      "enabled": true,
+      "publicClient": false,
+      "serviceAccountsEnabled": true,
+      "standardFlowEnabled": false,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "protocol": "openid-connect"
     }
   ],
   "users": [

@@ -70,6 +70,27 @@ spec:
             - name: Webhooks__SecretEncryptionKey
               value: "Vg1G2KjonUB1uH8trETJzr30EPoeqt0YRGzYibDKy1o="
             # `7-03`: same requirement as ago-chat-api - see the comment there.
+            # `8-07`/ago-root `adr/0058`: the demo-tenant minting path. **Off here, on purpose.** An
+            # endpoint that creates tenants from the public internet is not something a host should
+            # acquire by upgrading, and only the demo deployment wants it - overlays/demo patches this
+            # to "true" and supplies the origin. While it is false the Keycloak credential below is not
+            # required either (see AddKeycloakDemoIdentities), which is what lets the local loop and any
+            # real customer's installation run with none of it configured.
+            - name: DemoTenant__Enabled
+              value: "false"
+            - name: DemoTenant__VisitorOrigin
+              value: "http://localhost:3000"
+            - name: Keycloak__Admin__BaseUrl
+              value: "http://keycloak:8080"
+            - name: Keycloak__Admin__Realm
+              value: "ago-chat"
+            - name: Keycloak__Admin__ClientId
+              value: "ago-demo-provisioner"
+            # The one credential in this system that lets a web-facing process write to the identity
+            # provider (`17-03`'s inventory). Applied to the realm by k8s/apply-demo-provisioner.sh,
+            # which also grants the service account its single role.
+            - name: Keycloak__Admin__ClientSecret
+              value: "$(KEYCLOAK_DEMO_PROVISIONER_SECRET)"
             - name: Otel__Exporter__Endpoint
               value: "http://jaeger:4317"
           volumeMounts:

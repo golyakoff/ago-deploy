@@ -114,19 +114,25 @@ images:
     newTag: e6ad7d5749b7eabd13594752054cc4935a6833ea
 
 patches:
-  # `8-07`/ago-root `adr/0058`: this is the one deployment that will want the demo-credential endpoint,
-  # so this is where it gets turned on - and it is deliberately **still off**, set here rather than
-  # omitted so that turning it on later is a one-word diff in a file that already explains itself.
+  # `8-07`/ago-root `adr/0058`: this is the one deployment that wants the demo-credential endpoint, so
+  # this is where it is turned on.
   #
-  # It stays off until `ago-widget`'s two `public-demo*/index.html` pages read `?site=` and something
-  # renders a button. `adr/0058` states the reason as a Consequence and it is not a small one: a
-  # minted viewer gets a tenant of their own, but the demo pages boot a baked-in site key, so their
-  # console has no widget pointing at it. That is *worse* than the shared account it replaces, not
-  # merely incomplete. Until then, enabling this would publish an unauthenticated tenant-creating
-  # endpoint on the public internet that nothing can usefully call - all of the exposure, none of the
-  # feature. Follow-up: `8-09` in ago-root. The visitor origin is
-  # the public demo shop the minted tenant's `visitorUrl` will point a viewer at, and the minted site is
-  # created with exactly this origin allowed, so `5-01`'s layer 2 lets its widget connect.
+  # **`8-09` turned it on** - the one-word diff this block was shaped to make possible. The condition
+  # it was waiting for is met: `ago-widget`'s two `public-demo*/index.html` pages now read `?site=`
+  # (falling back to their own baked-in key, so every existing link is unaffected) and both render a
+  # "Get your own tenant" button that calls this endpoint. A minted viewer's console now has a widget
+  # pointing at it, which is what makes the feature better than the shared account rather than worse.
+  #
+  # **Turning this on publishes an unauthenticated, tenant-creating endpoint on the public internet.**
+  # That is intended, and `8-07` built two guards for it that are worth naming here because this is the
+  # line that arms them: a per-IP rate limit (3, refilling at ~3/hour) and a total cap on live demo
+  # tenants (50), counted from the database inside the request rather than cached. Setting this back to
+  # "false" is the whole of the rollback - the endpoint refuses immediately, and `DemoTenantExpiryJob`
+  # keeps deleting whatever was already minted.
+  #
+  # The visitor origin is the public demo shop the minted tenant's `visitorUrl` points a viewer at, and
+  # the minted site is created with exactly this origin allowed, so `5-01`'s layer 2 lets its widget
+  # connect.
   #
   # A strategic-merge patch, not a JSON-patch by index: kustomize merges `env` by the `name` key, so
   # this changes exactly these two variables and leaves the other twenty alone. An index would have
@@ -147,7 +153,7 @@ patches:
               - name: api
                 env:
                   - name: DemoTenant__Enabled
-                    value: "false"
+                    value: "true"
                   - name: DemoTenant__VisitorOrigin
                     value: "https://demo-shop1.reserve-me.ru"
   # The Worker needs the credential to expire tenants, and the flag to require it - but it mints
@@ -167,7 +173,7 @@ patches:
               - name: worker
                 env:
                   - name: DemoTenant__Enabled
-                    value: "false"
+                    value: "true"
   # `15-06`: the three `imagePullPolicy: Never` patches that used to open this list are gone - see the
   # `images:` block above for why the default is now correct. What adr/0026 reasoned about here (a node
   # that builds its own images and imports them into containerd) is still true; what changed is that an

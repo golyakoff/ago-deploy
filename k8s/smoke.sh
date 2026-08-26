@@ -102,6 +102,79 @@ else
 fi
 
 echo
+echo "Operator hub"
+# `5-18`: the check that would have caught the console never connecting - and the reason it does more
+# than negotiate is that **negotiate succeeded the whole time it was broken**.
+# `OperatorHub.OnConnectedAsync` aborted the connection immediately *after* a successful SignalR
+# handshake, which is a clean close: nothing logged, no transport fallback, nothing registered in
+# Redis, and a console that said "Offline". Any check that stops at negotiate is blind to it - which is
+# what the visitor check above is, and why 12/12 stayed green through a total product outage.
+#
+# Server-Sent Events, not WebSockets: it is the transport that carries a real hub connection (the hub's
+# OnConnectedAsync runs for it) while staying pure HTTP, so curl alone can see the difference. A healthy
+# connection holds the stream open until this times out; an aborted one flushes the handshake ack and
+# then SignalR's own close frame, `{"type":7}`, within a second. Both were measured against the live
+# deployment before this was written.
+#
+# **The `Origin` header is the whole check.** Both origin validators allow a connection that sends none
+# - a non-browser client has no cross-origin claim to verify - so without it this would pass vacuously
+# against a deployment no browser can connect to.
+#
+# **A freshly minted tenant, not the seeded one, and that is not incidental.** The bug was invisible to
+# the seeded tenants: somebody had added the console to *their* AllowedOrigins, so the old, wrong check
+# happened to pass for them. Only a tenant whose origins are just its own shop page - which is every
+# tenant `8-07` mints - showed it. A check built on the seeded credential would have stayed green.
+mint=$(curl -s --max-time 20 -w '\n%{http_code}' -X POST "https://chat.${DOMAIN}/api/v1/demo/credentials")
+mcode=$(echo "$mint" | tail -1)
+if [ "$mcode" != "200" ]; then
+  skip "operator hub connection (demo minting answered ${mcode} - DemoTenant off, at capacity, or rate-limited)"
+else
+  muser=$(echo "$mint" | head -1 | grep -oE '"username":"[^"]+"' | cut -d'"' -f4)
+  mpass=$(echo "$mint" | head -1 | grep -oE '"password":"[^"]+"' | cut -d'"' -f4)
+  otok=$(curl -s --max-time 20 -X POST \
+    "https://auth.${DOMAIN}/realms/ago-chat/protocol/openid-connect/token" \
+    -d "client_id=ago-console" -d "grant_type=password" \
+    --data-urlencode "username=${muser}" --data-urlencode "password=${mpass}" \
+    | grep -oE '"access_token":"[^"]+"' | cut -d'"' -f4)
+
+  if [ -z "$otok" ]; then
+    bad "the minted operator could not obtain a token - the credential 8-07 hands a stranger does not work"
+  else
+    ok "a minted operator signs in (the credential a stranger is given actually works)"
+    OORIGIN="https://console.${DOMAIN}"
+    octoken=$(curl -s --max-time 20 -X POST \
+      "https://chat.${DOMAIN}/hubs/operator/negotiate?negotiateVersion=1" \
+      -H "Authorization: Bearer ${otok}" -H "Origin: ${OORIGIN}" \
+      | grep -oE '"connectionToken":"[^"]+"' | cut -d'"' -f4)
+
+    if [ -z "$octoken" ]; then
+      bad "operator hub negotiate returned no connectionToken"
+    else
+      ok "operator hub negotiates"
+      ossefile=$(mktemp)
+      ( curl -s --max-time 6 -o "$ossefile" \
+          "https://chat.${DOMAIN}/hubs/operator?id=${octoken}" \
+          -H "Authorization: Bearer ${otok}" -H "Origin: ${OORIGIN}" \
+          -H 'Accept: text/event-stream' >/dev/null 2>&1 ) &
+      osse=$!
+      sleep 1
+      curl -s --max-time 10 -o /dev/null -X POST \
+        "https://chat.${DOMAIN}/hubs/operator?id=${octoken}" \
+        -H "Authorization: Bearer ${otok}" -H "Origin: ${OORIGIN}" \
+        --data-binary "$(printf '{"protocol":"json","version":1}\036')"
+      wait $osse 2>/dev/null || true
+
+      if grep -q '"type":7' "$ossefile" 2>/dev/null; then
+        bad "the operator hub accepted the handshake and then closed the connection - no operator can hold one, so nothing is ever assigned (5-18)"
+      else
+        ok "an operator holds a hub connection from the console's origin (5-18: the check that was missing)"
+      fi
+      rm -f "$ossefile"
+    fi
+  fi
+fi
+
+echo
 echo "Frontends"
 # `15-07`: the check that would have caught the 2026-08-25 stale *console* bundle, which is the
 # incident all of this exists for. Every frontend image writes the commit it was built from into

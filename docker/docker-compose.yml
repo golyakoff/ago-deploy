@@ -191,6 +191,14 @@ services:
       # inside its own kustomization root (that file's own comment has the detail); this compose file
       # has no such restriction and just reaches up into the same one, so there is still one copy.
       - ../k8s/base/keycloak-realm-import.json:/opt/keycloak/data/import/ago-chat-realm.json:ro
+      # `11-07`: the login theme, the same two files kustomize turns into the keycloak-login-theme
+      # ConfigMap - laid out here by hand because a bind mount has no configMapGenerator to place
+      # `items` for it. Without them this loop is strictly worse than no theme at all: the realm
+      # import already carries `loginTheme: ago`, so Keycloak would look for a theme that is not
+      # there, log `Failed to find theme ago` and serve the stock one - a local login page that
+      # looks nothing like the cluster's, which is exactly the divergence this item exists to end.
+      - ../k8s/base/keycloak-theme/theme.properties:/opt/keycloak/themes/ago/login/theme.properties:ro
+      - ../k8s/base/keycloak-theme/ago.css:/opt/keycloak/themes/ago/login/resources/css/ago.css:ro
     healthcheck:
       test: ["CMD-SHELL", "exec 3<>/dev/tcp/localhost/9000 && echo -e 'GET /health/ready HTTP/1.1\r\nhost: localhost\r\nConnection: close\r\n\r\n' >&3 && cat <&3 | grep -q 'UP'"]
       interval: 5s

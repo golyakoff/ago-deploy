@@ -47,7 +47,16 @@ fi
 # costs nothing and removes a failure that looks like a permissions mystery.
 chmod +x "$AGO_ROOT/ago-deploy/k8s/build-images.sh" "$AGO_ROOT/ago-deploy/k8s/build-static-images.sh" \
          "$AGO_ROOT/ago-deploy/k8s/smoke.sh" "$AGO_ROOT/ago-deploy/k8s/deploy.sh" \
-         "$AGO_ROOT/ago-deploy/k8s/rollback.sh" 2>/dev/null || true
+         "$AGO_ROOT/ago-deploy/k8s/rollback.sh" \
+         "$AGO_ROOT/ago-deploy/k8s/check-theme-tokens.sh" 2>/dev/null || true
+
+# `11-07`: the Keycloak login theme carries a copy of ago-console's design tokens, because a
+# ConfigMap has to stand on its own inside the cluster. This is the moment that copy can be checked
+# against the source - both checkouts are at their tip and nothing has been built yet. It is a hard
+# failure rather than a warning: the whole point of the item was that a silently-diverging second
+# copy of a colour is the failure this project has already had elsewhere. Run
+# `k8s/check-theme-tokens.sh --write` to regenerate, look at the diff, and commit it.
+bash "$AGO_ROOT/ago-deploy/k8s/check-theme-tokens.sh"
 
 step "2. Pack the platform into the local feed"
 # ago-chat restores Ago.Platform.* from this file feed by version. A platform release bumps the

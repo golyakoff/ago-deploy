@@ -19,7 +19,8 @@
 #
 # What it does and does not cover:
 #   - Realm-level settings (adr/0034's brute-force thresholds, password policy, OTP parameters and the
-#     four token/session lifetimes; registrationAllowed, verifyEmail, sslRequired) - yes. PUT
+#     four token/session lifetimes; registrationAllowed, verifyEmail, sslRequired, and `11-07`'s
+#     loginTheme) - yes. PUT
 #     /admin/realms/{realm} maps the realm-level fields of the representation and ignores its nested
 #     users/clients/roles collections, which is exactly the split wanted here: settings move, accounts
 #     do not. Verified live - the runtime-created user present before the run was still present and
@@ -39,6 +40,12 @@
 #     from the file, the rule above applies and this script leaves the live SMTP configuration alone.
 #     Run apply-smtp-settings.sh *after* this script rather than before, and re-run it if in doubt -
 #     it is idempotent, and it is always the safe direction.
+#
+# `11-07` note: `loginTheme` is a plain realm-level field, so this script is all it takes to move the
+# login pages onto the AGO theme on a realm that already exists - no bespoke kcadm call. Checked by
+# setting loginTheme to something else on a running realm and running exactly the update below: it
+# came back to `ago`. Worth knowing because the theme is the one setting whose absence is visible to
+# every visitor rather than only in a token.
 #
 # What it deliberately is not: `kc.sh import --override true`. That would apply the whole file, and it
 # does so by replacing the realm - taking every runtime-created user with it. Never run it against a
@@ -88,7 +95,7 @@ KCADM=/opt/keycloak/bin/kcadm.sh
   --user \"\$KEYCLOAK_ADMIN\" --password \"\$KEYCLOAK_ADMIN_PASSWORD\" >/dev/null
 \$KCADM update realms/$REALM -f $IMPORT_FILE
 echo '-- realm now reports:'
-\$KCADM get realms/$REALM --fields registrationAllowed,resetPasswordAllowed,verifyEmail,bruteForceProtected,failureFactor,passwordPolicy,accessTokenLifespan,ssoSessionIdleTimeout,ssoSessionMaxLifespan,offlineSessionIdleTimeout,actionTokenGeneratedByUserLifespan
+\$KCADM get realms/$REALM --fields loginTheme,registrationAllowed,resetPasswordAllowed,verifyEmail,bruteForceProtected,failureFactor,passwordPolicy,accessTokenLifespan,ssoSessionIdleTimeout,ssoSessionMaxLifespan,offlineSessionIdleTimeout,actionTokenGeneratedByUserLifespan
 "
 
 echo "== done. Users and clients were not touched - see this script's own header for what it does not cover."

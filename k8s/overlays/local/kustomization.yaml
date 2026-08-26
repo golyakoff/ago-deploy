@@ -24,6 +24,15 @@ secretGenerator:
 # attempted - imagePullPolicy: Never turns "forgot to build the image" into a clear ErrImageNeverPull
 # instead of a confusing hang waiting on a registry that does not have this tag.
 patches:
+  # `8-08`: the migrator Job, same reasoning as the three Deployments below - and it is a Job, so it
+  # needs its own target rather than being covered by theirs.
+  - target:
+      kind: Job
+      name: ago-chat-migrator
+    patch: |
+      - op: add
+        path: /spec/template/spec/containers/0/imagePullPolicy
+        value: Never
   - target:
       kind: Deployment
       name: ago-chat-api

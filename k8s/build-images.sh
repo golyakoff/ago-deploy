@@ -1,5 +1,10 @@
 #!/usr/bin/env bash
-# Builds the three Ago.Chat.* host images straight into the local Docker daemon's image store.
+# Builds the four Ago.Chat.* host images straight into the local Docker daemon's image store.
+#
+# `8-08`: Ago.Chat.Migrator joined the list. It is built from the same Dockerfile and tagged the same
+# way as the other three deliberately - it applies the migrations *that commit* carries, so a
+# migrator built from a different SHA than the hosts is the exact mismatch that item exists to
+# prevent. There is no way to build three of the four here.
 #
 # Two callers, deliberately one script:
 #
@@ -39,7 +44,7 @@ if ! git -C "$CHAT_REPO" diff --quiet HEAD 2>/dev/null; then
   echo "WARNING: $CHAT_REPO has uncommitted changes - ${GIT_COMMIT:0:7} will not describe what is in this image." >&2
 fi
 
-for project in Ago.Chat.Api Ago.Chat.Worker Ago.Chat.Webhooks; do
+for project in Ago.Chat.Api Ago.Chat.Worker Ago.Chat.Webhooks Ago.Chat.Migrator; do
   name="$(echo "$project" | sed 's/Ago\.Chat\.//' | tr '[:upper:]' '[:lower:]')"
   image="${IMAGE_REPO:+${IMAGE_REPO}/}ago-chat-${name}:${IMAGE_TAG}"
   echo "Building ${image} from ${project} (commit ${GIT_COMMIT:0:7})..."

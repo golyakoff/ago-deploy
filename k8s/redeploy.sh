@@ -103,7 +103,7 @@ step "4. Import into containerd"
 # the Never patches) find these locally and never reach out: the kubelet matches on the full
 # reference, so `ghcr.io/.../ago-chat-api:<sha>` present in containerd is used as-is. Building here
 # is now the exception - a hotfix, or a rebuilt cluster ahead of CI - not the normal path.
-for img in ago-chat-api ago-chat-worker ago-chat-webhooks; do
+for img in ago-chat-api ago-chat-worker ago-chat-webhooks ago-chat-migrator; do
   printf "   %-18s " "$img"
   docker save "${REGISTRY}/${img}:${CHAT_SHA}" | sudo k3s ctr -n k8s.io images import - >/dev/null && echo "imported"
 done
@@ -113,25 +113,59 @@ for entry in "ago-console:$CONSOLE_SHA" "ago-demo-shop1:$WIDGET_SHA" "ago-demo-s
 done
 
 step "5. Migrations"
-# Before the restart, deliberately. Migrations here are additive, so the currently-running old code
-# is unaffected by columns it does not know about - whereas new code meeting an old schema fails on
-# every query that touches the new columns, which is the failure this whole script exists to prevent.
-# A destructive migration would need a different order and its own thinking; there has not been one.
-export PATH="$PATH:$HOME/.dotnet/tools"
-cd "$AGO_ROOT/ago-chat"
-dotnet restore src/Ago.Chat.Infrastructure.Postgres/Ago.Chat.Infrastructure.Postgres.csproj \
-  --configfile /tmp/nuget.migrations.config >/dev/null
-kc port-forward "svc/postgres" 15432:5432 -n "$NS" >/tmp/redeploy-pf.log 2>&1 &
-PF=$!; trap 'kill $PF 2>/dev/null || true' EXIT
-sleep 4
-# Ask the running Postgres which secret it actually uses rather than pattern-matching the namespace.
-# kustomize hash-suffixes the name, so an edit to .env leaves the previous secret behind and a grep
-# returns two - which is exactly what happened on the first real run of this script.
-SECRET_NAME=$(kc get deployment postgres -n "$NS" -o jsonpath='{.spec.template.spec.containers[0].envFrom[0].secretRef.name}')
-PGPW=$(kc get secret "$SECRET_NAME" -n "$NS" -o jsonpath='{.data.POSTGRES_PASSWORD}' | base64 -d)
-AGO_CHAT_CONNECTION_STRING="Host=localhost;Port=15432;Database=ago_chat;Username=ago;Password=${PGPW}" \
-  dotnet ef database update -p src/Ago.Chat.Infrastructure.Postgres -s src/Ago.Chat.Infrastructure.Postgres
-kill $PF 2>/dev/null || true; trap - EXIT
+# `8-08` / ago-root `adr/0056`: this step used to be `dotnet ef database update`, run from the checkout
+# on this node against a port-forwarded Postgres, needing the dotnet SDK and a NuGet restore on a
+# machine whose only other job is running containers. It is now the Ago.Chat.Migrator image, built from
+# the same commit as the hosts, applied as a Job. In order of how much each part matters:
+#
+#   - The thing that migrates and the things that serve are built from one commit by one build, so they
+#     cannot disagree about which migrations exist. The old step applied whatever the checkout happened
+#     to hold, which is not necessarily what the images were built from.
+#   - It also works where this script is not in the loop at all - a cluster rebuilt from scratch during
+#     `15-02`'s restore drill runs the Job because the Job is in the manifest set.
+#   - No SDK, no restore, no port-forward on the node.
+#
+# And the safety net underneath: the hosts refuse to start against a schema older than the migrations
+# they were compiled with (SchemaVersionGuard), so skipping this step can no longer reproduce the
+# 2026-08-25 failure. It produces a deploy that visibly does not come up, which is the whole point.
+#
+# Before the restart, deliberately, exactly as before: migrations here are additive, so the currently
+# running old code is unaffected by columns it does not know about, whereas new code meeting an old
+# schema fails on every query that touches them. `adr/0056` adopts expand/contract so that stays true.
+#
+# Deleted first because a Job's pod template is immutable - re-applying one whose image tag changed is
+# rejected outright, and every deploy changes it. That delete is the reason this lives in the script
+# rather than being left to `apply -k`, which handles the from-scratch case perfectly well on its own.
+#
+# `-l app=ago-chat-migrator` is what keeps this from applying the rest of the overlay: the rendered
+# output holds every Deployment at the tag pinned in kustomization.yaml, and applying those here would
+# undo step 6's own `set image` and trigger a second rollout of everything.
+#
+# It has to be the *rendered overlay* rather than base/migrator.yaml directly, because kustomize
+# hash-suffixes the `infra-credentials` Secret this Job's envFrom names - applying the raw base file
+# would point it at a Secret that does not exist. A standalone kustomization under k8s/ was tried and
+# does not work either: kustomize refuses a `resources:` path outside its own root (the same
+# anti-path-traversal restriction base/kustomization.yaml already documents for configMapGenerator).
+#
+# Caveat, stated because it was found rather than guessed and could not be verified from a dev
+# machine: `kubectl apply` resolves an API mapping for every document it is handed *before* the
+# selector narrows anything, so this line fails on a cluster missing cert-manager's CRDs. The demo
+# node has them - the same overlay's Certificate/ClusterIssuer are applied on every deploy - so this
+# is fine there and would not be on a bare cluster.
+kc delete job ago-chat-migrator -n "$NS" --ignore-not-found >/dev/null
+kc kustomize "$AGO_ROOT/ago-deploy/k8s/overlays/demo" \
+  | sed "s#image: .*/ago-chat-migrator:.*#image: ${REGISTRY}/ago-chat-migrator:${CHAT_SHA}#" \
+  | kc apply -n "$NS" -l app=ago-chat-migrator -f - >/dev/null
+
+echo "   waiting for the migration to finish..."
+if ! kc wait --for=condition=complete job/ago-chat-migrator -n "$NS" --timeout=300s 2>/dev/null; then
+  echo "   MIGRATION FAILED - the deploy stops here, on purpose (adr/0056)." >&2
+  kc logs job/ago-chat-migrator -n "$NS" >&2 || true
+  exit 1
+fi
+# Printed, not swallowed: `8-08`'s Scope is explicit that a migration which runs silently is the same
+# operational problem as one that does not run. This is the line that says which ones were applied.
+kc logs job/ago-chat-migrator -n "$NS" | sed 's/^/   /'
 
 step "6. Move the backend onto this commit, backend first"
 # The API before the frontends: 12-03's owner view calls 12-02's endpoint, and a console that is

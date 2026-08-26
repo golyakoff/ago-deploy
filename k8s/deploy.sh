@@ -15,10 +15,16 @@
 # stale, and no way to tell. redeploy.sh made the sequence repeatable; it could not make it
 # identifiable, because identity is a property of the artifact, not of the procedure.
 #
-# What this script deliberately is NOT: it does not build, pull the checkouts, or run migrations.
-# It moves the cluster to an already-published artifact. redeploy.sh is still the build-from-source
-# path, and migrations remain its job - read the "Migrations and rollback" note at the bottom of
-# this file before rolling anything back, because that asymmetry is the part usually got wrong.
+# What this script deliberately is NOT: it does not build or pull the checkouts. It moves the cluster
+# to an already-published artifact. redeploy.sh is still the build-from-source path.
+#
+# `8-08`: it does not run migrations either, and since that item it no longer needs to warn about the
+# consequence. The hosts refuse to start against a schema older than the migrations they were compiled
+# with, so moving to an image whose migrations have not been applied produces pods that visibly do not
+# come up rather than pods that serve 200s for pages whose queries fail. If that happens, run
+# Ago.Chat.Migrator at the same SHA (redeploy.sh step 5 is the worked form) and the pods recover on
+# their own. Read the "Migrations and rollback" note at the bottom of this file before rolling
+# anything back, because that asymmetry is the part usually got wrong.
 set -euo pipefail
 
 NS="${NS:-ago-chat}"
@@ -195,8 +201,14 @@ CHAT_REPO="${CHAT_REPO:-$AGO_ROOT/ago-chat}" "$HERE/smoke.sh" "$DOMAIN"
 # story gets silently wrong:
 #
 #   Rolling an image back does nothing whatsoever to the database. Schema only moves forward here;
-#   `dotnet ef database update` has no counterpart in this script and deliberately none in
-#   rollback.sh either.
+#   Ago.Chat.Migrator (`8-08`) has no reverse and deliberately none in rollback.sh either - it offers
+#   no `--down` and no `--target`, because EF's generated `Down()` methods have never been executed in
+#   this project and a rollback path nobody has tested is worse than none (`adr/0056`).
+#
+#   The guard the hosts now carry does not change this, and is worth understanding precisely: it
+#   refuses when the database is *behind* the image, and says nothing when the database is *ahead*.
+#   An image rolled back onto a newer schema starts normally, which is exactly what the expand/contract
+#   discipline below is there to make safe.
 #
 # That is survivable only because every migration in this project so far has been additive, so code
 # from an earlier commit runs unharmed against a later schema - it simply ignores columns it does not

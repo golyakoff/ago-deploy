@@ -1,0 +1,87 @@
+# `8-08` / ago-root `adr/0056`: schema migrations are applied by their own deployable, and by nothing
+# else. A Job rather than a Deployment because the question it answers - "is the schema at the version
+# this release expects" - has an answer and is then over; a migrator that stays running has no meaning.
+#
+# WHAT MAKES THIS RUN BEFORE THE HOSTS. Nothing here does, and nothing needs to. Kustomize has no
+# native "this Job before those Deployments", and rather than reach for an init container on each host,
+# `8-08` put the check inside the hosts themselves: Ago.Chat.Api/Worker/Webhooks each compare the
+# database against the migrations their own binary was compiled with, and refuse to start while they
+# are behind (Ago.Chat.Infrastructure.Postgres.Schema.SchemaVersionGuard). So the ordering is a
+# property of the images, not of this file - which means it also holds for `kubectl apply -k` run by
+# hand, for a cluster rebuilt from scratch during `15-02`'s restore drill, for the docker-compose loop,
+# and for a bare `dotnet run`. An init container could not have reached the last two.
+#
+# The hosts wait a bounded 60s (SchemaGuard:WaitTimeout) before refusing, so applying this Job and the
+# Deployments together is a supported deploy rather than a race: a host that starts first waits for
+# this Job instead of crash-looping while it finishes.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: ago-chat-migrator
+  # `8-08`: an object-level label, not only the pod-template one below. `redeploy.sh` renders this
+  # whole overlay and pipes it to `kubectl apply -l app=ago-chat-migrator`, which filters on the
+  # object's own labels - that is what lets a redeploy re-run the migration without also re-applying
+  # every Deployment at the tag pinned in the overlay, which would undo the deploy's own `set image`.
+  labels:
+    app: ago-chat-migrator
+spec:
+  # `adr/0056`: "a non-zero exit must stop the deploy rather than be retried into a crash loop." A
+  # migration that failed will fail again - the schema it found is the schema it will find - so a retry
+  # buys nothing and costs the clarity of a Job that is simply Failed. One attempt, then a human.
+  backoffLimit: 0
+  # Long enough to read the logs of a failed run without racing a cleanup, short enough that finished
+  # Jobs do not accumulate one per deploy. Not measured; a completed Job holds no resources but its own
+  # record.
+  ttlSecondsAfterFinished: 3600
+  template:
+    metadata:
+      labels:
+        app: ago-chat-migrator
+    spec:
+      restartPolicy: Never
+      # `17-05`: stated rather than inherited, exactly as api.yaml/worker.yaml/webhooks.yaml state it -
+      # a base-image change that reversed the non-root default would otherwise do so silently. This
+      # container writes no files of its own; it opens a connection, applies DDL and exits.
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1654
+        runAsGroup: 1654
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: migrator
+          image: ago-chat-migrator:local
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          envFrom:
+            - secretRef:
+                name: infra-credentials
+          env:
+            # The only configuration this deployable has. It reads no broker, no cache and no object
+            # store - it does not use ChatModule at all - which is why this env block is six lines
+            # where api.yaml's is sixty, and why a migration can be applied while RabbitMQ is down.
+            #
+            # `17-03` is where this becomes a *different* credential from the one the hosts use: a DDL
+            # role here, a DML role there. `adr/0056` names that as this item's strongest consequence
+            # and deliberately does not half-do it, so today this is the same connection string
+            # api.yaml uses.
+            - name: AGO_CHAT_CONNECTION_STRING
+              value: "Host=postgres;Port=5432;Database=$(POSTGRES_DB);Username=$(POSTGRES_USER);Password=$(POSTGRES_PASSWORD)"
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+          resources:
+            requests:
+              memory: 64Mi
+              cpu: 50m
+            limits:
+              # Applying DDL is IO-bound and short-lived. Lower than any serving host's ceiling because
+              # this process holds one connection and no state - not a measured number, a shape.
+              memory: 256Mi
+              cpu: 500m
+      volumes:
+        - name: tmp
+          emptyDir: {}

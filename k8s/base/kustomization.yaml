@@ -10,6 +10,11 @@ resources:
   - redis.yaml
   - minio.yaml
   - keycloak.yaml
+  # `8-08`/`adr/0056`: the schema migrator, listed before the hosts it serves - purely for a
+  # reader's benefit, since kustomize applies resources by kind and not in list order. What
+  # actually orders them is that the hosts refuse to start until the schema is current; see this
+  # file's own header.
+  - migrator.yaml
   - api.yaml
   - worker.yaml
   - webhooks.yaml

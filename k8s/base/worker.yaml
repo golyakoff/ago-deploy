@@ -67,6 +67,8 @@ spec:
               value: "$(MINIO_ROOT_PASSWORD)"
             - name: Storage__S3__Bucket
               value: "attachments"
+            # `17-03` open finding - see base/api.yaml's own comment on this variable, and ago-root
+            # docs/architecture/secrets.md. Not a throwaway value once base/ serves overlays/demo.
             - name: Webhooks__SecretEncryptionKey
               value: "Vg1G2KjonUB1uH8trETJzr30EPoeqt0YRGzYibDKy1o="
             # `7-03`: same requirement as ago-chat-api - see the comment there.

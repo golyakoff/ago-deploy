@@ -68,6 +68,10 @@ spec:
             # Same throwaway local dev value appsettings.Development.json already commits in plain text
             # for the fast loop (Ago.Chat.Webhooks/appsettings.Development.json) - not a real secret,
             # following that file's own existing precedent rather than inventing a second pattern here.
+            #
+            # `17-03` open finding - "not a real secret" stopped being true when base/ started serving
+            # overlays/demo. See base/api.yaml's comment on this variable and ago-root
+            # docs/architecture/secrets.md, "Open finding".
             - name: Webhooks__SecretEncryptionKey
               value: "Vg1G2KjonUB1uH8trETJzr30EPoeqt0YRGzYibDKy1o="
             # `7-03`: same requirement as ago-chat-api - see that manifest's own comment.

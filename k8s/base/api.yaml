@@ -67,6 +67,18 @@ spec:
             # 3-06: Program.cs falls back to a random per-process key when this is unset (fine for
             # the single-instance dotnet-run dev loop) - required here because 3 replicas behind a
             # Gateway with no sticky sessions must all validate the same visitor/operator tokens.
+            #
+            # `17-03`/ago-root `adr/0067`: THIS IS THE SINGLE-KEY FORM, KEPT ON PURPOSE. Ago.Chat.Api
+            # now accepts a *set* of visitor signing keys while issuing with exactly one, so the key
+            # can be changed without logging out every visitor on every site at the same instant -
+            # which is why it had never been changed. This variable is the one-active-key case of that
+            # set, so applying `17-03` rotates nothing.
+            #
+            # A rotation replaces this single line with `Auth__VisitorSigningKeys__Keys__N__*` entries
+            # and REMOVES this one: setting both is a host that refuses to start, deliberately, so a
+            # half-finished edit cannot look applied while the pod signs with the other key. The exact
+            # YAML, and what a visitor experiences at each step, is ago-root
+            # docs/runbooks/secret-rotation.md.
             - name: Auth__SigningKey
               value: "$(AUTH_JWT_SIGNING_KEY)"
             # `5-05`/`adr/0022`: the Operator scheme's issuer/JWKS source - keycloak.yaml's own
@@ -90,6 +102,20 @@ spec:
             # `7-03`: same finding as above - WebhookSecretCipherOptions is bound and validated for
             # every host (ChatModule.ConfigureServices), not only Ago.Chat.Webhooks. Same throwaway
             # local dev value appsettings.Development.json already commits in plain text.
+            #
+            # `17-03` OPEN FINDING, recorded where a reader will meet it: base/ is inherited by
+            # overlays/demo, which is the real public deployment, so "throwaway local dev value" has
+            # not been true of this line since that overlay existed. This key encrypts every tenant's
+            # webhook signing secret at rest (ago-root `adr/0024`), and its value is committed here.
+            # It is useless without the database rows or a backup artifact, which is what bounds the
+            # exposure - it is the second half of a credential, not a remote one.
+            #
+            # `17-03` deliberately did NOT fix it in passing: `adr/0024` chose reversible encryption so
+            # a secret can be shown to a tenant again, so the stored ciphertext is load-bearing and
+            # changing this key makes every already-registered webhook secret permanently
+            # undecryptable, silently. The fix needs a second key setting and a re-encryption path -
+            # structurally what ago-root `adr/0067` just built for the visitor signing key, applied to
+            # data at rest. Full write-up: ago-root docs/architecture/secrets.md, "Open finding".
             - name: Webhooks__SecretEncryptionKey
               value: "Vg1G2KjonUB1uH8trETJzr30EPoeqt0YRGzYibDKy1o="
             # `7-03`: PlatformObservabilityOptions.Exporter.Endpoint is [Required] - AddPlatformObservability

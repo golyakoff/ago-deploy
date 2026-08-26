@@ -27,6 +27,10 @@ spec:
         runAsNonRoot: true
         runAsUser: 65534
         runAsGroup: 65534
+        # `17-05` finished the block this file started: seccomp was the piece missing from every
+        # workload here, including this one.
+        seccompProfile:
+          type: RuntimeDefault
       containers:
         - name: node-exporter
           image: quay.io/prometheus/node-exporter:v1.8.2

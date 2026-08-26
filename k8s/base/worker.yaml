@@ -13,9 +13,26 @@ spec:
         app: ago-chat-worker
     spec:
       terminationGracePeriodSeconds: 30
+      # `17-05`: stated, not inherited. The chiseled base (`8-00`) already defaults to a non-root user -
+      # verified live on the demo node, the container's runtime spec reports uid/gid 1654 - and that is
+      # exactly the problem this block fixes: a base-image change would have reversed it silently and
+      # nothing here would have objected. Naming 1654 turns a silent reversal into a pod that will not
+      # start. `readOnlyRootFilesystem` costs one emptyDir at /tmp and nothing else: this host writes no
+      # files of its own (attachment bytes never pass through it - `file-storage.md`).
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1654
+        runAsGroup: 1654
+        seccompProfile:
+          type: RuntimeDefault
       containers:
         - name: worker
           image: ago-chat-worker:local
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
           ports:
             - containerPort: 8080 # health endpoint only - this host has no business HTTP surface
           envFrom:
@@ -55,6 +72,9 @@ spec:
             # `7-03`: same requirement as ago-chat-api - see the comment there.
             - name: Otel__Exporter__Endpoint
               value: "http://jaeger:4317"
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
           resources:
             requests:
               memory: 128Mi
@@ -80,10 +100,27 @@ spec:
             periodSeconds: 10
           lifecycle:
             preStop:
-              exec:
-                # Placeholder until Stage 2 adds the real drain (stop claiming new outbox batches,
-                # let in-flight ones finish) - see concurrency.md.
-                command: ["sh", "-c", "sleep 5"]
+              # `17-05`: this was `exec: ["sh", "-c", "sleep 5"]` and **it had never once run.** The
+              # chiseled base image (`8-00`) contains no shell and no coreutils - `kubectl exec ... --
+              # true` in a running pod answers `executable file not found in $PATH` - so every
+              # termination since this hook was written logged a `FailedPreStopHook` event and went
+              # straight to SIGTERM. A failing preStop hook does not fail a rollout, which is why it
+              # stayed invisible: `3-06`'s rolling-deploy verification watched for lost messages and
+              # readiness flapping, and saw neither, because a single replica draining slightly early
+              # loses nothing a client will notice.
+              #
+              # `sleep` is Kubernetes' own preStop action (GA since 1.30), executed by the kubelet
+              # rather than inside the container, so it needs nothing from the image at all. Same
+              # duration, same reasoning as before - see the comment below and `edge.md` - now
+              # actually applied. Verified live: a rollout of a pod carrying this form produces no
+              # `FailedPreStopHook` event, where the previous form produced one every time.
+              sleep:
+                seconds: 5
+              # Placeholder until Stage 2 adds the real drain (stop claiming new outbox batches,
+              # let in-flight ones finish) - see concurrency.md.
+      volumes:
+        - name: tmp
+          emptyDir: {}
 ---
 apiVersion: v1
 kind: Service

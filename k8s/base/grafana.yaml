@@ -31,9 +31,28 @@ spec:
       labels:
         app: grafana
     spec:
+      # `17-05`: uid 472 is Grafana's own account in this image. `fsGroup` is required here - the PVC's
+      # existing contents are group-root - and it has one visible cost worth naming rather than
+      # leaving to be discovered: it widens grafana.db from 0640 to 0660, and Grafana logs
+      # "SQLite database file has broader permissions than it should" on every start from then on.
+      # A warning about a file only uid 472 and gid 472 can reach, in exchange for a container that is
+      # not root.
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 472
+        runAsGroup: 472
+        fsGroup: 472
+        fsGroupChangePolicy: OnRootMismatch
+        seccompProfile:
+          type: RuntimeDefault
       containers:
         - name: grafana
           image: grafana/grafana-oss:11.3.1
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
           ports:
             - containerPort: 3000
           env:
@@ -62,6 +81,8 @@ spec:
               readOnly: true
             - name: data
               mountPath: /var/lib/grafana
+            - name: tmp
+              mountPath: /tmp
           resources:
             requests:
               memory: 128Mi
@@ -94,6 +115,8 @@ spec:
         - name: data
           persistentVolumeClaim:
             claimName: grafana-data
+        - name: tmp
+          emptyDir: {}
 ---
 apiVersion: v1
 kind: Service

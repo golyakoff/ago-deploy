@@ -33,9 +33,30 @@ spec:
       # cannot boot before Postgres accepts connections, and the pod simply stays in Init until it does,
       # which also means the readiness clock below does not start ticking against a Postgres that is
       # still coming up.
+      # `17-05`: uid 1000 with **gid 0**, which is what this image expects - Keycloak's own files are
+      # group-root and group-readable so the image can run under an arbitrary uid. Forcing gid 1000
+      # here would make its own installation unreadable to it.
+      #
+      # **No `readOnlyRootFilesystem` on the Keycloak container**, and the reason is a decision that
+      # lives elsewhere: `start-dev` re-runs Quarkus's build-time augmentation into /opt/keycloak on
+      # every boot (~23s of it, measured in `runbooks/public-deploy.md`). Making that filesystem
+      # read-only needs `start --optimized`, which needs a derived, pre-built image -
+      # `15-01`/`adr/0036`'s deferred work, not this item's. The init container below does get one,
+      # because all it runs is psql.
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 0
+        seccompProfile:
+          type: RuntimeDefault
       initContainers:
         - name: create-keycloak-database
           image: postgres:17-alpine # already on every node that runs postgres.yaml - no new image
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
           envFrom:
             - secretRef:
                 name: infra-credentials
@@ -69,6 +90,10 @@ spec:
       containers:
         - name: keycloak
           image: quay.io/keycloak/keycloak:26.0
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
           # `5-05`/`adr/0022`: start-dev, never start - `adr/0036` re-examined that choice once a real
           # database was under Keycloak and kept it deliberately, with the reasoning written down there
           # rather than assumed. --import-realm brings in the demo realm/client/operator on first boot.

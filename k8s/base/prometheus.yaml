@@ -31,9 +31,25 @@ spec:
       labels:
         app: prometheus
     spec:
+      # `17-05`: the image already runs as nobody (65534) - stated here so it stays that way. `fsGroup`
+      # is safe on this one (unlike postgres.yaml, whose data directory has a mode requirement), and
+      # `OnRootMismatch` keeps it from re-walking the whole TSDB on every start.
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        runAsGroup: 65534
+        fsGroup: 65534
+        fsGroupChangePolicy: OnRootMismatch
+        seccompProfile:
+          type: RuntimeDefault
       containers:
         - name: prometheus
           image: prom/prometheus:v3.0.1
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
           # prometheus-scrape-config.yml's own header comment has the full detail, including a known
           # gap this item cannot close from ago-deploy alone: no Ago.Chat.* host currently serves
           # /metrics (7-02 wired an OTLP push exporter for metrics, not a Prometheus scrape endpoint).

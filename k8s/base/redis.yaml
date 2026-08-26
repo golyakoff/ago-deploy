@@ -31,9 +31,25 @@ spec:
       labels:
         app: redis
     spec:
+      # `17-05`: same shape as postgres.yaml - the entrypoint starts as root and drops to the image's
+      # own `redis` account, which is uid 999 **gid 1000** (not 999; read out of the running container
+      # with `id redis` rather than assumed, because that mismatch is exactly the guess that produces
+      # an unreadable dump.rdb). Unlike Postgres this one tolerates a read-only root filesystem:
+      # everything it writes goes to the /data PVC.
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 999
+        runAsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
       containers:
         - name: redis
           image: redis:7-alpine
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
           ports:
             - containerPort: 6379
           volumeMounts:

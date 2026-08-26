@@ -1,7 +1,7 @@
 {
   "realm": "ago-chat",
   "enabled": true,
-  "sslRequired": "none",
+  "sslRequired": "external",
   "registrationAllowed": true,
   "registrationEmailAsUsername": false,
   "resetPasswordAllowed": true,

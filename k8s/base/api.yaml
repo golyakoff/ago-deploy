@@ -18,9 +18,26 @@ spec:
       # a 10s buffer - not measured, a starting point for Stage 7 to tune (CLAUDE.md: "measure or
       # stay silent" applies to the 45 itself, not to the 35 lower bound, which is arithmetic).
       terminationGracePeriodSeconds: 45
+      # `17-05`: stated, not inherited. The chiseled base (`8-00`) already defaults to a non-root user -
+      # verified live on the demo node, the container's runtime spec reports uid/gid 1654 - and that is
+      # exactly the problem this block fixes: a base-image change would have reversed it silently and
+      # nothing here would have objected. Naming 1654 turns a silent reversal into a pod that will not
+      # start. `readOnlyRootFilesystem` costs one emptyDir at /tmp and nothing else: this host writes no
+      # files of its own (attachment bytes never pass through it - `file-storage.md`).
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1654
+        runAsGroup: 1654
+        seccompProfile:
+          type: RuntimeDefault
       containers:
         - name: api
           image: ago-chat-api:local
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
           ports:
             - containerPort: 8080
           envFrom:
@@ -81,6 +98,9 @@ spec:
             # compose loop's localhost:4317 (adr/0025: every host exports OTLP directly here, no collector).
             - name: Otel__Exporter__Endpoint
               value: "http://jaeger:4317"
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
           resources:
             requests:
               memory: 128Mi
@@ -112,15 +132,32 @@ spec:
             periodSeconds: 10
           lifecycle:
             preStop:
-              exec:
-                # 3-06: readinessProbe above can take up to periodSeconds * failureThreshold = 15s
-                # worst-case to mark this pod NotReady once /healthz/ready starts failing (edge.md
-                # step 2) - sleeping that long before SIGTERM is what actually happens next
-                # (ConnectionDrainCoordinator.StopAsync, Ago.Platform.Realtime) guarantees the
-                # Gateway has genuinely stopped routing new connections here first. The drain itself
-                # is not in this hook - it runs automatically in-process on SIGTERM, during the
-                # generic host's own shutdown sequence.
-                command: ["sh", "-c", "sleep 15"]
+              # `17-05`: this was `exec: ["sh", "-c", "sleep 15"]` and **it had never once run.** The
+              # chiseled base image (`8-00`) contains no shell and no coreutils - `kubectl exec ... --
+              # true` in a running pod answers `executable file not found in $PATH` - so every
+              # termination since this hook was written logged a `FailedPreStopHook` event and went
+              # straight to SIGTERM. A failing preStop hook does not fail a rollout, which is why it
+              # stayed invisible: `3-06`'s rolling-deploy verification watched for lost messages and
+              # readiness flapping, and saw neither, because a single replica draining slightly early
+              # loses nothing a client will notice.
+              #
+              # `sleep` is Kubernetes' own preStop action (GA since 1.30), executed by the kubelet
+              # rather than inside the container, so it needs nothing from the image at all. Same
+              # duration, same reasoning as before - see the comment below and `edge.md` - now
+              # actually applied. Verified live: a rollout of a pod carrying this form produces no
+              # `FailedPreStopHook` event, where the previous form produced one every time.
+              sleep:
+                seconds: 15
+              # 3-06: readinessProbe above can take up to periodSeconds * failureThreshold = 15s
+              # worst-case to mark this pod NotReady once /healthz/ready starts failing (edge.md
+              # step 2) - sleeping that long before SIGTERM is what actually happens next
+              # (ConnectionDrainCoordinator.StopAsync, Ago.Platform.Realtime) guarantees the
+              # Gateway has genuinely stopped routing new connections here first. The drain itself
+              # is not in this hook - it runs automatically in-process on SIGTERM, during the
+              # generic host's own shutdown sequence.
+      volumes:
+        - name: tmp
+          emptyDir: {}
 ---
 apiVersion: v1
 kind: Service

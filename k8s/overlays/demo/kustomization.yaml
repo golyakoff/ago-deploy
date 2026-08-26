@@ -20,6 +20,10 @@ resources:
   # it holds no data worth reaching from outside, and the same reasoning that removed Grafana's
   # public route applies.
   - alertmanager.yaml
+  # `17-05`: the first NetworkPolicy resources in this repository. Demo overlay only - see that
+  # file's own header for why they are not in ../../base (the local cluster's CNI has never been
+  # shown to enforce policy, and unenforced policy reads as protection).
+  - network-policies.yaml
 
 # Same shape as overlays/local/kustomization.yaml's own secretGenerator - one Secret, real values
 # this time (adr/0026, .env.example's own header comment: these are NOT the local throwaway

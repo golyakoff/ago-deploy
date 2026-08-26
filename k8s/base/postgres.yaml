@@ -31,9 +31,63 @@ spec:
       labels:
         app: postgres
     spec:
+      # `17-05`. The image runs its entrypoint as root and drops to uid 70 itself, so "postgres runs
+      # non-root" was true and unstated; this states it, and closes the window in which anything in
+      # this pod is root at all.
+      #
+      # **No `fsGroup`, deliberately, and that is the line that would break it.** `fsGroup` makes
+      # Kubernetes chgrp the volume and add group write, which turns PGDATA into 0770 - and Postgres
+      # refuses to start on any data directory that is not u=rwx (0700) or u=rwx,g=rx (0750). The
+      # local-path directory is already uid 70 mode 0700, so the uid alone is enough and the
+      # "obvious" extra line is the harmful one.
+      #
+      # **No `readOnlyRootFilesystem`, for the same reason.** Postgres needs a writable
+      # /var/run/postgresql for its Unix socket; an emptyDir there arrives root-owned 0755 and only
+      # `fsGroup` would make it writable by uid 70 - which is the line that cannot be added. Stated
+      # rather than quietly skipped.
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 70
+        runAsGroup: 70
+        seccompProfile:
+          type: RuntimeDefault
+      # And because `fsGroup` is off the table, this is what makes a **fresh** cluster work.
+      # `local-path` creates a PVC directory owned by root; Postgres running as uid 70 would then
+      # refuse to initialise into it ("data directory has wrong ownership") - a failure that would
+      # never appear on the running deployment, whose directory is already uid 70, and would appear
+      # the first time `15-02`'s restore drill rebuilt the cluster from scratch. Same shape as
+      # minio.yaml's own init container and for the same underlying reason: a chown no manifest field
+      # can express. Idempotent - it re-runs every boot and does nothing on a directory already
+      # correct.
+      initContainers:
+        - name: chown-data
+          image: postgres:17-alpine # the same image as the container below - nothing new to pull
+          command: ["sh", "-c", "chown 70:70 /var/lib/postgresql/data"]
+          securityContext:
+            runAsNonRoot: false
+            runAsUser: 0
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+              add: ["CHOWN", "FOWNER"]
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+          resources:
+            requests:
+              memory: 16Mi
+              cpu: 10m
+            limits:
+              memory: 64Mi
+              cpu: 200m
       containers:
         - name: postgres
           image: postgres:17-alpine
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
           ports:
             - containerPort: 5432
           envFrom:

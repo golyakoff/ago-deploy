@@ -31,9 +31,60 @@ spec:
       labels:
         app: minio
     spec:
+      # `17-05`: **MinIO was the one image in this deployment genuinely running as root** - not root
+      # for a moment in an entrypoint like Postgres, Redis and RabbitMQ, but root for the life of the
+      # process, verified in the node's own process table. Everything below exists to change that.
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        fsGroupChangePolicy: OnRootMismatch
+        seccompProfile:
+          type: RuntimeDefault
+      # **`fsGroup` alone is not enough for MinIO, and finding that out cost a CrashLoopBackOff.**
+      # It made every path group-1000 and group-writable, which is what `fsGroup` is for and what is
+      # sufficient for Prometheus and Grafana - and MinIO still refused to start with
+      # "Unable to write to the backend", because it checks for **owner** write on the data path
+      # ("chmod u+rxw", says its own hint) and will not accept group write in its place. On a
+      # local-path PVC the directory is created by the provisioner as root, so a fresh cluster lands
+      # in exactly the same state as an existing one and no manifest field fixes it.
+      #
+      # Hence a root init container whose entire job is one chown, so that the long-lived process
+      # need not be root. It keeps three capabilities and nothing else, and it is idempotent - it
+      # re-runs on every boot and does nothing on a directory already owned correctly. Trading a
+      # one-shot root container for a permanently-root server is the point; pretending the trade is
+      # free is not.
+      initContainers:
+        - name: chown-data
+          image: minio/minio:RELEASE.2025-09-07T16-13-09Z # already pulled for the container below
+          command: ["sh", "-c", "chown -R 1000:1000 /data && chmod u+rwx /data"]
+          securityContext:
+            runAsNonRoot: false
+            runAsUser: 0
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+              add: ["CHOWN", "FOWNER", "DAC_OVERRIDE"]
+          volumeMounts:
+            - name: data
+              mountPath: /data
+          resources:
+            requests:
+              memory: 16Mi
+              cpu: 10m
+            limits:
+              memory: 64Mi
+              cpu: 200m
       containers:
         - name: minio
           image: minio/minio:RELEASE.2025-09-07T16-13-09Z
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
           args: ["server", "/data", "--console-address", ":9001"]
           ports:
             - containerPort: 9000 # S3 API
@@ -44,6 +95,8 @@ spec:
           volumeMounts:
             - name: data
               mountPath: /data
+            - name: tmp
+              mountPath: /tmp
           resources:
             requests:
               memory: 128Mi
@@ -67,6 +120,8 @@ spec:
         - name: data
           persistentVolumeClaim:
             claimName: minio-data
+        - name: tmp
+          emptyDir: {}
 ---
 apiVersion: v1
 kind: Service

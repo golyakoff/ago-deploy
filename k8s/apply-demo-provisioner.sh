@@ -53,8 +53,29 @@ exec_kc config credentials --server http://localhost:8080 --realm master \
 echo "Setting the $CLIENT_ID client secret..."
 CLIENT_UUID=$(exec_kc get clients -r "$REALM" -q "clientId=$CLIENT_ID" --fields id --format csv --noquotes | tail -n1)
 if [[ -z "$CLIENT_UUID" ]]; then
-  echo "No $CLIENT_ID client in realm $REALM - apply the manifests first so the realm import creates it." >&2
-  exit 1
+  # It created it here rather than failing, and the first version of this script did fail - it said
+  # "apply the manifests first so the realm import creates it", which is advice that can never work.
+  # `adr/0036`: `--import-realm` is skip-if-exists, so a realm that already exists never picks up a
+  # client added to the import file afterwards. That is exactly the case this script exists for, and
+  # it is the case the demo deployment was in - found on 2026-08-26 by running it there.
+  #
+  # The definition below mirrors keycloak-realm-import.json's own entry, minus the secret, which the
+  # next statement sets from the environment. A fresh realm still gets the client from the import;
+  # this branch is what makes an existing one converge on the same thing.
+  echo "No $CLIENT_ID client in realm $REALM yet - creating it..."
+  # Booleans and the id only. `name` is set in a second call and `description` is not set at all:
+  # kcadm's `-s key=value` could not carry the import file's description - it answers a bare
+  # `unknown_error` on the whole create, and the same create minus that one flag succeeds. Found
+  # 2026-08-26 by running this against the demo realm. The description lives in
+  # keycloak-realm-import.json, which is where a reader looks anyway, and losing it on an
+  # already-existing realm costs nothing a comment does not replace.
+  exec_kc create clients -r "$REALM"     -s "clientId=$CLIENT_ID"     -s 'enabled=true'     -s 'publicClient=false'     -s 'serviceAccountsEnabled=true'     -s 'standardFlowEnabled=false'     -s 'implicitFlowEnabled=false'     -s 'directAccessGrantsEnabled=false'     -s 'protocol=openid-connect' >/dev/null
+  CLIENT_UUID=$(exec_kc get clients -r "$REALM" -q "clientId=$CLIENT_ID" --fields id --format csv --noquotes | tail -n1)
+  if [[ -z "$CLIENT_UUID" ]]; then
+    echo "Created $CLIENT_ID but could not read it back - stopping rather than guessing." >&2
+    exit 1
+  fi
+  exec_kc update "clients/$CLIENT_UUID" -r "$REALM" -s 'name=AGO demo tenant provisioner (8-07)' >/dev/null
 fi
 exec_kc update "clients/$CLIENT_UUID" -r "$REALM" -s "secret=$KEYCLOAK_DEMO_PROVISIONER_SECRET" >/dev/null
 

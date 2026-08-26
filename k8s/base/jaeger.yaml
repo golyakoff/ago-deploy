@@ -37,6 +37,32 @@ spec:
           env:
             - name: COLLECTOR_OTLP_ENABLED
               value: "true"
+            # `16-05`: a bound on how many traces the in-memory store keeps, because it had none and
+            # the consequence was not theoretical. Read off this cluster on 2026-08-26: this pod had
+            # been **OOMKilled 7 times**, most recently minutes before the reading, because
+            # `jaegertracing/all-in-one`'s memory store defaults to unlimited and simply grows until
+            # the container hits the 512Mi limit above. So "how long is a trace kept" had the answer
+            # "until the process is killed for holding too many of them" - retention by crash, which
+            # loses every trace at once and takes the trace backend down with it. ago-root's
+            # `architecture/personal-data.md` said "until the pod restarts", which was true by
+            # accident and for the wrong reason.
+            #
+            # 10000 is derived from a measurement on this cluster, not picked: 3000 requests driven
+            # through the API moved this pod's `process_resident_memory_bytes` from 54.7 MB to
+            # 70.8 MB, i.e. ~5.4 KB of resident memory per trace at the shape of trace this
+            # deployment actually produces. A real conversation trace carries several more spans, so
+            # the number is sized against a pessimistic ~20 KB/trace: 10000 x 20 KB = ~200 MB of
+            # trace data inside a 512Mi limit, which leaves the Go runtime the headroom it needs to
+            # collect rather than to be killed.
+            #
+            # Worth knowing before raising it: at the rate this cluster currently produces traces,
+            # 10000 is on the order of an hour, because the overwhelming majority of spans are
+            # liveness/readiness probes and Prometheus scrapes rather than anything anybody would
+            # ever look at. The fix for *that* is to filter health-probe routes out of the ASP.NET
+            # Core instrumentation in the hosts, which is a change in `ago-chat` and is named as a
+            # follow-up in ago-root's `backlog/16-05`, not a bigger number here.
+            - name: MEMORY_MAX_TRACES
+              value: "10000"
           ports:
             - containerPort: 4317 # OTLP gRPC
             - containerPort: 4318 # OTLP HTTP

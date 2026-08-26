@@ -1,0 +1,128 @@
+# `16-05`: container logs are a personal-data store, and until this file they had no retention at all.
+#
+# What is in them, measured on the local cluster on 2026-08-26 rather than assumed. The NGINX Gateway
+# Fabric data plane writes one access-log line per request to stdout; `17-02` removed the query string
+# from that line, so what remains is the client IP, and a client IP is personal data. nginx's *error*
+# log goes to the same stream and `17-02` established that it still carries the query string and
+# cannot be told not to. Both end up in a file on the node by the ordinary route: nginx writes to
+# /dev/stdout, the container runtime captures the stream, and /var/log/pods/<ns>_<pod>_<uid>/<container>/N.log
+# is what a person reads afterwards.
+#
+# Nothing anywhere in this repository said how long that file lives, and the answer measured on the
+# local Docker Desktop node was "forever": the worker container's log was a single unrotated 88 MB
+# file after 2.5 days, with 229 MB of container logs on the node in total. k3s (the demo node) is
+# better but not by design - kubelet rotates at its own defaults (10 MiB, 5 files), which bounds
+# *volume* and says nothing about *age*. Neither is a chosen number.
+#
+# **The number chosen here is 14 days**, and it is a choice rather than a derivation, exactly the way
+# `adr/0050` labelled the backup window's 30 days. The reasoning is in ago-root's `adr/0057`; the
+# short form is that an investigation opened by `15-03`'s alerting has to be able to look back across
+# two weekends, and that a log of client IPs earns less every day it is kept while costing the same.
+# It is deliberately *not* the backup window's 30 days: those two numbers answer different questions
+# (a restore must be possible; an investigation must be possible) and the shorter one is the right
+# default for the more sensitive, less useful store.
+#
+# **What this job can and cannot reach, stated because the difference matters.** It deletes the
+# *rotated* container-log files kubelet leaves behind (`N.log.<timestamp>` and their `.gz`) once they
+# are older than the window, and nothing else at all. It deliberately does
+# **not** touch a container's current `N.log`: that file is held open by the runtime, and truncating
+# or unlinking it under a live writer is how a "cleanup" job turns into an outage. Bounding the
+# current file is the node's job and is a size limit, not an age limit - kubelet's
+# `containerLogMaxSize`/`containerLogMaxFiles`, set in `/etc/rancher/k3s/config.yaml`, documented as a
+# node step in ago-root's `runbooks/public-deploy.md`. The two together are the whole mechanism: the
+# node bounds how large the live file grows before it is rotated, this job bounds how long the rotated
+# ones survive. Neither alone is a retention policy.
+#
+# A CronJob rather than a `logrotate` entry on the node (which `adr/0040` uses for Postfix's mbox):
+# these files are kubelet's, and a second rotator racing kubelet for the same paths is worse than no
+# rotator. This one only removes what kubelet has already finished with.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: log-retention
+spec:
+  # 03:20 UTC daily. A daily cadence is enough for a 14-day window - the job's granularity only
+  # decides how far past the window a file can survive, and it is one of the two reasons the honest
+  # ceiling is ~16 days rather than 14 (the other is `-mtime`, below). A tighter schedule would buy
+  # back one of those days for a cost in noise that is not worth it.
+  schedule: "20 3 * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 3
+  # A missed schedule (node down over the window) should just run at the next opportunity rather than
+  # backfilling, and without this the CronJob controller gives up permanently after 100 missed slots.
+  startingDeadlineSeconds: 3600
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      template:
+        spec:
+          restartPolicy: Never
+          # `17-05`'s direction, and the one workload in this repository that has to argue with it.
+          # Deleting root-owned files under /var/log/pods needs uid 0 - node-exporter gets away with
+          # `nobody` because everything it needs is a *read-only* mount, and this job's whole purpose
+          # is a write. What it does not need is any capability at all: uid 0 already owns these
+          # files and the directories are root-writable, so DAC_OVERRIDE and the rest are dropped and
+          # the job still works (verified live - it is not a guess about what root can do without
+          # capabilities). The mount is the single directory it prunes, not the host root.
+          securityContext:
+            runAsUser: 0
+            runAsGroup: 0
+            seccompProfile:
+              type: RuntimeDefault
+          containers:
+            - name: prune
+              image: busybox:1.36
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities:
+                  drop: ["ALL"]
+              env:
+                # The one place the number lives, so aligning it with a published privacy policy later
+                # is one edit - the same reason `adr/0050` put the backup window in one variable.
+                - name: RETENTION_DAYS
+                  value: "14"
+              command: ["/bin/sh", "-c"]
+              args:
+                - |
+                  set -eu
+                  cd /var/log/pods
+                  echo "pruning rotated container logs older than ${RETENTION_DAYS} days"
+                  # kubelet's rotated names are `N.log.<UTC timestamp>` and `N.log.<UTC timestamp>.gz`.
+                  # `-name '*.log.*'` matches both and matches no current `N.log`, which is the whole
+                  # safety property this expression rests on.
+                  #
+                  # `-mtime +N` is "strictly more than N whole 24-hour periods old", so this deletes
+                  # at 15 days rather than at 14, and the daily schedule adds up to another day on top
+                  # - a worst case of ~16. Stated rather than rounded away: the number that can be put
+                  # in a privacy policy is a *ceiling*, and the ceiling here is sixteen days, not
+                  # fourteen. Not "fixed" by using `-mtime +13`, which would trade a documented
+                  # two-day overshoot for an undocumented one-day undershoot.
+                  find . -type f -name '*.log.*' -mtime "+${RETENTION_DAYS}" -print -exec rm -f {} +
+                  echo "done"
+                  # Deliberately one expression and nothing else. An earlier version of this job also
+                  # removed directories left empty under /var/log/pods, and that was withdrawn after
+                  # it was tried on a live cluster: a pod's log directory is briefly empty between
+                  # kubelet creating it and the container's log symlink appearing, so an "obviously
+                  # safe" `-type d -empty` prune deleted the log directory of a pod that was still
+                  # starting - including, on one run, the pruner's own. It also turned out to be
+                  # unnecessary: kubelet garbage-collects orphaned pod log directories by itself
+                  # (observed doing exactly that within a minute on this cluster), and an empty
+                  # directory holds no bytes and therefore no personal data. Retention is about
+                  # content; this job deletes content and nothing else.
+              resources:
+                requests:
+                  memory: 16Mi
+                  cpu: 10m
+                limits:
+                  memory: 64Mi
+                  cpu: 200m
+              volumeMounts:
+                - name: pod-logs
+                  mountPath: /var/log/pods
+          volumes:
+            - name: pod-logs
+              hostPath:
+                path: /var/log/pods
+                type: Directory

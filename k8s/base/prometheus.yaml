@@ -53,6 +53,33 @@ spec:
           # prometheus-scrape-config.yml's own header comment has the full detail, including a known
           # gap this item cannot close from ago-deploy alone: no Ago.Chat.* host currently serves
           # /metrics (7-02 wired an OTLP push exporter for metrics, not a Prometheus scrape endpoint).
+          #
+          # `16-05`: the first two args reproduce the image's own default command exactly
+          # (`--config.file`, `--storage.tsdb.path`) - naming any arg replaces the whole default CMD,
+          # so leaving one out silently changes where Prometheus reads its config or writes its data.
+          # The two retention flags are what this item adds.
+          #
+          # **Time: 14 days**, aligned with the container-log window in log-retention.yaml and for the
+          # same reason (ago-root's `adr/0057`). Prometheus's own default is 15 days, so the change in
+          # behaviour is one day; the change that matters is that the number is now *chosen and
+          # written down* rather than inherited, which is what a published retention statement needs.
+          # `16-05` checked what is actually in here before setting it: 47 label names, none
+          # person-shaped - no client address anywhere (`network_peer_address`/`server_address` come
+          # from *outbound* HttpClient instrumentation and hold this cluster's own addresses), no
+          # email, no id belonging to a person. So this window is about disk and about being able to
+          # state a number, not about holding personal data.
+          #
+          # **Size: 768MB**, against the 1Gi PVC above. Time-based retention alone does not stop a
+          # cardinality explosion from filling the volume before the fourteen days are up, and the
+          # audit found one label that grows without bound - `node`, whose value is the API pod's
+          # HOSTNAME, so every pod replacement adds a new series (8 distinct values already on a
+          # single-node local cluster, plus the `deliver-to-connections.<node>` topic label derived
+          # from it). Whichever limit is reached first wins, which is the behaviour wanted here.
+          args:
+            - --config.file=/etc/prometheus/prometheus.yml
+            - --storage.tsdb.path=/prometheus
+            - --storage.tsdb.retention.time=14d
+            - --storage.tsdb.retention.size=768MB
           ports:
             - containerPort: 9090
           volumeMounts:

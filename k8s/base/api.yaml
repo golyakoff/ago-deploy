@@ -117,6 +117,19 @@ spec:
             # which also grants the service account its single role.
             - name: Keycloak__Admin__ClientSecret
               value: "$(KEYCLOAK_DEMO_PROVISIONER_SECRET)"
+            # `5-18`: the origin the operator console is served from. Until this item, OperatorHub
+            # validated an operator's connection Origin against the *tenant's* AllowedOrigins - the
+            # list of pages allowed to embed that tenant's widget - so any tenant whose list did not
+            # happen to contain the console had every operator connection aborted straight after the
+            # SignalR handshake, silently. Required: the API refuses to start without it, rather than
+            # refusing every operator without saying so.
+            #
+            # localhost:5173 is ago-console's own Vite dev server, kept so a developer running the
+            # console locally against this API works without a second setting.
+            - name: Console__AllowedOrigins__0
+              value: "https://console.reserve-me.ru"
+            - name: Console__AllowedOrigins__1
+              value: "http://localhost:5173"
             - name: Otel__Exporter__Endpoint
               value: "http://jaeger:4317"
           volumeMounts:

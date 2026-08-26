@@ -1,37 +1,55 @@
 /* ==========================================================================================
    AGO login theme - `11-07`.
 
-   Every value below is a token from ago-console/src/design/tokens.css, copied deliberately and
-   listed in one block so the copy is visible rather than scattered. That file is the single source
-   (`11-05`); this is the second consumer, and `11-07` names keeping the two from drifting as part
-   of its own scope - a generated or checked copy, not a promise to remember. Until that exists,
-   this block is the whole surface to compare.
+   The token block below is GENERATED from ago-console/src/design/tokens.css (`11-05`, the single
+   source) by k8s/check-theme-tokens.sh. Do not edit it by hand: run `check-theme-tokens.sh --write`
+   to regenerate, and `check-theme-tokens.sh` to fail when the two have drifted. The values are
+   copied rather than imported because this theme has to be a self-contained ConfigMap a cluster can
+   mount without ago-console anywhere near it - but the copy is now machine-made and machine-checked,
+   which is what `11-07` asked for and what its first pass owed. redeploy.sh runs the check right
+   after it pulls both checkouts.
+
+   The block holds exactly the tokens this stylesheet uses. Add a `var(--ago-…)` below, regenerate,
+   and it appears; stop using one and it disappears - so there is never a stale value sitting here
+   that nothing reads.
 
    Selectors are doubled on purpose: Keycloak's login markup moved from Bootstrap-shaped class names
    to PatternFly ones across recent majors, and a theme that names only one set silently stops
    applying on an upgrade. Both are cheap; a login page that quietly reverts to stock is not.
+   Keycloak 26.0 serves PatternFly v3 markup, so today it is the older names that are live.
    ========================================================================================== */
 
+/* The one deliberate departure from the console, and the reason it has its own name rather than
+   redefining `--ago-font-sans`: this page loads no webfont. `adr/0030` weighed Google Fonts for a
+   dashboard; this is the one page in the product where a third-party request would sit beside a
+   password field, so the theme keeps the system tail of the console's stack and nothing else.
+   check-theme-tokens.sh asserts this really is that stack's tail, so a change to the fallbacks in
+   tokens.css cannot pass unnoticed. Self-hosting the two faces here is the upgrade path if the type
+   turns out to matter. */
 :root {
-  --ago-font-sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --ago-login-font: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
+/* GEN-BEGIN tokens - generated from ago-console/src/design/tokens.css, do not edit by hand */
+:root {
   --ago-ink: #14141f;
   --ago-ink-soft: #57546f;
   --ago-paper: #fbfaf7;
   --ago-surface: #ffffff;
-  --ago-surface-sunken: #f1efe9;
   --ago-line: #e5e2da;
   --ago-brand: #4b3aff;
   --ago-brand-deep: #3324c9;
   --ago-brand-tint: #ecebff;
+  --ago-mint: #eafffb;
+  --ago-success: #12684a;
   --ago-danger: #9f1d17;
   --ago-danger-tint: #fdecea;
-  --ago-success: #12684a;
-  --ago-mint: #eafffb;
   --ago-radius-sm: 0.5rem;
   --ago-radius-md: 0.75rem;
   --ago-radius-lg: 1rem;
   --ago-shadow-lg: 0 1px 1px rgba(20, 20, 31, 0.05), 0 20px 44px -24px rgba(20, 20, 31, 0.45);
 }
+/* GEN-END tokens */
 
 /* --- The page ---------------------------------------------------------------------------- */
 
@@ -39,7 +57,7 @@ body,
 .login-pf body,
 .login-pf-page {
   background: var(--ago-paper) !important;
-  font-family: var(--ago-font-sans);
+  font-family: var(--ago-login-font);
   color: var(--ago-ink);
 }
 
@@ -111,9 +129,30 @@ input[type="email"]:focus {
 }
 
 label,
+.pf-c-form__label,
+.pf-c-form__label-text,
 .pf-v5-c-form__label-text,
 .control-label {
   color: var(--ago-ink-soft);
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+
+/* Field-level validation - the registration form's own errors, which are the ones a self-registering
+   user (`10-01`) actually meets. Keycloak marks the input `aria-invalid` and appends a helper-text
+   node; both are addressed here rather than left on PatternFly's red, which is a different red from
+   the one `--ago-danger` was chosen to be. */
+.pf-c-form-control[aria-invalid="true"],
+.pf-v5-c-form-control[aria-invalid="true"],
+input[aria-invalid="true"] {
+  border-color: var(--ago-danger);
+}
+
+.pf-c-form__helper-text.pf-m-error,
+.pf-v5-c-form__helper-text.pf-m-error,
+.kc-feedback-text,
+#kc-content-wrapper span[id^="input-error"] {
+  color: var(--ago-danger);
   font-size: 0.8125rem;
   font-weight: 600;
 }
@@ -145,6 +184,16 @@ input[type="submit"].btn-primary,
 .pf-v5-c-button.pf-m-primary:focus-visible {
   outline: 2px solid var(--ago-brand-deep);
   outline-offset: 2px;
+}
+
+/* The show-password toggle sits inside the input group and is a secondary control, not a primary
+   one - it gets the field's own edge and radius so the pair reads as one control. */
+.pf-c-button.pf-m-control,
+.pf-v5-c-button.pf-m-control {
+  background: var(--ago-surface);
+  border: 1px solid var(--ago-line);
+  border-radius: 0 var(--ago-radius-sm) var(--ago-radius-sm) 0;
+  color: var(--ago-ink-soft);
 }
 
 /* --- Links ------------------------------------------------------------------------------- */
@@ -185,6 +234,23 @@ a,
   border: 1px solid var(--ago-brand);
   border-radius: var(--ago-radius-md);
   color: var(--ago-ink);
+}
+
+/* The pages people land on at the worst moment: `error.ftl` ("We are sorry…") and `info.ftl`
+   ("You need to verify your email address"). Neither has a form on it, so nothing above reaches
+   them - without this block they are the only screens in the flow still set in the browser's
+   default paragraph styling on an AGO card. */
+#kc-error-message,
+#kc-info-message {
+  color: var(--ago-ink);
+}
+
+#kc-error-message .instruction,
+#kc-info-message .instruction,
+.login-pf-page .instruction {
+  font-size: 0.9375rem;
+  line-height: 1.5;
+  margin: 0 0 1rem;
 }
 
 /* --- The strip under the form ------------------------------------------------------------ */

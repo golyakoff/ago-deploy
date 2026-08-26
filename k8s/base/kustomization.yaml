@@ -17,6 +17,9 @@ resources:
   - prometheus.yaml
   - grafana.yaml
   - node-exporter.yaml
+  # `16-05`: the only thing in this cluster that deletes anything on a schedule. See the file's own
+  # header for what it can and cannot reach, and ago-root's `adr/0057` for the fourteen days.
+  - log-retention.yaml
 
 # `5-05`/`adr/0022`: the demo realm lives inside this directory (keycloak-realm-import.json), not a
 # sibling `keycloak/` folder that would read more naturally - kustomize's configMapGenerator refuses a

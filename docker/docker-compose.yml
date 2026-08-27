@@ -243,7 +243,7 @@ services:
   # so metrics push to Prometheus's own OTLP receiver directly, or a collector in front of Jaeger that
   # would reopen adr/0025). Not something this deploy-only item can fix by itself.
   prometheus:
-    image: prom/prometheus:v3.0.1
+    image: prom/prometheus:v3.14.0
     restart: unless-stopped
     ports:
       - "9090:9090" # http://localhost:9090/targets

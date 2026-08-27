@@ -118,6 +118,12 @@ spec:
             # data at rest. Full write-up: ago-root docs/architecture/secrets.md, "Open finding".
             - name: Webhooks__SecretEncryptionKey
               value: "Vg1G2KjonUB1uH8trETJzr30EPoeqt0YRGzYibDKy1o="
+            # `14-02`/`adr/0069`: ChannelCredentialCipherOptions is bound and validated for every host
+            # (ChatModule.ConfigureServices), the same way WebhookSecretCipherOptions above is - but
+            # sourced from infra-credentials from day one, not committed as a literal: the open
+            # finding on the line above is not something to repeat on a second key.
+            - name: Channels__CredentialEncryptionKey
+              value: "$(CHANNELS_CREDENTIAL_ENCRYPTION_KEY)"
             # `7-03`: PlatformObservabilityOptions.Exporter.Endpoint is [Required] - AddPlatformObservability
             # (7-01/7-02) fails ValidateOnStart without it, and appsettings.json carries no default (only
             # appsettings.Development.json does, for the fast loop). jaeger.yaml's own Service, not the

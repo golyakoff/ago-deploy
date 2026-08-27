@@ -74,6 +74,9 @@ spec:
             # docs/architecture/secrets.md, "Open finding".
             - name: Webhooks__SecretEncryptionKey
               value: "Vg1G2KjonUB1uH8trETJzr30EPoeqt0YRGzYibDKy1o="
+            # `14-02`/`adr/0069`: same requirement as ago-chat-api - see that manifest's own comment.
+            - name: Channels__CredentialEncryptionKey
+              value: "$(CHANNELS_CREDENTIAL_ENCRYPTION_KEY)"
             # `7-03`: same requirement as ago-chat-api - see that manifest's own comment.
             - name: Otel__Exporter__Endpoint
               value: "http://jaeger:4317"

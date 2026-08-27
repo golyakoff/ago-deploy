@@ -22,7 +22,7 @@
 
 services:
   postgres:
-    image: postgres:17-alpine
+    image: postgres:18-alpine
     environment:
       # Scratch credentials, in plain text on purpose - they protect a database that exists for
       # minutes and is deleted afterwards. The restored `keycloak` role's password is reset by

@@ -1,0 +1,88 @@
+# 17-04. This repository has no CI (nothing here compiles - `docs/backlog/17-04-...md`'s own scope
+# note: "ago-deploy needs no build"), but it still carries every image tag this deployment runs, so
+# it is exactly the place a stale base image goes unnoticed longest - nothing here ever rebuilds on
+# its own the way a Dockerfile-backed image does when its repository's CI runs.
+#
+# Dependabot's "docker" package-ecosystem reads both plain Dockerfiles/docker-compose.yml files *and*
+# Kubernetes manifest YAML for `image:` references, directory by directory - it does not recurse, so
+# every directory that holds a manifest with an `image:` line needs its own entry below. Verified via
+# GitHub's own documentation while writing this (`supported-ecosystems-and-repositories`,
+# `dependabot-options-reference`): "docker" covers Kubernetes Deployment YAML this way, and the
+# `docker-compose` ecosystem is the separate, GA-since-2025-02-25 entry for `docker-compose.yml`
+# files specifically. Both are used below because this repository has both shapes.
+#
+# `ignore` entries below name this project's own images (ago-chat-*, ago-console, ago-demo-shop{1,2},
+# ago-landing) wherever they share a directory with genuine third-party base images. Their tags in
+# `k8s/base` and `k8s/overlays/demo` are `:local` placeholders that kustomize's own `images:` block
+# overrides with the real SHA at apply time (adr/0047) - not a version Dependabot could sensibly
+# "update" at all, and the real rollout for these is this project's own CI/deploy pipeline
+# (`ago-deploy/deploy.sh`), not a Dependabot PR. Left un-ignored, Dependabot would either silently
+# skip a non-semver `:local` tag (harmless) or propose a nonsensical bump (noise) - the `ignore` block
+# makes the intent explicit either way, rather than relying on Dependabot's own tag-parsing behaviour
+# to happen to do the right thing.
+version: 2
+updates:
+  # k8s/base: the third-party base images every environment shares (postgres, redis, rabbitmq,
+  # keycloak, grafana, prometheus, jaeger, minio, node-exporter, busybox) alongside this project's own
+  # four Ago.Chat.* placeholders.
+  - package-ecosystem: "docker"
+    directory: "/k8s/base"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "Etc/UTC"
+    ignore:
+      - dependency-name: "ago-chat-api"
+      - dependency-name: "ago-chat-worker"
+      - dependency-name: "ago-chat-webhooks"
+      - dependency-name: "ago-chat-migrator"
+
+  # k8s/overlays/demo: alertmanager (third-party) alongside this project's own four frontend
+  # placeholders.
+  - package-ecosystem: "docker"
+    directory: "/k8s/overlays/demo"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "Etc/UTC"
+    ignore:
+      - dependency-name: "ago-console"
+      - dependency-name: "ago-demo-shop1"
+      - dependency-name: "ago-demo-shop2"
+      - dependency-name: "ago-landing"
+
+  # k8s/overlays/local: mailpit, the local-only mail catcher (docs/runbooks/local-dev.md).
+  - package-ecosystem: "docker"
+    directory: "/k8s/overlays/local"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "Etc/UTC"
+
+  # docker/docker-compose.yml: the compose inner loop (docs/runbooks/local-dev.md) - postgres,
+  # rabbitmq, redis, minio, mailpit, keycloak, jaeger, prometheus, grafana.
+  - package-ecosystem: "docker-compose"
+    directory: "/docker"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "Etc/UTC"
+
+  # k8s/backup/docker-compose.restore-drill.yml: the restore-drill compose file
+  # (docs/backlog/15-02-backup-and-verified-restore.md) - postgres, minio, keycloak.
+  - package-ecosystem: "docker-compose"
+    directory: "/k8s/backup"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "Etc/UTC"
+
+  # No github-actions entry: this repository has no .github/workflows/ directory today (confirmed
+  # 2026-08-27). Add one the day it gains its first workflow - the comment on the item's own
+  # "Minimal CI" scope line is explicit that this repository is expected to stay build-free, not that
+  # it will never have a workflow of any kind.

@@ -72,19 +72,19 @@ configMapGenerator:
 images:
   - name: ago-chat-api
     newName: ghcr.io/golyakoff/ago-chat-api
-    newTag: 7879966ef4c1c4848f3b401801f2c8bea16d2378
+    newTag: 674f54729c28e7cec92555caab83dd35a96ceada
   - name: ago-chat-worker
     newName: ghcr.io/golyakoff/ago-chat-worker
-    newTag: 7879966ef4c1c4848f3b401801f2c8bea16d2378
+    newTag: 674f54729c28e7cec92555caab83dd35a96ceada
   - name: ago-chat-webhooks
     newName: ghcr.io/golyakoff/ago-chat-webhooks
-    newTag: 7879966ef4c1c4848f3b401801f2c8bea16d2378
+    newTag: 674f54729c28e7cec92555caab83dd35a96ceada
   # `8-08`: the migrator moves with the three hosts and never independently - it applies the
   # migrations *that commit* carries, so a migrator on a different SHA from the hosts is the exact
   # mismatch this item exists to prevent. deploy.sh sets all four from one argument for that reason.
   - name: ago-chat-migrator
     newName: ghcr.io/golyakoff/ago-chat-migrator
-    newTag: 7879966ef4c1c4848f3b401801f2c8bea16d2378
+    newTag: 674f54729c28e7cec92555caab83dd35a96ceada
   # `15-07`/`adr/0051`: the four static bundles, which `15-06` could not reach - and the one it did
   # not reach is the one the 2026-08-25 incident happened to. Their four `imagePullPolicy: Never`
   # patches are gone from *-static.yaml for the same reason the three above went.
@@ -95,20 +95,19 @@ images:
   # reason. ago-demo-shop1 and ago-demo-shop2 do share a tag, because they really are one commit of
   # ago-widget packaged twice - the difference between them is in the name, never in the tag.
   #
-  # **These four tags were built on the node and imported into containerd, not pulled from GHCR** -
-  # they name commits from before each repository's publish job existed, which is the same position
-  # 15-06 was in on the day it shipped (adr/0047's "What was actually performed"). `IfNotPresent`
-  # finds them locally, so `apply -k` is safe today; the first `main` build after this item merges
-  # publishes real GHCR images, and these four values should be updated to those commits then.
+  # Real GHCR-published commits as of 2026-08-27's deploy - the transition this comment used to say
+  # was still pending (`15-07`'s own publish jobs) has happened. `IfNotPresent` still applies: present
+  # locally it is used as-is, absent it is pulled from GHCR, so nothing here depends on which case a
+  # given node is in.
   - name: ago-console
     newName: ghcr.io/golyakoff/ago-console
-    newTag: 68ab5febc442d191a2eb04e1d140cf3d6285130d
+    newTag: 5dd5b2741001857464a67dabc3ff215823a0d4e7
   - name: ago-demo-shop1
     newName: ghcr.io/golyakoff/ago-demo-shop1
-    newTag: a04ff4290d3e62a6ff18a2c5e093aec7512bb028
+    newTag: a1c0423996266b53c6dbba647a0f66a0c22089c2
   - name: ago-demo-shop2
     newName: ghcr.io/golyakoff/ago-demo-shop2
-    newTag: a04ff4290d3e62a6ff18a2c5e093aec7512bb028
+    newTag: a1c0423996266b53c6dbba647a0f66a0c22089c2
   - name: ago-landing
     newName: ghcr.io/golyakoff/ago-landing
     newTag: 467634530e7482eebcf770765b1b5d75c3ef9880

@@ -1,5 +1,6 @@
 {
   "realm": "ago-chat",
+  "displayName": "AGO Chat",
   "enabled": true,
   "sslRequired": "external",
   "registrationAllowed": true,

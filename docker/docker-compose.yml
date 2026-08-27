@@ -212,7 +212,7 @@ services:
   # "explicit over implicit" instinct start-dev's own flags follow above. In-memory storage only: a
   # demo cluster restarts often and 7-03's own scope excludes retention/sizing.
   jaeger:
-    image: jaegertracing/all-in-one:1.65.0
+    image: jaegertracing/all-in-one:1.76.0
     restart: unless-stopped
     environment:
       COLLECTOR_OTLP_ENABLED: "true"

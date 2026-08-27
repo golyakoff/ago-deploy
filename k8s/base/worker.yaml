@@ -71,6 +71,9 @@ spec:
             # docs/architecture/secrets.md. Not a throwaway value once base/ serves overlays/demo.
             - name: Webhooks__SecretEncryptionKey
               value: "Vg1G2KjonUB1uH8trETJzr30EPoeqt0YRGzYibDKy1o="
+            # `14-02`/`adr/0069`: same requirement as ago-chat-api - see that manifest's own comment.
+            - name: Channels__CredentialEncryptionKey
+              value: "$(CHANNELS_CREDENTIAL_ENCRYPTION_KEY)"
             # `7-03`: same requirement as ago-chat-api - see the comment there.
             # `8-07`/ago-root `adr/0058`: the demo-tenant minting path. **Off here, on purpose.** An
             # endpoint that creates tenants from the public internet is not something a host should

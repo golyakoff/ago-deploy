@@ -6,7 +6,7 @@ name: ago-chat-infra
 
 services:
   postgres:
-    image: postgres:17-alpine
+    image: postgres:18-alpine
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER:?}
@@ -87,7 +87,7 @@ services:
   # database. A one-shot service rather than an init container because compose has no such concept -
   # service_completed_successfully is the equivalent, and keycloak waits on it below.
   keycloak-db-init:
-    image: postgres:17-alpine
+    image: postgres:18-alpine
     restart: "no"
     depends_on:
       postgres:

@@ -3,3 +3,9 @@
 .env
 docker/.env
 k8s/overlays/local/.env
+
+# `14-07`/ago-root `adr/0070`: the author's personal VLESS relay config (Xray-core client JSON,
+# including the connection UUID) - a second file rather than a line in the .env above, deliberately
+# not named ".env" so the top wildcard doesn't quietly cover it; named explicitly here instead. See
+# k8s/overlays/demo/.env.telegram-relay.example for what it holds and why it is a separate Secret.
+k8s/overlays/demo/.env.telegram-relay

@@ -31,6 +31,16 @@ resources:
 secretGenerator:
   - name: infra-credentials
     envs: [.env]
+  # `14-07`/ago-root `adr/0070`: the author's personal Telegram relay config (Xray-core client JSON,
+  # UUID included) - deliberately its own Secret rather than one more key in infra-credentials above.
+  # See .env.telegram-relay.example's own header for the full reasoning (short version: six of the
+  # eight Deployments that read infra-credentials do so via a blanket `envFrom`, which would turn this
+  # into a plaintext env var on Postgres and MinIO for no reason; a second Secret confines it to the
+  # one sidecar container that mounts it as a file, and its own rotation restarts one Deployment
+  # instead of the whole cluster). Same `envs:` source shape as infra-credentials above - the
+  # single-line-JSON constraint that implies is explained in the .example file.
+  - name: telegram-relay-credentials
+    envs: [.env.telegram-relay]
 
 # `15-03`. NOTE THAT NOTHING WAS ADDED TO .env OR .env.example BY THIS ITEM, and the absence is the
 # point rather than an omission: the notification channel is the node's own Postfix over the cluster
@@ -173,6 +183,132 @@ patches:
                 env:
                   - name: DemoTenant__Enabled
                     value: "true"
+  # `14-07`/ago-root `adr/0070`: the Telegram outbound relay - **the first sidecar in this repository.**
+  # ago-chat-worker is the only host that makes outbound calls to Telegram's Bot API in the hot path
+  # (TelegramLongPollingService's own `getUpdates` polling, and ChannelMessageDeliveryConsumer's
+  # outbound replies via TelegramChannelAdapter - both registered only in Ago.Chat.Worker/Program.cs,
+  # checked against the `feat/14-07-telegram-channel-adapter` branch in ago-chat before writing this).
+  #
+  # **Correction to this item's own brief, found by reading the code rather than assuming it:**
+  # Ago.Chat.Api *also* calls Telegram once - TelegramChannelEndpoints' `getMe` token-validation check,
+  # made synchronously when an operator connects a bot from the console. That call does NOT go through
+  # this relay (Ago.Chat.Api's own pod gets no proxy env var, no sidecar) and so is left exposed to the
+  # same ~50% failure rate adr/0070 measured direct. This is a deliberate, named gap, not an oversight:
+  # it is a one-shot, retry-tolerant setup action (TelegramChannelEndpoints' own remarks already treat
+  # a transient failure there as expected - it propagates rather than corrupting state), not the
+  # message-delivery path this item's Done-when criteria are actually about. Closing it means either
+  # exposing this sidecar beyond loopback (a Service + NetworkPolicy pair, widening exactly the blast
+  # radius the sidecar shape exists to avoid, and the tenancy-isolation question `14-07`'s own backlog
+  # item already flagged as `17-01`'s to answer) or running a second copy of this same sidecar in
+  # Ago.Chat.Api's pod (doubling where the personal relay credential is mounted for a low-volume path).
+  # Left as a follow-up rather than decided unilaterally here - see this task's own report.
+  #
+  # **Why a sidecar (init container with restartPolicy: Always - "native sidecars", GA in Kubernetes
+  # 1.29) and not a separate Deployment + Service.** Only one host needs this in its hot path (above).
+  # A sidecar shares ago-chat-worker's network namespace, so the relay is reached at 127.0.0.1 exactly
+  # as manually verified live on the VPS (adr/0070) - no new Service, no cluster-wide-reachable open
+  # SOCKS5 proxy, and it scales with Worker's own replica count automatically instead of needing an
+  # independent scaling decision. The alternative the backlog item names (a separate Deployment +
+  # ClusterIP Service, reusable by other channels later) was rejected for now on the same grounds
+  # `17-05`'s network-policies.yaml already used to reject a namespace-wide default-deny: it is more
+  # surface than the one real caller currently needs, and `17-01`'s tenancy-isolation work has not yet
+  # said what an in-cluster SOCKS5 proxy should be allowed to reach.
+  #
+  # **Why an init container with `restartPolicy: Always` rather than a second ordinary entry in
+  # `containers:`.** Plain sidecars-via-containers-list have no defined start/stop ordering against the
+  # main container - kubelet may SIGTERM both at once. Worker's own `lifecycle.preStop.sleep: 5s`
+  # (below, unchanged) exists specifically so in-flight work can drain; an outbound Telegram send mid-
+  # flight through the relay during that window must not have the relay itself torn down first. A
+  # native sidecar is started before regular containers and stopped after them - kubelet documentation,
+  # unverified live here since it needs a real termination race to observe, so this is the one claim in
+  # this change that rests on the documented contract rather than a demonstration; see this task's own
+  # report.
+  #
+  # **The image**: the official `ghcr.io/xtls/xray-core`, not a third-party build (`teddysun/xray`,
+  # considered - a well-known community image, but the official one needs trusting one fewer party for
+  # a container that terminates this deployment's own outbound TLS). Pinned by tag *and* digest
+  # (adr/0047's own reasoning for the three ago-chat-* images, applied here to a dependency that moves
+  # on its own release cadence rather than with this repository's commits - deliberately NOT added to
+  # the `images:` transformer block above, the same way keycloak.yaml's own image is not: both are
+  # external images versioned independently of anything in this repository). Digest confirmed directly
+  # against the GHCR registry API (`GET /v2/xtls/xray-core/manifests/26.7.11` with an anonymous pull
+  # token, `docker-content-digest` response header) rather than trusted from a rendered web page, since
+  # a wrong digest here is a silent pull failure at the worst possible time.
+  #
+  # **No root, no shell in this image** (upstream's own stated design) - `readOnlyRootFilesystem: true`
+  # costs nothing extra here (unlike `worker`'s own `/tmp` emptyDir, this container writes no file:
+  # config is read-only mounted, logging is left at Xray's own stdout-console default rather than
+  # pointed at a file). No `runAsUser` set at the container level - not because it is left to the
+  # image (it isn't: the pod-level `securityContext` above, `worker`'s own stated UID 1654, applies to
+  # every container that does not override it, this one included, since per-field pod/container
+  # securityContext merge means an unset container field inherits the pod's value rather than the
+  # image's own default). Demonstrated rather than assumed: this exact image, at this exact pinned
+  # digest, run locally as UID 1654 with `--read-only --cap-drop=ALL --security-opt=no-new-privileges`
+  # (docker, not this cluster - a rendering task cannot start a real pod) starts cleanly and its SOCKS5
+  # listener accepts a connection; a build with no shell and "no root privileges" as its stated design
+  # goal turned out to mean exactly what it says, but that is exactly the kind of claim CLAUDE.md's
+  # "measure or stay silent" says not to take on faith.
+  #
+  # A readinessProbe (not a livenessProbe: a crashed process under `restartPolicy: Always` already
+  # restarts on its own, which is the whole point of that field) gives `kubectl get pods` an honest
+  # "1/2 containers ready" the moment the relay is actually listening, rather than reporting the pod
+  # healthy while `worker`'s own Telegram calls would silently fail to reach 127.0.0.1:1080 at all.
+  #
+  # Resource sizing is a starting point, not a measurement (CLAUDE.md: "measure or stay silent" applies
+  # to the number, not to having one) - Xray-core's own documented footprint for one client connection
+  # is small; this leaves headroom for several concurrent long-poll/reply connections without being
+  # large enough to meaningfully compete with `worker` for the pod's own budget (nfr.md, ago-root).
+  - target:
+      kind: Deployment
+      name: ago-chat-worker
+    patch: |
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: ago-chat-worker
+      spec:
+        template:
+          spec:
+            containers:
+              - name: worker
+                env:
+                  - name: Channels__Telegram__Proxy__Socks5Address
+                    value: "127.0.0.1:1080"
+            initContainers:
+              - name: telegram-relay
+                restartPolicy: Always
+                image: ghcr.io/xtls/xray-core:26.7.11@sha256:a1644183accdb0b5be967093fe34be756fd5de15fe2ee0206e842ae17350967f
+                command: ["/usr/local/bin/xray"]
+                args: ["run", "-c", "/usr/local/etc/xray/config.json"]
+                securityContext:
+                  allowPrivilegeEscalation: false
+                  readOnlyRootFilesystem: true
+                  runAsNonRoot: true
+                  capabilities:
+                    drop: ["ALL"]
+                readinessProbe:
+                  tcpSocket:
+                    port: 1080
+                  periodSeconds: 5
+                  failureThreshold: 3
+                volumeMounts:
+                  - name: telegram-relay-config
+                    mountPath: /usr/local/etc/xray
+                    readOnly: true
+                resources:
+                  requests:
+                    memory: 32Mi
+                    cpu: 25m
+                  limits:
+                    memory: 128Mi
+                    cpu: 250m
+            volumes:
+              - name: telegram-relay-config
+                secret:
+                  secretName: telegram-relay-credentials
+                  items:
+                    - key: TELEGRAM_RELAY_XRAY_CONFIG
+                      path: config.json
   # `15-06`: the three `imagePullPolicy: Never` patches that used to open this list are gone - see the
   # `images:` block above for why the default is now correct. What adr/0026 reasoned about here (a node
   # that builds its own images and imports them into containerd) is still true; what changed is that an

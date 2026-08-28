@@ -249,10 +249,20 @@ patches:
   # goal turned out to mean exactly what it says, but that is exactly the kind of claim CLAUDE.md's
   # "measure or stay silent" says not to take on faith.
   #
-  # A readinessProbe (not a livenessProbe: a crashed process under `restartPolicy: Always` already
-  # restarts on its own, which is the whole point of that field) gives `kubectl get pods` an honest
-  # "1/2 containers ready" the moment the relay is actually listening, rather than reporting the pod
-  # healthy while `worker`'s own Telegram calls would silently fail to reach 127.0.0.1:1080 at all.
+  # No readinessProbe - tried, reverted. `tcpSocket: port 1080` looked right and rendered clean, but
+  # found live 2026-08-28 the moment this actually deployed: kubelet's own probe connects to the
+  # container over the **Pod IP**, never over the container's own loopback - the exact same distinction
+  # this comment block already draws between "127.0.0.1 (reachable from `worker`)" and "the Pod IP
+  # (reachable from the rest of the cluster)". A relay correctly bound to 127.0.0.1 is for that reason
+  # permanently unreachable from a kubelet-issued tcpSocket probe, no matter how healthy it is - not a
+  # flaky check, a check that cannot pass by construction. It blocked every future rollout of this
+  # Deployment outright (`kubectl rollout status` timed out, the old pod never terminated), confirmed by
+  # `kubectl debug --target=telegram-relay` showing `127.0.0.1:1080` open from inside the Pod's own
+  # network namespace at the exact moment the Pod-IP probe kept failing. `restartPolicy: Always` still
+  # gives this container ordinary crash-restart semantics with no probe at all - the only cost of
+  # removing it is `kubectl get pods` no longer distinguishes "container started" from "socket actually
+  # listening," which is a `kubectl logs`/`kubectl debug` question now rather than a `kubectl get`
+  # one-liner.
   #
   # Resource sizing is a starting point, not a measurement (CLAUDE.md: "measure or stay silent" applies
   # to the number, not to having one) - Xray-core's own documented footprint for one client connection
@@ -286,11 +296,6 @@ patches:
                   runAsNonRoot: true
                   capabilities:
                     drop: ["ALL"]
-                readinessProbe:
-                  tcpSocket:
-                    port: 1080
-                  periodSeconds: 5
-                  failureThreshold: 3
                 volumeMounts:
                   - name: telegram-relay-config
                     mountPath: /usr/local/etc/xray

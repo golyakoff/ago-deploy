@@ -139,7 +139,7 @@ tests:
               fstype: ext4
             exp_annotations:
               summary: "Node root filesystem is 10% free"
-              meaning: "Under 15% free on the one filesystem holding every PVC and the image store. nfr.md sets no disk target, so this is a headroom choice (about 12 GB of 79 GB), not a derived limit."
+              meaning: "Under 15% free on the one filesystem holding every PVC and the image store. nfr.md sets no disk target; 12 GB of 79 GB is about 21 days of runway at the ~0.56 GB/day rate 15-05 measured (fragile - one pre-traffic tenant, will change), not a derived limit."
               first_check: "on the node: df -h /, then du -xh --max-depth=2 / | sort -rh | head, then k3s crictl images"
               runbook: "ago-root docs/runbooks/alerting.md#nodediskfilling"
 

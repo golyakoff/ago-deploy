@@ -1,3 +1,15 @@
+# `storage: 2Gi` below is a label, not an enforced capacity limit - deliberately, decided in `15-05`
+# (2026-08-29). The `local-path` StorageClass backs this PVC with a plain directory on the node's own
+# root filesystem and applies no quota: Postgres inside this pod sees the node's real free space, not
+# 2Gi (confirmed live - `df` inside the pod reports the node's own ~79G filesystem). `15-05` weighed a
+# real quota-enforcing provisioner (LVM- or XFS-quota-backed local-path) against this and chose not to
+# build one now: real per-volume usage across all six PVCs here is ~130M combined against tens of
+# gigabytes of real free space, so the actual risk is the *node's total* filling, not one component
+# outgrowing a declared share a quota would contain - a single node-level alert
+# (`15-03`'s `NodeDiskFilling`) covers that more cheaply than six new per-volume quotas would, and a
+# real quota provisioner is named as a future item if that stops being true. Resizing this number does
+# nothing while the class ignores it; real headroom is managed by that alert and by the reserved-headroom
+# budget `15-05` records, never by this field.
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:

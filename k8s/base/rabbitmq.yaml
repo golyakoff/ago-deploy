@@ -1,3 +1,5 @@
+# `storage: 1Gi` is a label, not an enforced capacity limit - `local-path` applies no quota (`15-05`,
+# 2026-08-29). See `postgres.yaml`'s own PVC comment for the full reasoning; it applies identically.
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:

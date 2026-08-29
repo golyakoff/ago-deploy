@@ -128,11 +128,37 @@ groups:
         # rebuild the images without the cluster wedging while someone works out what to delete. A
         # "you still have room to fix this" line, deliberately not a "you are out of room" one.
         #
-        # DELIBERATELY NOT predict_linear(). The obvious better rule is "the disk will be full within
-        # N days at the current rate", and it is absent because `15-05`'s own starting note applies: a
-        # single measurement taken by hand on 2026-08-25 is the entire growth history, and one point
-        # is not a slope. A prediction window chosen today would be an invented number wearing a
-        # function call. It becomes the right rule once there is a baseline to fit.
+        # `15-05` (2026-08-29) now has a real trailing-4-day rate to check that 12 GB against, not just
+        # a single point: node-exporter's own series gives -6664.6 bytes/sec of available space
+        # shrinking, roughly 0.56 GB/day. 12 GB of headroom at that rate is about 21 days of lead time
+        # from the moment this fires to actual exhaustion - comfortably longer than the 24h
+        # `repeat_interval` below and than any reasonable gap between someone opening their inbox. The
+        # threshold itself is unchanged; what changed is that "12 GB is enough room to fix this" is now
+        # a checked claim, not just an assumption. The rate is stated as fragile on purpose - one demo
+        # tenant, no real customer traffic pattern, and it predates `15-04`'s pruning jobs actually
+        # removing anything (nothing has aged out yet) - so it will move, probably down as usage grows
+        # and up once pruning/archiving start reclaiming space, and neither this comment nor the
+        # threshold should be read as a promise about when the disk fills.
+        #
+        # `15-05`'s own local fill test (throwaway `docker-desktop` cluster, never this deployment)
+        # found the failure this threshold exists to give lead time against: Postgres does not degrade
+        # gracefully as free space drops, it runs normally right up to the last byte and then hits a
+        # hard cliff - a heap-file or temp-file write at zero bytes free returns a clean, immediate,
+        # recoverable error (no crash), but a WAL write at the same moment PANICs the whole instance,
+        # and the crash-recovery that follows needs to write its own WAL segment - if the disk is
+        # *still* full at that point, recovery itself fails and Postgres does not come back on its own.
+        # It reliably does once real space exists again on the same filesystem (not necessarily inside
+        # Postgres's own directory - a neighbour's file being deleted was enough in the test), with no
+        # corruption observed in either path. The operational reading: this alert firing is the last
+        # point at which freeing space is a calm, five-minute task; past zero bytes free, freeing space
+        # is the only way Postgres comes back at all, and it will not do so by itself if nothing frees.
+        #
+        # STILL DELIBERATELY NOT predict_linear(), even with a real rate to plug in now. A trend fit on
+        # four days from one pre-traffic, pre-pruning demo tenant is not a representative slope, and a
+        # `page`-severity rule built on it would be exactly the kind of invented-number alert `15-03`'s
+        # own design note above rejects - it would fire (or fail to) on a curve nobody should trust yet.
+        # The fixed-headroom threshold stays the honest choice until there is a rate worth trusting: one
+        # that survives real traffic and at least one full prune/archive cycle actually removing rows.
         expr: >-
           node_filesystem_avail_bytes{job="node", mountpoint="/"}
             / node_filesystem_size_bytes{job="node", mountpoint="/"} < 0.15
@@ -143,7 +169,7 @@ groups:
           severity: page
         annotations:
           summary: "Node root filesystem is {{ $value | humanizePercentage }} free"
-          meaning: "Under 15% free on the one filesystem holding every PVC and the image store. nfr.md sets no disk target, so this is a headroom choice (about 12 GB of 79 GB), not a derived limit."
+          meaning: "Under 15% free on the one filesystem holding every PVC and the image store. nfr.md sets no disk target; 12 GB of 79 GB is about 21 days of runway at the ~0.56 GB/day rate 15-05 measured (fragile - one pre-traffic tenant, will change), not a derived limit."
           first_check: "on the node: df -h /, then du -xh --max-depth=2 / | sort -rh | head, then k3s crictl images"
           runbook: "ago-root docs/runbooks/alerting.md#nodediskfilling"
 

@@ -13,7 +13,12 @@
 #
 # What it does:
 #   1. reads every `--ago-*` declaration out of ago-console/src/design/tokens.css (`11-05`, the
-#      single source);
+#      single source) - from the base `:root` block only. `tokens.css` gained a dark theme
+#      (reversal of `adr/0030` point 4) that redeclares several of the same token names inside a
+#      `@media (prefers-color-scheme: dark)` block and a `:root[data-theme="dark"]` block, both
+#      *after* the base `:root` in the file; this login theme stays light-only on purpose
+#      (`adr/0030`'s 2026-08-26 amendment), so those dark declarations are skipped by selector,
+#      not merely by being later in the file - see the awk script's own BEGIN comment for how;
 #   2. reads ago.css and collects every `var(--ago-*)` it actually uses *outside* the generated
 #      block - so the block contains exactly the tokens the stylesheet needs, and an unused one
 #      disappears the next time it is regenerated rather than lingering as a second, stale copy;
@@ -57,14 +62,69 @@ trap 'rm -f "$generated"' EXIT
 awk -v TOKENS="$TOKENS_CSS" '
   function trim(s) { gsub(/^[ \t]+|[ \t]+$/, "", s); return s }
 
+  # Removes `/* ... */` CSS comments from a line, block comments included - tracked across calls
+  # via the global `in_comment`. tokens.css own header is one large block comment that, among other
+  # things, spells out the `:root { ... }` / `@media { ... }` cascade shape in prose, complete with
+  # literal `{`/`}` characters - the selector-depth tracker below has to see those as commentary, not
+  # as real nesting, or it mis-counts before the first genuine rule is even reached.
+  function strip_comments(s,    out, i) {
+    out = ""
+    while (length(s) > 0) {
+      if (in_comment) {
+        i = index(s, "*/")
+        if (i == 0) { return out }
+        s = substr(s, i + 2)
+        in_comment = 0
+        continue
+      }
+      i = index(s, "/*")
+      if (i == 0) { out = out s; return out }
+      out = out substr(s, 1, i - 1)
+      s = substr(s, i + 2)
+      in_comment = 1
+    }
+    return out
+  }
+
   BEGIN {
     # tokens.css, in declaration order - the block is emitted in the source order so a reviewer can
     # read the two files side by side.
+    #
+    # Selector-aware on purpose, not a blind line scan: `11-05`/dark-theme-reversal put a *second*,
+    # *dark* declaration of several of these same token names later in the file, inside
+    # `@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { ... } }` and inside
+    # `:root[data-theme="dark"] { ... }`. A scan keyed only on the token name (the previous version
+    # of this script) would let whichever declaration comes *later in the file* silently win - and
+    # since the dark blocks are written after the base `:root` (the natural order to write them in),
+    # that would have baked dark colours into this repository login theme, which the `adr/0030`
+    # 2026-08-26 amendment keeps deliberately light-only. So: track which selector each line is
+    # nested inside, and harvest a `--ago-*` declaration only when it sits directly inside a bare
+    # `:root { ... }` block at the top level - not inside any `@media` block, and not inside a more
+    # specific selector like `:root:not(...)` or `:root[data-theme=...]`, even though both of those
+    # also literally start with the four characters ":root".
+    #
+    # The parser is deliberately only as smart as this file needs it to be: one selector-or-close
+    # per line (true of every hand-formatted rule in tokens.css today), no attempt at full CSS
+    # tokenising. If that stops being true, this comment is the place to notice.
+    depth = 0
+    in_comment = 0
     while ((getline line < TOKENS) > 0) {
-      if (line ~ /^[ \t]*--ago-[A-Za-z0-9-]+:/) {
-        name = line; sub(/:.*/, "", name); name = trim(name)
-        value = line; sub(/^[ \t]*--ago-[A-Za-z0-9-]+:[ \t]*/, "", value)
-        sub(/;[ \t]*(\/\*.*)?$/, "", value)
+      code = strip_comments(line)
+      if (code == "") continue
+      if (code ~ /\{/) {
+        selector = code; sub(/\{.*/, "", selector); selector = trim(selector)
+        depth++
+        sel[depth] = selector
+        continue
+      }
+      if (code ~ /\}/) {
+        depth--
+        continue
+      }
+      if (depth == 1 && sel[1] == ":root" && code ~ /^[ \t]*--ago-[A-Za-z0-9-]+:/) {
+        name = code; sub(/:.*/, "", name); name = trim(name)
+        value = code; sub(/^[ \t]*--ago-[A-Za-z0-9-]+:[ \t]*/, "", value)
+        sub(/;[ \t]*$/, "", value)
         tval[name] = trim(value)
         torder[++tn] = name
       }

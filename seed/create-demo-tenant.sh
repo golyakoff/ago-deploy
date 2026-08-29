@@ -26,6 +26,12 @@
 # script, and 5-08's own scope explicitly defers a role-assignment UI (a general role-editor is out of
 # scope per that item's own notes) - this remains the only way any role, Operator or Admin, is ever
 # granted in this project today.
+#
+# `18-04`: conversation:note_write/conversation:tag join both Operator role arrays below - found
+# missing 2026-08-29 while landing that item alongside the identical gap in
+# RegisterSiteHandler/MintDemoTenantHandler's own OperatorRolePermissions (ago-chat), which this
+# script independently restates rather than shares, per this file's own remarks above. Without it,
+# neither demo operator could write a note or apply a tag despite both new console panels existing.
 set -euo pipefail
 
 NETWORK="ago-chat-infra_default"
@@ -80,7 +86,7 @@ on conflict (id) do update set external_subject_id = excluded.external_subject_i
 
 insert into roles (id, site_id, name, permissions)
 values ('$ROLE_ID', '$SITE_ID', 'Operator',
-        array['conversation:read', 'conversation:send', 'conversation:assign']::text[])
+        array['conversation:read', 'conversation:send', 'conversation:assign', 'conversation:note_write', 'conversation:tag']::text[])
 on conflict (id) do nothing;
 
 insert into roles (id, site_id, name, permissions)
@@ -113,7 +119,7 @@ on conflict (id) do update set external_subject_id = excluded.external_subject_i
 
 insert into roles (id, site_id, name, permissions)
 values ('$ROLE2_ID', '$SITE2_ID', 'Operator',
-        array['conversation:read', 'conversation:send', 'conversation:assign']::text[])
+        array['conversation:read', 'conversation:send', 'conversation:assign', 'conversation:note_write', 'conversation:tag']::text[])
 on conflict (id) do nothing;
 
 insert into operator_roles (operator_id, role_id)

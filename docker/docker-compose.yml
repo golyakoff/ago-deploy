@@ -14,8 +14,11 @@ services:
       POSTGRES_DB: ${POSTGRES_DB:?}
     ports:
       - "5432:5432"
+    # `18`: the mount point moved one level up - the 18+ image's own entrypoint refuses to start
+    # against a volume mounted directly at .../postgresql/data (docker-library/postgres#1259), so the
+    # named volume now sits at the parent and Postgres places PGDATA in its own subdirectory.
     volumes:
-      - postgres-data:/var/lib/postgresql/data
+      - postgres-data-pg18:/var/lib/postgresql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
       interval: 5s
@@ -288,7 +291,12 @@ services:
       retries: 10
 
 volumes:
-  postgres-data:
+  # `postgres-data-pg18`, not `postgres-data`: an existing `postgres-data` volume holds 17-format
+  # PGDATA written directly at its own root, which the 18+ image's mount-point change (see the
+  # service definition above) would otherwise present at the wrong relative path. Renaming gives
+  # `docker compose up` a genuinely fresh volume automatically; the old `postgres-data` volume is
+  # left in place, unreferenced, as a local rollback path (`docker volume ls` finds it).
+  postgres-data-pg18:
   rabbitmq-data:
   redis-data:
   minio-data:

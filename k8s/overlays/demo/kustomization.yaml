@@ -111,7 +111,7 @@ images:
   # given node is in.
   - name: ago-console
     newName: ghcr.io/golyakoff/ago-console
-    newTag: 52528e540fad88d649a07ee1efcf10c21ab51112
+    newTag: 36377ed205a38365be6614f2caabe1131192755e
   - name: ago-demo-shop1
     newName: ghcr.io/golyakoff/ago-demo-shop1
     newTag: ab002baa4b3d0aa3bd0a80c000ddbbaa99806fe7

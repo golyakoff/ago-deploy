@@ -10,10 +10,17 @@
 # real quota provisioner is named as a future item if that stops being true. Resizing this number does
 # nothing while the class ignores it; real headroom is managed by that alert and by the reserved-headroom
 # budget `15-05` records, never by this field.
+# `postgres-data-pg18`, not `postgres-data`: a Postgres major version cannot start against a data
+# directory a different major initialised (the on-disk format changed) - reusing the old PVC name
+# means the new pod tries to `initdb` into a directory `local-path` already provisioned for one, and
+# no manifest field expresses "reformat this volume". A fresh PVC gets `initdb` a genuinely empty
+# directory; the old `postgres-data` PVC is deliberately left orphaned rather than deleted here - it
+# is the rollback path (repoint this claimName back and revert the image tag) until the upgrade is
+# confirmed solid on the live cluster, at which point removing it is its own small follow-up.
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
-  name: postgres-data
+  name: postgres-data-pg18
 spec:
   accessModes: ["ReadWriteOnce"]
   resources:
@@ -71,10 +78,18 @@ spec:
       # minio.yaml's own init container and for the same underlying reason: a chown no manifest field
       # can express. Idempotent - it re-runs every boot and does nothing on a directory already
       # correct.
+      # `18` upgrade: the mount point moved one level up. The 17 image (and every one before it)
+      # read/wrote PGDATA directly at /var/lib/postgresql/data; found live - the 18 image's own
+      # entrypoint refuses to start against that path at all, mount empty or not, and names why:
+      # https://github.com/docker-library/postgres/pull/1259. Its own PR keeps data at a
+      # major-version-specific subdirectory under /var/lib/postgresql (pg_ctlcluster's layout), so a
+      # single ReadWriteOnce PVC mounted at the parent is what the 18+ image now expects - this is
+      # not a version-bump cosmetic, it is a mandatory mount-path change every future major needs to
+      # keep clearing.
       initContainers:
         - name: chown-data
-          image: postgres:17-alpine # the same image as the container below - nothing new to pull
-          command: ["sh", "-c", "chown 70:70 /var/lib/postgresql/data"]
+          image: postgres:18-alpine # the same image as the container below - nothing new to pull
+          command: ["sh", "-c", "chown 70:70 /var/lib/postgresql"]
           securityContext:
             runAsNonRoot: false
             runAsUser: 0
@@ -85,7 +100,7 @@ spec:
               add: ["CHOWN", "FOWNER"]
           volumeMounts:
             - name: data
-              mountPath: /var/lib/postgresql/data
+              mountPath: /var/lib/postgresql
           resources:
             requests:
               memory: 16Mi
@@ -95,7 +110,7 @@ spec:
               cpu: 200m
       containers:
         - name: postgres
-          image: postgres:17-alpine
+          image: postgres:18-alpine
           securityContext:
             allowPrivilegeEscalation: false
             capabilities:
@@ -107,7 +122,7 @@ spec:
                 name: infra-credentials
           volumeMounts:
             - name: data
-              mountPath: /var/lib/postgresql/data
+              mountPath: /var/lib/postgresql
           resources:
             requests:
               memory: 256Mi
@@ -132,7 +147,7 @@ spec:
       volumes:
         - name: data
           persistentVolumeClaim:
-            claimName: postgres-data
+            claimName: postgres-data-pg18
 ---
 apiVersion: v1
 kind: Service

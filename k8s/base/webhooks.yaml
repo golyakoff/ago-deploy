@@ -77,6 +77,18 @@ spec:
             # `14-02`/`adr/0069`: same requirement as ago-chat-api - see that manifest's own comment.
             - name: Channels__CredentialEncryptionKey
               value: "$(CHANNELS_CREDENTIAL_ENCRYPTION_KEY)"
+            # `13-02`: same requirement as ago-chat-api - see that manifest's own comment (STUB, no
+            # real ЮKassa merchant account yet).
+            - name: Billing__PricePerSeatRub
+              value: "590"
+            - name: Billing__CheckoutReturnUrl
+              value: "https://console.reserve-me.ru/settings/billing"
+            - name: Billing__YooKassa__ShopId
+              value: "STUB-NOT-A-REAL-YOOKASSA-ACCOUNT"
+            - name: Billing__YooKassa__SecretKey
+              value: "stub-no-real-secret-key-configured"
+            - name: Billing__YooKassa__WebhookKey
+              value: "stub-no-real-webhook-key-configured"
             # `7-03`: same requirement as ago-chat-api - see that manifest's own comment.
             - name: Otel__Exporter__Endpoint
               value: "http://jaeger:4317"

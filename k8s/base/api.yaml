@@ -124,6 +124,26 @@ spec:
             # finding on the line above is not something to repeat on a second key.
             - name: Channels__CredentialEncryptionKey
               value: "$(CHANNELS_CREDENTIAL_ENCRYPTION_KEY)"
+            # `13-02`: BillingOptions/YooKassaOptions are bound and validated for every host
+            # (ChatModule.ConfigureServices) - this manifest never carried either, so a fresh image
+            # crash-loops the moment ValidateOnStart runs (the same class of gap `7-03`'s own remarks
+            # above record for S3StorageOptions). **STUB, not a real merchant account**: no ЮKassa
+            # Shop ID/Secret/WebhookKey exists yet - applying for one needs a published price list,
+            # which does not exist yet either (`ago-business`'s pricing decisions are still pending
+            # sign-off). These three values are deliberately obvious non-credentials - real ЮKassa
+            # will refuse any call made with them (401), so a checkout can fail loudly but never
+            # silently charge anything. Replace with the real triple the moment the merchant account
+            # exists; nothing else in this manifest needs to change to do that.
+            - name: Billing__PricePerSeatRub
+              value: "590"
+            - name: Billing__CheckoutReturnUrl
+              value: "https://console.reserve-me.ru/settings/billing"
+            - name: Billing__YooKassa__ShopId
+              value: "STUB-NOT-A-REAL-YOOKASSA-ACCOUNT"
+            - name: Billing__YooKassa__SecretKey
+              value: "stub-no-real-secret-key-configured"
+            - name: Billing__YooKassa__WebhookKey
+              value: "stub-no-real-webhook-key-configured"
             # `7-03`: PlatformObservabilityOptions.Exporter.Endpoint is [Required] - AddPlatformObservability
             # (7-01/7-02) fails ValidateOnStart without it, and appsettings.json carries no default (only
             # appsettings.Development.json does, for the fast loop). jaeger.yaml's own Service, not the

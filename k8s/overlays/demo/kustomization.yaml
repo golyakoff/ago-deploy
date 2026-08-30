@@ -114,10 +114,10 @@ images:
     newTag: c9854391eef26c4c1698a1db3d4f08b7708033d6
   - name: ago-demo-shop1
     newName: ghcr.io/golyakoff/ago-demo-shop1
-    newTag: ab002baa4b3d0aa3bd0a80c000ddbbaa99806fe7
+    newTag: 9e1d1aaf9523c3c6c5db1b70c86ab8ecea0acb6a
   - name: ago-demo-shop2
     newName: ghcr.io/golyakoff/ago-demo-shop2
-    newTag: ab002baa4b3d0aa3bd0a80c000ddbbaa99806fe7
+    newTag: 9e1d1aaf9523c3c6c5db1b70c86ab8ecea0acb6a
   - name: ago-landing
     newName: ghcr.io/golyakoff/ago-landing
     newTag: 467634530e7482eebcf770765b1b5d75c3ef9880

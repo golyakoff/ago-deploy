@@ -82,19 +82,19 @@ configMapGenerator:
 images:
   - name: ago-chat-api
     newName: ghcr.io/golyakoff/ago-chat-api
-    newTag: acf832cc410313cb2103879af4b1aba15a07df1c
+    newTag: b3dc3aaafc2a7940c59f59c490aa32b42944d9db
   - name: ago-chat-worker
     newName: ghcr.io/golyakoff/ago-chat-worker
-    newTag: acf832cc410313cb2103879af4b1aba15a07df1c
+    newTag: b3dc3aaafc2a7940c59f59c490aa32b42944d9db
   - name: ago-chat-webhooks
     newName: ghcr.io/golyakoff/ago-chat-webhooks
-    newTag: acf832cc410313cb2103879af4b1aba15a07df1c
+    newTag: b3dc3aaafc2a7940c59f59c490aa32b42944d9db
   # `8-08`: the migrator moves with the three hosts and never independently - it applies the
   # migrations *that commit* carries, so a migrator on a different SHA from the hosts is the exact
   # mismatch this item exists to prevent. deploy.sh sets all four from one argument for that reason.
   - name: ago-chat-migrator
     newName: ghcr.io/golyakoff/ago-chat-migrator
-    newTag: acf832cc410313cb2103879af4b1aba15a07df1c
+    newTag: b3dc3aaafc2a7940c59f59c490aa32b42944d9db
   # `15-07`/`adr/0051`: the four static bundles, which `15-06` could not reach - and the one it did
   # not reach is the one the 2026-08-25 incident happened to. Their four `imagePullPolicy: Never`
   # patches are gone from *-static.yaml for the same reason the three above went.
@@ -111,7 +111,7 @@ images:
   # given node is in.
   - name: ago-console
     newName: ghcr.io/golyakoff/ago-console
-    newTag: 36377ed205a38365be6614f2caabe1131192755e
+    newTag: c9854391eef26c4c1698a1db3d4f08b7708033d6
   - name: ago-demo-shop1
     newName: ghcr.io/golyakoff/ago-demo-shop1
     newTag: ab002baa4b3d0aa3bd0a80c000ddbbaa99806fe7

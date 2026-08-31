@@ -152,7 +152,7 @@ services:
   # still runs on every boot: it is skip-if-exists, and now that the realm survives, it is skipped.
   # k8s/apply-realm-settings.sh is how a changed realm file reaches a realm that already exists.
   keycloak:
-    image: quay.io/keycloak/keycloak:26.0
+    image: quay.io/keycloak/keycloak:26.7
     restart: unless-stopped
     command: start-dev --import-realm --health-enabled=true
     depends_on:

@@ -109,18 +109,23 @@ images:
   # was still pending (`15-07`'s own publish jobs) has happened. `IfNotPresent` still applies: present
   # locally it is used as-is, absent it is pulled from GHCR, so nothing here depends on which case a
   # given node is in.
+  #
+  # `15-08`: all three bumped together to their own repository's post-cache-header-fix main tip -
+  # ago-landing's tag is that repository's own CVE remediation commit (fix/apk-upgrade-cve, 17-04
+  # pattern), which had to land separately because the cache-header fix's own publish-images run
+  # failed a real Trivy finding (CVE-2026-14456) before this tag existed at all.
   - name: ago-console
     newName: ghcr.io/golyakoff/ago-console
-    newTag: c9854391eef26c4c1698a1db3d4f08b7708033d6
+    newTag: d08c87b344f7a8cbbf3d6a3d95705ef6779fcc43
   - name: ago-demo-shop1
     newName: ghcr.io/golyakoff/ago-demo-shop1
-    newTag: 9e1d1aaf9523c3c6c5db1b70c86ab8ecea0acb6a
+    newTag: bd16c92ff8241dd5f0caa4fdbab1bd4cb60ff546
   - name: ago-demo-shop2
     newName: ghcr.io/golyakoff/ago-demo-shop2
-    newTag: 9e1d1aaf9523c3c6c5db1b70c86ab8ecea0acb6a
+    newTag: bd16c92ff8241dd5f0caa4fdbab1bd4cb60ff546
   - name: ago-landing
     newName: ghcr.io/golyakoff/ago-landing
-    newTag: 467634530e7482eebcf770765b1b5d75c3ef9880
+    newTag: aa84163c28cddeb792fe50f70e99a55f0048f60b
 
 patches:
   # `8-07`/ago-root `adr/0058`: this is the one deployment that wants the demo-credential endpoint, so

@@ -51,7 +51,7 @@ spec:
           type: RuntimeDefault
       initContainers:
         - name: create-keycloak-database
-          image: postgres:17-alpine # already on every node that runs postgres.yaml - no new image
+          image: postgres:18-alpine # already on every node that runs postgres.yaml - no new image
           securityContext:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true

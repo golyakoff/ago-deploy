@@ -1,0 +1,170 @@
+# `20-20`: AGO Calendar's own migrator, following `8-08`/`adr/0056`'s established shape (see
+# migrator.yaml's own header for the full reasoning - a Job because "is the schema current" has an
+# answer and is then over, and ordering the hosts after it is a property of the images rather than of
+# this file. It is not repeated in full here).
+#
+# TWO THINGS THIS JOB DOES THAT `ago-chat-migrator` DOES NOT, AND WHY BOTH LIVE HERE RATHER THAN IN
+# `Ago.Calendar.Migrator` ITSELF:
+#
+# 1. **It creates its own database.** Postgres's `initdb` creates exactly one database
+#    (`POSTGRES_DB`, which is `ago_chat` - the whole cluster has one Postgres instance, `adr/0026`'s
+#    one-node sizing) and only on the very first initialisation of an empty data directory. A cluster
+#    whose PVC already holds weeks of `ago_chat` data - which is every cluster this manifest will ever
+#    reach - will never grow a second database from that mechanism. `keycloak.yaml`'s own init
+#    container is the precedent: an idempotent `SELECT ... WHERE NOT EXISTS (...) \gexec`, run on
+#    every boot, safe to repeat. This case is simpler than Keycloak's - no `CREATE ROLE`, no
+#    `ALTER ROLE ... PASSWORD` - because `20-20`'s own brief decided `ago_calendar` is owned by the
+#    *existing* `ago` role rather than a second one: one small tenant on one node, and a role split
+#    buys isolation this deployment does not need yet (the same DDL/DML-role question `8-08` already
+#    named and deliberately left undone for `ago_chat`). **Consequence worth stating: no new secret.**
+#    `AGO_CALENDAR_CONNECTION_STRING` below reuses `POSTGRES_USER`/`POSTGRES_PASSWORD` straight out of
+#    the `infra-credentials` Secret every other workload already reads - nothing new to generate, hold
+#    or rotate.
+#
+#    Placed on the migrator Job rather than as its own separate init resource because the migrator is
+#    "the thing that must run before anything else" (this item's own framing) - creating the database
+#    is a precondition of applying migrations to it, so it belongs on the same Job as the step it
+#    precedes, in the same init-container position `keycloak.yaml` already established for exactly
+#    this kind of "make what I need exist first" step.
+#
+# 2. **It waits for Postgres to actually accept connections before doing either of the above.**
+#    `Ago.Calendar.Migrator` was shipped deliberately without `8-10`'s `DatabaseAvailabilityWait` -
+#    read `MigratorRunner`'s own remarks in `ago-calendar`: "nothing has deployed AGO Calendar yet, so
+#    that incident has no analogue here to fix... worth porting before this repository is actually
+#    rolled out against a multi-workload deploy - noted in this item's report rather than solved
+#    here." This manifest is that rollout, so the gap this item's own brief names is real and not
+#    hypothetical: with `backoffLimit: 0` below (same reasoning as `migrator.yaml` - a migration that
+#    failed will fail again, so a retry buys nothing), a bare `psql` racing a Postgres pod that is
+#    still starting fails the whole Job exactly the way `8-10`'s incident describes, and needs a human
+#    to delete and re-apply it. **So the wait below is not decorative - it is the only thing standing
+#    between a routine "everything came up together" rollout and a Job that needs a human every time.**
+#
+#    It borrows the *shape* of `8-10`'s fix (bounded wait, and a real failure is reported immediately
+#    rather than waited out) without porting its exact mechanism, because that mechanism is C# code
+#    classifying Npgsql exceptions and SQLSTATEs - there is nothing to port into a shell script. The
+#    shell equivalent uses `pg_isready`'s own exit codes, which already draw almost the same line:
+#    0 = accepting connections, 1 = rejecting connections ("starting up" - waited through), 2 = no
+#    response at all (connection refused, DNS not resolvable yet, timeout - also waited through,
+#    matching `8-10`'s own finding that a fresh container's port can accept a TCP connection and then
+#    answer nothing), 3 = no attempt was made (bad invocation of `pg_isready` itself - a bug in this
+#    script, not "the database is not ready", so it fails immediately rather than spending the full 90s
+#    finding out). Verified directly, not assumed: run against an unreachable host, `pg_isready` here
+#    returns 2 and the loop waits, exactly the case `8-10` measured as `EndOfStreamException` on the
+#    Npgsql side of the identical scenario. 90s to match `8-10`'s own measured number for the same
+#    class of event (a pod restart during a many-workload rollout) - not re-measured for this
+#    lighter-weight Job, reused because the event it is sized for is the same event.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: ago-calendar-migrator
+  # `8-08`'s own pattern: an object-level label so a targeted `kubectl apply -l app=ago-calendar-migrator`
+  # can re-run this Job alone, the same way `redeploy.sh` already does for `ago-chat-migrator`.
+  labels:
+    app: ago-calendar-migrator
+spec:
+  # `adr/0056`, unchanged from migrator.yaml's own reasoning: a migration that failed will fail again,
+  # so retrying buys nothing and costs the clarity of a Job that is simply Failed. One attempt, then a
+  # human - and see the header above for why "the database was not up yet" must never be allowed to
+  # count as that one attempt.
+  backoffLimit: 0
+  ttlSecondsAfterFinished: 3600
+  template:
+    metadata:
+      labels:
+        app: ago-calendar-migrator
+    spec:
+      restartPolicy: Never
+      # `17-05`/`adr/0054`: stated, not inherited - `ago-calendar`'s own Dockerfile copies `ago-chat`'s
+      # chiselled-base shape (`8-00`) deliberately ("follow ago-chat's own... shape rather than
+      # inventing a second one"), so the same non-root uid applies here for the same reason
+      # migrator.yaml states it: a base-image change that reversed the default would otherwise do so
+      # silently.
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1654
+        runAsGroup: 1654
+        seccompProfile:
+          type: RuntimeDefault
+      initContainers:
+        - name: create-calendar-database
+          image: postgres:18-alpine # already on every node that runs postgres.yaml - no new image
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          envFrom:
+            - secretRef:
+                name: infra-credentials
+          command: ["sh", "-c"]
+          args:
+            - |
+              set -eu
+              # `8-10`'s own bound, and its own shape: distinguish "not yet" from "not going to", and
+              # report a real connection-parameter failure (pg_isready exit 3) immediately rather than
+              # waiting it out - a bug in this script's own invocation should read as a bug, not as a
+              # 90-second timeout. $SECONDS is not portable to this image's shell (verified: this is
+              # Alpine's busybox ash, and $SECONDS is empty here even though it works under bash) -
+              # `date +%s` is, and is used for the deadline instead.
+              deadline=$(( $(date +%s) + 90 ))
+              until pg_isready -h postgres -p 5432 -U "$POSTGRES_USER" -d "$POSTGRES_DB" >/dev/null 2>&1; do
+                rc=$?
+                if [ "$rc" -eq 3 ]; then
+                  echo "CANNOT CONNECT TO DATABASE: pg_isready exited 3 (bad connection parameters), which is not a \"starting up\" condition - refusing to wait it out" >&2
+                  exit 1
+                fi
+                now=$(date +%s)
+                if [ "$now" -ge "$deadline" ]; then
+                  echo "WAITING FOR DATABASE FAILED: postgres did not accept connections within 90s" >&2
+                  exit 1
+                fi
+                echo "waiting for postgres..."
+                sleep 2
+              done
+              echo "postgres accepting connections"
+              export PGPASSWORD="$POSTGRES_PASSWORD"
+              # No CREATE ROLE, no ALTER ROLE - see the header comment. `ago_calendar` is owned by the
+              # same `ago` role every other database-touching workload in this namespace already
+              # authenticates as.
+              psql -h postgres -U "$POSTGRES_USER" -d postgres -v ON_ERROR_STOP=1 <<'SQL'
+              SELECT 'CREATE DATABASE ago_calendar OWNER ago' WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'ago_calendar')\gexec
+              SQL
+              echo "ago_calendar database ready"
+          resources:
+            requests:
+              memory: 32Mi
+              cpu: 50m
+            limits:
+              memory: 128Mi
+              cpu: 200m
+      containers:
+        - name: migrator
+          image: ago-calendar-migrator:local
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          envFrom:
+            - secretRef:
+                name: infra-credentials
+          env:
+            # `ago-calendar`'s `Ago.Calendar.Migrator/Program.cs` reads exactly this one variable and
+            # nothing else - no DI container, no configuration binding (see that file's own remarks).
+            # A different database from every other workload's `$(POSTGRES_DB)` on purpose: this
+            # product owns `ago_calendar`, never `ago_chat`.
+            - name: AGO_CALENDAR_CONNECTION_STRING
+              value: "Host=postgres;Port=5432;Database=ago_calendar;Username=$(POSTGRES_USER);Password=$(POSTGRES_PASSWORD)"
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+          resources:
+            requests:
+              memory: 64Mi
+              cpu: 50m
+            limits:
+              memory: 256Mi
+              cpu: 500m
+      volumes:
+        - name: tmp
+          emptyDir: {}

@@ -14,6 +14,9 @@ resources:
   - demo-shop1-static.yaml
   - demo-shop2-static.yaml
   - landing-static.yaml
+  # `20-20`: AGO Calendar's own console bundle, same reasoning as the four above - demo-overlay-only,
+  # no local-dev counterpart.
+  - calendar-console-static.yaml
   # `15-03`: alerting. Demo-overlay-only, deliberately - see alertmanager.yaml's own header for why
   # this is not in ../../base alongside prometheus.yaml and grafana.yaml, and for why Alertmanager
   # was chosen over Grafana's built-in alerting. Not routed through gateway.yaml and never will be:
@@ -126,6 +129,35 @@ images:
   - name: ago-landing
     newName: ghcr.io/golyakoff/ago-landing
     newTag: aa84163c28cddeb792fe50f70e99a55f0048f60b
+  # `20-20`: AGO Calendar's own four images. The three backend ones move together and never
+  # independently, same rule as the ago-chat-* four above and the same reason: `calendar-migrator.yaml`
+  # applies the migrations *this* commit's Domain carries, so a migrator on a different SHA from the
+  # hosts is the exact mismatch `8-08` exists to prevent - there just is no `deploy.sh` for this
+  # product yet to enforce it by construction, so it is enforced here by all three sharing one line to
+  # edit. Published today at this commit (confirmed against `ago-calendar`'s own `origin/main`,
+  # `ee3b38aaac2aceeb2377a7c431671d1657c0fbfe`) - unverified from this machine that GHCR actually holds
+  # the built artifacts at that tag; see this item's own report.
+  - name: ago-calendar-api
+    newName: ghcr.io/golyakoff/ago-calendar-api
+    newTag: ee3b38aaac2aceeb2377a7c431671d1657c0fbfe
+  - name: ago-calendar-worker
+    newName: ghcr.io/golyakoff/ago-calendar-worker
+    newTag: ee3b38aaac2aceeb2377a7c431671d1657c0fbfe
+  - name: ago-calendar-migrator
+    newName: ghcr.io/golyakoff/ago-calendar-migrator
+    newTag: ee3b38aaac2aceeb2377a7c431671d1657c0fbfe
+  # The console is its own repository with its own release cadence (`repositories.md`'s "each
+  # deployable surface gets its own repo" pattern, same reasoning `ago-console`'s own entry above
+  # documents) - it does NOT share a tag with the three backend images. Pinned to
+  # `ago-calendar-console`'s own `origin/main` tip at the time this overlay was written
+  # (`3bf11058ddeeab96715c55ae0216e30f1c51efc7`) rather than to a SHA named in this item's own brief,
+  # because the brief did not name one for this image - "publishes from its own repo; pin the same way
+  # the other static frontends are pinned" is an instruction to determine it, not a given value.
+  # **This exact commit is confirmed to produce a bundle that throws at runtime** - see
+  # calendar-console-static.yaml's own header for why, and this item's report for the fix.
+  - name: ago-calendar-console
+    newName: ghcr.io/golyakoff/ago-calendar-console
+    newTag: 3bf11058ddeeab96715c55ae0216e30f1c51efc7
 
 patches:
   # `8-07`/ago-root `adr/0058`: this is the one deployment that wants the demo-credential endpoint, so

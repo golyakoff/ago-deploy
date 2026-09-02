@@ -55,3 +55,10 @@ spec:
     - demo-shop1.reserve-me.ru
     - demo-shop2.reserve-me.ru
     - reserve-me.ru
+    # `20-20`: AGO Calendar's own two hostnames - a working default this item proposes rather than a
+    # settled name (see this item's report). Adding them re-issues the whole certificate once (fresh
+    # HTTP-01 challenges for these two only - cert-manager does not replay the five that already
+    # passed), the same real, bounded operation `grafana.reserve-me.ru`'s own comment above already
+    # describes for a SAN change.
+    - calendar-api.reserve-me.ru
+    - calendar.reserve-me.ru

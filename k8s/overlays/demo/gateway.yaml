@@ -64,6 +64,19 @@ spec:
         mode: Terminate
         certificateRefs:
           - name: ago-public-tls
+    # The chat API's new, permanent name. Both listeners serve the same API for now, on purpose:
+    # `chat.` is what the widget, the console and the landing page's copy-me snippet all point at
+    # today, and it becomes the chat *console* at the end of this migration. Serving both first is
+    # what makes that flip safe - a consumer can move to `chat-api.` and be verified working before
+    # anything about `chat.` changes.
+    - name: https-chat-api
+      port: 443
+      protocol: HTTPS
+      hostname: chat-api.reserve-me.ru
+      tls:
+        mode: Terminate
+        certificateRefs:
+          - name: ago-public-tls
     - name: https-auth
       port: 443
       protocol: HTTPS
@@ -171,8 +184,11 @@ spec:
   parentRefs:
     - name: ago-chat-gateway
       sectionName: https-chat
+    - name: ago-chat-gateway
+      sectionName: https-chat-api
   hostnames:
     - chat.reserve-me.ru
+    - chat-api.reserve-me.ru
   rules:
     # Same three prefixes as overlays/local/gateway.yaml - unchanged by the public/TLS shift, only the
     # hostname and parent listener differ.

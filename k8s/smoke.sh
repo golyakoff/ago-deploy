@@ -29,6 +29,17 @@
 set -uo pipefail
 
 DOMAIN="${1:-reserve-me.ru}"
+
+# The chat API's hostname, as a variable rather than spelled out six times. It moved from `chat.` to
+# `chat-api.` on 2026-09-02, when the naming scheme was settled: the bare product name belongs to the
+# human-facing console, and an API takes the `-api` suffix. `chat.` becomes the chat console at the
+# end of that migration.
+#
+# **This check is the gate for that flip.** While both names still serve the API, a green run here
+# means every consumer can be moved to `chat-api.` and verified before `chat.` changes meaning. If
+# this is red, the flip is not safe yet - and it will be red until the DNS record exists and the
+# certificate has been re-issued to cover it.
+CHAT_API="chat-api.${DOMAIN}"
 PUBLIC_KEY="${PUBLIC_KEY:-demo_site}"
 CHAT_REPO="${CHAT_REPO:-}"
 NS="${NS:-ago-chat}"
@@ -62,13 +73,13 @@ fi
 
 echo
 echo "API"
-c=$(code "https://chat.${DOMAIN}/healthz/ready")
+c=$(code "https://${CHAT_API}/healthz/ready")
 [ "$c" = "200" ] && ok "healthz/ready 200 (Postgres, RabbitMQ, Redis all answered)" || bad "healthz/ready returned $c"
 
 # 15-06: the check that would have caught the 2026-08-25 stale deploy. The commit comes out of the
 # compiled binary (BuildInfoResponse / -p:SourceRevisionId), not out of a manifest, so this says what
 # is running rather than what was asked for.
-version=$(curl -s --max-time 20 "https://chat.${DOMAIN}/healthz/version")
+version=$(curl -s --max-time 20 "https://${CHAT_API}/healthz/version")
 commit=$(echo "$version" | sed -n 's/.*"commit":"\([^"]*\)".*/\1/p')
 if [ -z "$commit" ]; then
   bad "healthz/version answered nothing usable - a pre-15-06 image is deployed, and it cannot name its own commit"
@@ -87,14 +98,14 @@ else
   fi
 fi
 
-session=$(curl -s --max-time 20 -w '\n%{http_code}' -X POST "https://chat.${DOMAIN}/api/v1/visitor-sessions" \
+session=$(curl -s --max-time 20 -w '\n%{http_code}' -X POST "https://${CHAT_API}/api/v1/visitor-sessions" \
   -H 'Content-Type: application/json' -d "{\"publicKey\":\"${PUBLIC_KEY}\"}")
 scode=$(echo "$session" | tail -1)
 token=$(echo "$session" | head -1 | grep -oE '"token":"[^"]+"' | cut -d'"' -f4)
 if [ "$scode" = "201" ] && [ -n "$token" ]; then
   ok "visitor-sessions 201 with a usable token (a Site loaded, so the schema matches the code)"
   n=$(curl -s --max-time 20 -o /dev/null -w '%{http_code}' -X POST \
-    "https://chat.${DOMAIN}/hubs/visitor/negotiate?negotiateVersion=1" -H "Authorization: Bearer ${token}")
+    "https://${CHAT_API}/hubs/visitor/negotiate?negotiateVersion=1" -H "Authorization: Bearer ${token}")
   [ "$n" = "200" ] && ok "visitor hub negotiates with that token" || bad "hub negotiate returned $n"
 else
   bad "visitor-sessions returned $scode - this is the check that catches an unapplied migration"
@@ -139,7 +150,7 @@ echo "Operator hub"
 # the seeded tenants: somebody had added the console to *their* AllowedOrigins, so the old, wrong check
 # happened to pass for them. Only a tenant whose origins are just its own shop page - which is every
 # tenant `8-07` mints - showed it. A check built on the seeded credential would have stayed green.
-mint=$(curl -s --max-time 20 -w '\n%{http_code}' -X POST "https://chat.${DOMAIN}/api/v1/demo/credentials")
+mint=$(curl -s --max-time 20 -w '\n%{http_code}' -X POST "https://${CHAT_API}/api/v1/demo/credentials")
 mcode=$(echo "$mint" | tail -1)
 if [ "$mcode" != "200" ]; then
   skip "operator hub connection (demo minting answered ${mcode} - DemoTenant off, at capacity, or rate-limited)"
@@ -158,7 +169,7 @@ else
     ok "a minted operator signs in (the credential a stranger is given actually works)"
     OORIGIN="https://console.${DOMAIN}"
     octoken=$(curl -s --max-time 20 -X POST \
-      "https://chat.${DOMAIN}/hubs/operator/negotiate?negotiateVersion=1" \
+      "https://${CHAT_API}/hubs/operator/negotiate?negotiateVersion=1" \
       -H "Authorization: Bearer ${otok}" -H "Origin: ${OORIGIN}" \
       | grep -oE '"connectionToken":"[^"]+"' | cut -d'"' -f4)
 
@@ -168,13 +179,13 @@ else
       ok "operator hub negotiates"
       ossefile=$(mktemp)
       ( curl -s --max-time 6 -o "$ossefile" \
-          "https://chat.${DOMAIN}/hubs/operator?id=${octoken}" \
+          "https://${CHAT_API}/hubs/operator?id=${octoken}" \
           -H "Authorization: Bearer ${otok}" -H "Origin: ${OORIGIN}" \
           -H 'Accept: text/event-stream' >/dev/null 2>&1 ) &
       osse=$!
       sleep 1
       curl -s --max-time 10 -o /dev/null -X POST \
-        "https://chat.${DOMAIN}/hubs/operator?id=${octoken}" \
+        "https://${CHAT_API}/hubs/operator?id=${octoken}" \
         -H "Authorization: Bearer ${otok}" -H "Origin: ${OORIGIN}" \
         --data-binary "$(printf '{"protocol":"json","version":1}\036')"
       wait $osse 2>/dev/null || true
@@ -198,12 +209,13 @@ echo "Frontends"
 # CSS carry an --ago- token", "does the JS mention configureLogging" - and they could only ever
 # catch drift older than one specific named change, never drift in general.
 #
-# url:deployment. The landing page is at the apex, not a subdomain. `20-20`: calendar-console added -
-# ago-calendar-console's own Dockerfile writes /version.json the identical way (adr/0051's pattern,
+# url:deployment. The landing page is at the apex, not a subdomain. `20-20`: the calendar console added -
+# it is served at `calendar.` (the bare product name is the human-facing console), and its own
+# Dockerfile writes /version.json the identical way (adr/0051's pattern,
 # copied rather than reinvented), so this loop needs no special case for it.
 for entry in "console.${DOMAIN}:ago-console" "demo-shop1.${DOMAIN}:ago-demo-shop1" \
              "demo-shop2.${DOMAIN}:ago-demo-shop2" "${DOMAIN}:ago-landing" \
-             "calendar-console.${DOMAIN}:ago-calendar-console"; do
+             "calendar.${DOMAIN}:ago-calendar-console"; do
   host="${entry%%:*}"; deploy="${entry##*:}"
   commit=$(curl -s --max-time 20 "https://${host}/version.json" \
            | sed -n 's/.*"commit":"\([^"]*\)".*/\1/p' | head -1)
@@ -240,7 +252,12 @@ fi
 
 echo
 echo "Edge"
-for h in "chat" "auth" "console" "demo-shop1" "demo-shop2" "calendar" "calendar-console"; do
+# Both names of each API are listed while the rename is in flight. `chat.` and `console.` both still
+# answer today - `chat.` serves the API and becomes the console at the end of it, `console.` is
+# deleted after that. `calendar-console` is gone from this list because that name was never created:
+# the scheme settled on `calendar.` for the console and `calendar-api.` for the API before anything
+# was deployed under the first proposal.
+for h in "chat" "chat-api" "auth" "console" "demo-shop1" "demo-shop2" "calendar" "calendar-api"; do
   c=$(code "https://${h}.${DOMAIN}/")
   # auth's root redirects; anything that is not a connection failure means the listener is alive.
   [ "$c" != "000" ] && ok "${h}.${DOMAIN} answers ($c)" || bad "${h}.${DOMAIN} did not answer"

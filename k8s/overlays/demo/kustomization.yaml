@@ -131,9 +131,14 @@ images:
   # `ago-faq` is not deployed, so `/settings/faq` is designed to render "not configured" rather than
   # break - designed to, which is a claim to check on the stand rather than assume. The rest is the
   # UX gate (CI only) and dev-dependency bumps that never reach the bundle.
+  # `adr/0092`: the install screen now prints the real snippet instead of the plain-language "not
+  # yet" note it shipped with. Bumped in the same change as `ago-landing` below on purpose - the two
+  # are the same sentence told to two audiences (a signed-in tenant, and a stranger reading the
+  # marketing page), and leaving one on the old text while the other moved is the kind of split that
+  # gets noticed by a customer rather than by us.
   - name: ago-console
     newName: ghcr.io/golyakoff/ago-console
-    newTag: 30dd5468c40353a576c83b049bb259be5b28ebad
+    newTag: 05e231cfecba90badd398c3e9cb6215318f735c2
   # All three come from one `ago-widget` commit, and that is the point rather than tidiness: the two
   # demo pages and a real tenant's embed then run byte-identical bundles, which is checkable (three
   # `version.json` files naming one commit) instead of assumed.
@@ -152,9 +157,17 @@ images:
   - name: ago-widget-assets
     newName: ghcr.io/golyakoff/ago-widget-assets
     newTag: 97067197475496a58d3e9e924f1d484f3053d357
+  # `adr/0092`: the copy-me snippet on the public landing page had been handing out
+  # `chat.reserve-me.ru/widget.js` - a 404, under a filename that never existed anywhere. Until this
+  # is deployed, the page a prospective customer reads still gives them a script tag that does not
+  # load, which is the most expensive place in the whole system for a wrong string to sit.
+  #
+  # Also carries a real mobile fix found while checking it: the snippet's box did not wrap, so at
+  # 375px it was 463px wide and slid the entire landing page sideways. Measured in a browser before
+  # and after (537px -> 375px page width), not eyeballed.
   - name: ago-landing
     newName: ghcr.io/golyakoff/ago-landing
-    newTag: aa84163c28cddeb792fe50f70e99a55f0048f60b
+    newTag: b946777908b60e854f124d1ade7801024f9c88e9
   # `20-20`: AGO Calendar's own four images. The three backend ones move together and never
   # independently, same rule as the ago-chat-* four above and the same reason: `calendar-migrator.yaml`
   # applies the migrations *this* commit's Domain carries, so a migrator on a different SHA from the

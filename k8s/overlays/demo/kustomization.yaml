@@ -117,9 +117,21 @@ images:
   # ago-landing's tag is that repository's own CVE remediation commit (fix/apk-upgrade-cve, 17-04
   # pattern), which had to land separately because the cache-header fix's own publish-images run
   # failed a real Trivy finding (CVE-2026-14456) before this tag existed at all.
+  # `adr/0091` step 2, 2026-09-02: the console's own bundle now calls `chat-api.reserve-me.ru`. That
+  # value is inlined by Vite at build time, so it changes only by shipping a new image - which is why
+  # this pin, not a config edit, is what actually completes the step. Until it is applied, the running
+  # console still depends on `chat.` being the API, and step 3 (repointing `chat.` at the console)
+  # cannot happen.
+  #
+  # **This moves nine commits, not one, and an image pinned by commit SHA is all-or-nothing.** Besides
+  # the rename it carries `10-06`'s install screen (new, tenant-facing) and `19-03`'s AI FAQ module
+  # config screens, which have never been on this stand. `VITE_FAQ_API_BASE_URL` is unset here and
+  # `ago-faq` is not deployed, so `/settings/faq` is designed to render "not configured" rather than
+  # break - designed to, which is a claim to check on the stand rather than assume. The rest is the
+  # UX gate (CI only) and dev-dependency bumps that never reach the bundle.
   - name: ago-console
     newName: ghcr.io/golyakoff/ago-console
-    newTag: d08c87b344f7a8cbbf3d6a3d95705ef6779fcc43
+    newTag: 30dd5468c40353a576c83b049bb259be5b28ebad
   - name: ago-demo-shop1
     newName: ghcr.io/golyakoff/ago-demo-shop1
     newTag: bd16c92ff8241dd5f0caa4fdbab1bd4cb60ff546

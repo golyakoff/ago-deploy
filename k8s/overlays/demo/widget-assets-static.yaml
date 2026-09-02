@@ -1,0 +1,104 @@
+# `adr/0092`: the widget bundle on a public URL of its own, served at
+# `chat-api.reserve-me.ru/widget/` by a prefix rule in gateway.yaml.
+#
+# Until this existed there was **no public URL serving the widget at all**. The only copy a browser
+# could reach belonged to a demo shop, because each demo image bundles its own - so `10-06` could
+# build the whole install screen except the one thing a tenant actually pastes. `ago-landing`'s
+# copy-me snippet had been handing out `chat.reserve-me.ru/widget.js`, a 404 under a filename that
+# does not exist either (the file is `ago-chat.js`).
+#
+# Same Deployment/Service shape as `demo-shop1-static.yaml`, deliberately - it is the same nginx
+# serving the same bundle, built from the same Dockerfile with `--target assets`. Two differences,
+# both load-bearing:
+#
+#  1. **The probes hit `/version.json`, not `/`.** This image has no `index.html` - the assets stage
+#     removes nginx's stock welcome page, because this one is served at a public URL where a default
+#     page would answer `/widget/` and announce what the server is. With no index, `/` returns 403,
+#     so a copied `path: /` probe would leave the pod permanently unready.
+#  2. **No demo page and no `demo-boot.js`**, which is the whole point: a tenant embedding the widget
+#     downloads the bundle and nothing else.
+#
+# Demo-overlay-only rather than `k8s/base/`, same reasoning as `console-static.yaml` and the two demo
+# shops: nothing in `overlays/local` serves this over a cluster Service, and `ago-widget`'s own local
+# loop (`npx serve`) covers development entirely outside Kubernetes.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ago-widget-assets
+spec:
+  # One tenant-facing script, served by nginx from an emptyDir-free read-only rootfs. No state to
+  # scale for - and it sits behind the same Gateway that already fronts everything else.
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ago-widget-assets
+  template:
+    metadata:
+      labels:
+        app: ago-widget-assets
+    spec:
+      # `17-05`: identical to console-static.yaml's own block - read it there for why the nginx
+      # master is still root, what the five kept capabilities are each for, and which repository
+      # would have to change to fix it properly.
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: ago-widget-assets
+          # `15-07`/`adr/0051`: rewritten by the overlay's `images:` block to
+          # ghcr.io/golyakoff/ago-widget-assets:<40-char commit SHA>, published by ago-widget's CI
+          # from the same commit as the two demo images - which is what makes "the demos and a real
+          # tenant run the same widget" checkable rather than assumed.
+          image: ago-widget-assets:local
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+              add: ["CHOWN", "SETGID", "SETUID", "NET_BIND_SERVICE", "KILL"]
+          ports:
+            - containerPort: 80
+          volumeMounts:
+            - name: nginx-cache
+              mountPath: /var/cache/nginx
+            - name: nginx-run
+              mountPath: /run
+            - name: tmp
+              mountPath: /tmp
+          resources:
+            requests:
+              memory: 32Mi
+              cpu: 25m
+            limits:
+              memory: 64Mi
+              cpu: 100m
+          # `/version.json`, not `/` - see the header. It is also the more useful probe: it proves the
+          # image can name its own commit, which is the property `15-07` exists for.
+          readinessProbe:
+            httpGet:
+              path: /version.json
+              port: 80
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /version.json
+              port: 80
+            periodSeconds: 10
+      volumes:
+        - name: nginx-cache
+          emptyDir: {}
+        - name: nginx-run
+          emptyDir: {}
+        - name: tmp
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ago-widget-assets
+spec:
+  selector:
+    app: ago-widget-assets
+  ports:
+    - port: 80
+      targetPort: 80

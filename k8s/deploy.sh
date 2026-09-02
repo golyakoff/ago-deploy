@@ -210,10 +210,25 @@ CHAT_REPO="${CHAT_REPO:-$AGO_ROOT/ago-chat}" "$HERE/smoke.sh" "$DOMAIN"
 #   An image rolled back onto a newer schema starts normally, which is exactly what the expand/contract
 #   discipline below is there to make safe.
 #
-# That is survivable only because every migration in this project so far has been additive, so code
-# from an earlier commit runs unharmed against a later schema - it simply ignores columns it does not
-# know about. That is a property to preserve on purpose, not luck: a migration must stay compatible
-# with the image immediately before it (expand now, contract in a later release). A destructive
-# change - dropping or renaming a column, narrowing a type - breaks rollback outright, and if one is
-# ever merged, the recovery from a bad deploy stops being "roll the image back" and becomes
-# "restore from backup" (15-02). Say so in that migration's own review, before it merges.
+# That was survivable for as long as every migration was additive, so code from an earlier commit ran
+# unharmed against a later schema - it simply ignored columns it did not know about. That is a
+# property to preserve on purpose, not luck: a migration must stay compatible with the image
+# immediately before it (expand now, contract in a later release). A destructive change - dropping or
+# renaming a column, narrowing a type - breaks rollback outright, and when one is merged, the recovery
+# from a bad deploy stops being "roll the image back" and becomes "restore from backup" (15-02). Say
+# so in that migration's own review, before it merges.
+#
+# One such migration has now merged, so the paragraph above is history rather than a live guarantee:
+#
+#   20260901213751_Stage15RepartitionMessagesByTenantHash (`15-09`/`adr/0087`) rebuilds `messages`
+#   outright - `RENAME TO messages_pre_hash_partitioning`, `CREATE TABLE messages ... PARTITION BY
+#   HASH (site_id)`, copy, `DROP TABLE`. The primary key becomes `(id, site_id)`, `site_id` becomes
+#   `NOT NULL`, and the monthly `RANGE (created_at)` grid ceases to exist. It was taken deliberately,
+#   with no live clients and no data to lose, which is the cheapest that change was ever going to be.
+#
+#   What this costs: **an ago-chat image from before that commit must not be rolled onto this schema.**
+#   The host's own guard will not stop it - the database is *ahead* of such an image, which is the
+#   direction the guard says nothing about. The old worker still carries `PartitionMaintenanceJob`,
+#   which would try to add a monthly `RANGE` partition to a table that is now partitioned by hash.
+#   Across this boundary the recovery from a bad deploy is restore-from-backup (15-02), not a rollback.
+#   Rolling back *within* the post-15-09 range is unaffected.

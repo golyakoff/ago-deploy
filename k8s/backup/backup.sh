@@ -66,7 +66,27 @@ log "dumping postgres roles (globals)"
 $KUBECTL exec -n "$NAMESPACE" deploy/postgres -- \
   sh -c 'pg_dumpall -U "$POSTGRES_USER" --globals-only' > "$work/globals.sql"
 
-for db in ago_chat keycloak; do
+# **The list is asked for, never remembered.** This read `for db in ago_chat keycloak` until
+# 2026-09-02. A hardcoded list is a backup that stops being complete the moment a database is added,
+# and it stops silently: no error, no warning, just a dump that is not there and that nobody misses
+# until a restore. AGO Calendar is the concrete case - it brings its own database, and under the old
+# form a tenant's schedules would have sat outside every backup taken after it shipped.
+#
+# `datistemplate = false` drops template0/template1. `postgres` is excluded deliberately, not by
+# oversight: it holds no application state, and `restore.sh` connects *to* it in order to create the
+# others.
+log "enumerating databases"
+databases="$($KUBECTL exec -n "$NAMESPACE" deploy/postgres -- \
+  sh -c "psql -U \"\$POSTGRES_USER\" -d postgres -Atc \"select datname from pg_database where datistemplate = false and datname <> 'postgres' order by datname\"" \
+  | tr -d '\r')"
+
+# An empty list must be fatal. Without this, a failed enumeration writes an artifact containing
+# globals and MinIO objects, exits 0, and is indistinguishable from a good backup until the day it is
+# needed - which is the worst possible moment to find out.
+[ -n "$databases" ] || fail "could not enumerate databases - refusing to write a backup that may be missing one"
+log "databases to dump: $(echo "$databases" | tr '\n' ' ')"
+
+for db in $databases; do
   log "dumping database $db"
   # -Fc: custom format, compressed, restorable selectively with pg_restore. `messages` is
   # PARTITION BY RANGE (adr/0019, adr/0031) - pg_dump handles that natively, emitting the parent, each
@@ -139,13 +159,20 @@ log "writing manifest"
   echo "keycloak_image=$($KUBECTL get deploy keycloak -n "$NAMESPACE" -o jsonpath='{.spec.template.spec.containers[0].image}')"
   echo "ago_deploy_rev=$(git -C "$(dirname "$ENV_FILE")" rev-parse HEAD 2>/dev/null || echo unknown)"
   echo "minio_object_count=$(find "$work/minio" -type f | wc -l)"
+  echo "databases_dumped=$(echo "$databases" | tr '\n' ' ')"
   echo "# --- row counts at dump time ---"
   # -F= rather than building `name=count` in SQL: a string literal inside a double-quoted -c inside a
   # single-quoted sh -c inside kubectl exec is three levels of quoting deep, and it was wrong the first
   # time it ran. Letting psql do the formatting removes the level that broke.
-  $KUBECTL exec -n "$NAMESPACE" deploy/postgres -- \
-    sh -c 'psql -U "$POSTGRES_USER" -d ago_chat -At -F= -c "select relname, n_live_tup from pg_stat_user_tables order by relname"' \
-    | sed 's/^/ago_chat./'
+  #
+  # Over every dumped database, not `ago_chat` alone - same reason the dump loop is enumerated. These
+  # counts are what the restore drill compares against, so a database missing from here is a database
+  # whose loss a drill would compare as clean.
+  for db in $databases; do
+    $KUBECTL exec -n "$NAMESPACE" deploy/postgres -- \
+      sh -c "psql -U \"\$POSTGRES_USER\" -d $db -At -F= -c \"select relname, n_live_tup from pg_stat_user_tables order by relname\"" \
+      | sed "s/^/$db./"
+  done
   echo "keycloak.user_entity=$($KUBECTL exec -n "$NAMESPACE" deploy/postgres -- \
     sh -c 'psql -U "$POSTGRES_USER" -d keycloak -Atc "select count(*) from user_entity"')"
   echo "# --- sha256 of the members of this artifact ---"

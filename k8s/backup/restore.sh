@@ -84,7 +84,19 @@ log "restoring roles"
 in_pg psql -d postgres -f /w/globals-with-reset.sql >/dev/null 2>&1 \
   || log "  (some globals already existed - continuing)"
 
-for db in ago_chat keycloak; do
+# Derived from what the archive actually contains, not from a list - the inverse of `backup.sh`'s own
+# enumeration and for the same reason. A restore that knows the database names in advance restores
+# exactly the databases somebody thought of when writing this file, and leaves any newer one on the
+# floor while still reporting success.
+dumps="$(find "$work" -maxdepth 1 -name '*.dump' | sort)"
+if [ -z "$dumps" ]; then
+  log "FATAL: the archive contains no database dumps - nothing to restore"
+  exit 1
+fi
+log "databases in this archive: $(for d in $dumps; do basename "$d" .dump; done | tr '\n' ' ')"
+
+for dump in $dumps; do
+  db="$(basename "$dump" .dump)"
   log "creating and restoring $db"
   in_pg psql -d postgres -Atc "select 1 from pg_database where datname='$db'" | grep -q 1 \
     || in_pg psql -d postgres -Atc "create database $db" >/dev/null

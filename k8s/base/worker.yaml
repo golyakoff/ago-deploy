@@ -3,27 +3,14 @@ kind: Deployment
 metadata:
   name: ago-chat-worker
 spec:
-  # `14-16`: **this is a constraint, not a tuning knob. Do not raise it until that item lands.**
+  # An ordinary capacity choice again, as of `14-16`/`adr/0089` (2026-09-02). The warning that stood
+  # here - that raising this would permanently break inbound Telegram and MAX, because the two long-poll
+  # services were unstated singletons - is obsolete: poll ownership is now claimed per
+  # `ChannelCredentialId` by a session-scoped PostgreSQL advisory lock, so several Worker replicas share
+  # the bot fleet instead of fighting over it. `concurrency.md` carries the mechanism.
   #
-  # `Ago.Chat.Worker` hosts `TelegramLongPollingService` and `MaxLongPollingService`. Each keeps its
-  # poller set in process memory and each poll loop keeps its `offset` cursor as a local variable,
-  # coordinated by nothing - there is no advisory lock, no lease and no leader election anywhere in
-  # `ago-chat`. Two replicas therefore means two pollers per bot, each terminating the other's
-  # `getUpdates`, and inbound Telegram and MAX break *permanently* rather than transiently.
-  #
-  # This deliberately contradicts `concurrency.md`, which says without qualification that multiple
-  # Worker replicas compete for waiting conversations. That is true of the assignment path - it is
-  # what `SKIP LOCKED` is there for - and false of these two hosted services. `14-16` resolves the
-  # contradiction properly, by making the single-holder rule enforced rather than written down; this
-  # comment is the stopgap until then, added on the author's call 2026-09-02 because the foot-gun is
-  # live now and costs nothing to label.
-  #
-  # Separately, and harmlessly: even at one replica every rolling update overlaps the old and new pod,
-  # because `maxUnavailable` resolves to 0 here (25% of 1, rounded down), so the new pod must be Ready
-  # before the old one is asked to stop. That produces a transient Telegram `409` in the logs which
-  # clears itself. Nothing is lost (Telegram replays updates until the cursor passes them) and nothing
-  # is duplicated (`client_message_id` carries a unique index). Recorded so that log line is not
-  # mistaken for a provider outage.
+  # Raising it is therefore safe but still not automatic: it is a throughput decision and this project
+  # requires a load-test number for those rather than an assertion. One replica is what the demo needs.
   replicas: 1
   selector:
     matchLabels:

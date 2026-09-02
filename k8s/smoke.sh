@@ -250,6 +250,29 @@ if [ -n "$wcommit" ] && [ "$wcommit" != "unknown" ]; then
     || bad "the widget bundle does not contain ${wcommit:0:12} - either a pre-15-07 bundle, or the bundle and the version.json beside it did not come from one build"
 fi
 
+# `adr/0092`: the URL a real tenant's page actually loads the widget from. Checked separately from
+# demo-shop1 above, because for a long time *only* the demo shops served a bundle at all - each image
+# carries its own copy - while `chat.reserve-me.ru/widget.js`, the address `ago-landing` was handing
+# out for people to paste, was a 404. Nobody noticed, because nothing asked.
+#
+# Two assertions, and the second is the one that matters. A 200 alone proves nothing here: an SPA
+# catch-all answers 200 for any path whatsoever, which is exactly how `console.reserve-me.ru/widget.js`
+# looked healthy while serving `index.html` - a control request to a nonsense path returned the
+# identical bytes. So the content type is checked too.
+wct=$(curl -s -o /dev/null --max-time 20 -w '%{content_type}' "https://${CHAT_API}/widget/ago-chat.js")
+case "$wct" in
+  *javascript*) ok "the widget is served at https://${CHAT_API}/widget/ago-chat.js (${wct})" ;;
+  *) bad "https://${CHAT_API}/widget/ago-chat.js returned content-type '${wct}', not JavaScript - a tenant pasting the install snippet gets a script tag that does not load" ;;
+esac
+# The booking module has to be a sibling: ui/moduleLoader.ts resolves it relative to the widget's own
+# <script src> (adr/0058), so an origin serving ago-chat.js without it breaks booking at runtime and
+# only for the tenants who enabled it - the quietest possible failure.
+bct=$(curl -s -o /dev/null --max-time 20 -w '%{content_type}' "https://${CHAT_API}/widget/ago-chat-module-booking.js")
+case "$bct" in
+  *javascript*) ok "the booking module is served beside it" ;;
+  *) bad "https://${CHAT_API}/widget/ago-chat-module-booking.js returned '${bct}' - booking would fail at runtime for tenants who enabled it" ;;
+esac
+
 echo
 echo "Edge"
 # Both names of each API are listed while the rename is in flight. `chat.` and `console.` both still

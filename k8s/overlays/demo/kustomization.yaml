@@ -13,6 +13,8 @@ resources:
   - console-static.yaml
   - demo-shop1-static.yaml
   - demo-shop2-static.yaml
+  # `adr/0092`: the widget bundle on a public URL, so a tenant has somewhere to load it from at all.
+  - widget-assets-static.yaml
   - landing-static.yaml
   # `20-20`: AGO Calendar's own console bundle, same reasoning as the four above - demo-overlay-only,
   # no local-dev counterpart.
@@ -132,12 +134,24 @@ images:
   - name: ago-console
     newName: ghcr.io/golyakoff/ago-console
     newTag: 30dd5468c40353a576c83b049bb259be5b28ebad
+  # All three come from one `ago-widget` commit, and that is the point rather than tidiness: the two
+  # demo pages and a real tenant's embed then run byte-identical bundles, which is checkable (three
+  # `version.json` files naming one commit) instead of assumed.
+  #
+  # **The bump is not optional and was very nearly missed.** The deployed `bd16c92` predates
+  # `adr/0091`, so both demo bundles still called `chat.reserve-me.ru` - verified by fetching
+  # `demo-shop1.reserve-me.ru/ago-chat.js` from the node and finding zero occurrences of `chat-api.`.
+  # Step 3 of that migration repoints `chat.` at the console, which would have broken both public
+  # demo pages the moment it happened. This is what unblocks it.
   - name: ago-demo-shop1
     newName: ghcr.io/golyakoff/ago-demo-shop1
-    newTag: bd16c92ff8241dd5f0caa4fdbab1bd4cb60ff546
+    newTag: 97067197475496a58d3e9e924f1d484f3053d357
   - name: ago-demo-shop2
     newName: ghcr.io/golyakoff/ago-demo-shop2
-    newTag: bd16c92ff8241dd5f0caa4fdbab1bd4cb60ff546
+    newTag: 97067197475496a58d3e9e924f1d484f3053d357
+  - name: ago-widget-assets
+    newName: ghcr.io/golyakoff/ago-widget-assets
+    newTag: 97067197475496a58d3e9e924f1d484f3053d357
   - name: ago-landing
     newName: ghcr.io/golyakoff/ago-landing
     newTag: aa84163c28cddeb792fe50f70e99a55f0048f60b

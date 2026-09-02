@@ -213,6 +213,43 @@ spec:
       backendRefs:
         - name: ago-chat-api
           port: 80
+    # `adr/0092`: the one thing on this host that is not the API. The widget bundle a tenant's own
+    # page loads - `<script src="https://chat-api.reserve-me.ru/widget/ago-chat.js">`.
+    #
+    # **Why on the API's host rather than a `widget.`/`cdn.` one of its own.** The widget bakes its
+    # API origin in at build time, and that single property is what forced `adr/0091`'s rename into a
+    # three-step migration with a cache-expiry wait in the middle: an already-served bundle cannot be
+    # re-pointed by anything we deploy. Serving the canonical copy from the API's own origin is the
+    # way out - `config.ts` already reads `data-api` with a build-time fallback and already captures
+    # `script.src`, so the widget can eventually derive its API base from where it was loaded. A
+    # separate asset hostname would foreclose that permanently and make the next rename cost what
+    # this one did.
+    #
+    # Two arguments for a separate host were checked and dropped rather than repeated: the per-IP
+    # `RateLimitPolicy` below targets the **Gateway**, so it already applies to every hostname
+    # including any new one; and cache headers come from the image's own nginx.conf, not from the
+    # host it is routed at.
+    #
+    # `ReplacePrefixMatch` strips `/widget` so the image serves its files from its own root - which
+    # keeps it identical to the demo images' layout, and is what lets `ui/moduleLoader.ts` resolve
+    # `ago-chat-module-booking.js` as a sibling of `ago-chat.js` (`adr/0058`) without knowing this
+    # prefix exists.
+    #
+    # The API pods never see these requests. Matched on `/widget` rather than `/widget/` so the bare
+    # path resolves too.
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /widget
+      filters:
+        - type: URLRewrite
+          urlRewrite:
+            path:
+              type: ReplacePrefixMatch
+              replacePrefixMatch: /
+      backendRefs:
+        - name: ago-widget-assets
+          port: 80
 ---
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute

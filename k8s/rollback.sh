@@ -109,12 +109,19 @@ cat <<'EOF'
 
 Two things this did NOT do, both of which are now yours:
 
-  1. The database. Schema only moves forward here. Every migration so far has been additive, so an
-     earlier image runs unharmed against a later schema - it ignores columns it does not know about.
-     That is a property to keep deliberately: a migration must stay compatible with the image
-     immediately before it (expand now, contract in a later release). If the bad release carried a
-     destructive migration - a dropped or renamed column, a narrowed type - this rollback is not
-     enough, and the recovery is a restore (15-02), not a smaller version of this.
+  1. The database. Schema only moves forward here. Migrations are additive by policy, so an earlier
+     image runs unharmed against a later schema - it ignores columns it does not know about. That is
+     a property to keep deliberately: a migration must stay compatible with the image immediately
+     before it (expand now, contract in a later release). If the bad release carried a destructive
+     migration - a dropped or renamed column, a narrowed type - this rollback is not enough, and the
+     recovery is a restore (15-02), not a smaller version of this.
+
+     ONE SUCH BOUNDARY EXISTS TODAY, and this script cannot detect it for you:
+     20260901213751_Stage15RepartitionMessagesByTenantHash (15-09/adr/0087) rebuilt `messages` and
+     repartitioned it by HASH (site_id). Do not roll ago-chat back to a commit older than that
+     migration - the pre-15-09 worker still runs PartitionMaintenanceJob, which would try to add a
+     monthly RANGE partition to a table that no longer has a time dimension. Across that boundary the
+     recovery is a restore (15-02). Rolling back within the post-15-09 range is unaffected.
 
   2. k8s/overlays/demo/kustomization.yaml still names the tag someone last committed. A
      `kubectl apply -k overlays/demo` would undo this rollback. Update the newTag values this

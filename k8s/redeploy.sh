@@ -129,9 +129,12 @@ step "5. Migrations"
 # they were compiled with (SchemaVersionGuard), so skipping this step can no longer reproduce the
 # 2026-08-25 failure. It produces a deploy that visibly does not come up, which is the whole point.
 #
-# Before the restart, deliberately, exactly as before: migrations here are additive, so the currently
-# running old code is unaffected by columns it does not know about, whereas new code meeting an old
-# schema fails on every query that touches them. `adr/0056` adopts expand/contract so that stays true.
+# Before the restart, deliberately, exactly as before: migrations here are additive by policy, so the
+# currently running old code is unaffected by columns it does not know about, whereas new code meeting
+# an old schema fails on every query that touches them. `adr/0056` adopts expand/contract so that stays
+# true. The one migration that broke the policy on purpose (`15-09`/`adr/0087`, which rebuilt and
+# repartitioned `messages`) makes forward deploys no harder - it only rules out rolling an ago-chat
+# image back *across* it, which `rollback.sh` spells out.
 #
 # Deleted first because a Job's pod template is immutable - re-applying one whose image tag changed is
 # rejected outright, and every deploy changes it. That delete is the reason this lives in the script

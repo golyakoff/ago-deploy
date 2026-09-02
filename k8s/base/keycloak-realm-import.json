@@ -65,6 +65,35 @@
       ]
     },
     {
+      "clientId": "ago-calendar-console",
+      "name": "AGO Calendar console (20-20)",
+      "description": "adr/0027: Calendar resolves its own Operator from this same realm, so it needs its own client - never ago-console's. The token this client mints is validated by Ago.Calendar.Api (Operator:Authority/Operator:Audience), never by Ago.Chat.Api.",
+      "enabled": true,
+      "publicClient": true,
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": true,
+      "redirectUris": [
+        "http://localhost:5173/*",
+        "https://calendar.reserve-me.ru/*"
+      ],
+      "webOrigins": [
+        "http://localhost:5173",
+        "https://calendar.reserve-me.ru"
+      ],
+      "protocolMappers": [
+        {
+          "name": "ago-calendar-console-audience",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "config": {
+            "included.client.audience": "ago-calendar-console",
+            "id.token.claim": "false",
+            "access.token.claim": "true"
+          }
+        }
+      ]
+    },
+    {
       "clientId": "ago-demo-provisioner",
       "name": "AGO demo tenant provisioner (8-07)",
       "description": "Service account for Ago.Chat.Api/Worker to create and delete minted demo users. Holds realm-management:manage-users on this realm only - see ago-root/docs/adr/0058. Secret comes from infra-credentials, never this file.",

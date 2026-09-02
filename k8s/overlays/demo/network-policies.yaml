@@ -41,7 +41,9 @@ spec:
     matchExpressions:
       - key: app
         operator: In
-        values: [ago-console, ago-demo-shop1, ago-demo-shop2, ago-landing]
+        # `20-20`: ago-calendar-console added - the same shape, the same public exposure, and the same
+        # reason to have no business reaching Postgres, RabbitMQ or MinIO directly.
+        values: [ago-console, ago-demo-shop1, ago-demo-shop2, ago-landing, ago-calendar-console]
   policyTypes: [Egress]
   egress:
     - to:
@@ -106,8 +108,21 @@ spec:
                 # listener is reached. This file was written by `17-05` and the fourth host arrived
                 # in `8-08` after it - neither item was wrong on its own, and nothing either of them
                 # could run would have noticed. Adding a workload that talks to Postgres means adding
-                # it here, and that sentence is the whole lesson.
-                values: [ago-chat-api, ago-chat-worker, ago-chat-webhooks, ago-chat-migrator, keycloak]
+                # it here, and that sentence is the whole lesson - applied immediately below rather
+                # than relearned: `20-20`'s three ago-calendar-* workloads (including its own
+                # migrator's init container, which opens the connection this policy governs before
+                # `ago_calendar` even exists) are added in the same change that adds the workloads.
+                values:
+                  [
+                    ago-chat-api,
+                    ago-chat-worker,
+                    ago-chat-webhooks,
+                    ago-chat-migrator,
+                    keycloak,
+                    ago-calendar-api,
+                    ago-calendar-worker,
+                    ago-calendar-migrator,
+                  ]
         - ipBlock:
             cidr: 10.42.0.1/32
         - ipBlock:
@@ -131,7 +146,10 @@ spec:
             matchExpressions:
               - key: app
                 operator: In
-                values: [ago-chat-api, ago-chat-worker, ago-chat-webhooks]
+                # `20-20`: ago-calendar-api/-worker added - `AddCalendarRateLimiting` registers a lazy
+                # Redis connection for both (calendar-worker.yaml's own comment explains why the
+                # Worker gets one despite never resolving it today).
+                values: [ago-chat-api, ago-chat-worker, ago-chat-webhooks, ago-calendar-api, ago-calendar-worker]
         - ipBlock:
             cidr: 10.42.0.1/32
         - ipBlock:

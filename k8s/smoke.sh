@@ -102,6 +102,21 @@ else
 fi
 
 echo
+echo "Calendar API"
+# `20-20`: the same three checks every other host gets - answers, reports its commit, tag matches the
+# binary - with one real difference from the "API" section above, named rather than silently narrowed:
+# `Ago.Calendar.Api` has no `/healthz/ready` and no `/healthz/version` (confirmed against the
+# `ago-calendar` source at the pinned commit - `Program.cs` maps no health route at all, only a bare
+# `GET /` returning the loaded module's name). So "answers" is real; "reports its commit" and "tag
+# matches the binary" are not checkable today and are SKIPped rather than faked against `GET /`, which
+# carries no commit information to compare.
+c=$(code "https://calendar.${DOMAIN}/")
+[ "$c" = "200" ] && ok "calendar API answers (200 from GET /, the only route it maps with no dependency check behind it)" \
+                 || bad "calendar API did not answer (got $c)"
+skip "calendar API self-reported commit (Ago.Calendar.Api maps no /healthz/version - 20-20's own report names this gap)"
+skip "calendar API image-tag-vs-commit match (needs the check above)"
+
+echo
 echo "Operator hub"
 # `5-18`: the check that would have caught the console never connecting - and the reason it does more
 # than negotiate is that **negotiate succeeded the whole time it was broken**.
@@ -183,9 +198,12 @@ echo "Frontends"
 # CSS carry an --ago- token", "does the JS mention configureLogging" - and they could only ever
 # catch drift older than one specific named change, never drift in general.
 #
-# url:deployment. The landing page is at the apex, not a subdomain.
+# url:deployment. The landing page is at the apex, not a subdomain. `20-20`: calendar-console added -
+# ago-calendar-console's own Dockerfile writes /version.json the identical way (adr/0051's pattern,
+# copied rather than reinvented), so this loop needs no special case for it.
 for entry in "console.${DOMAIN}:ago-console" "demo-shop1.${DOMAIN}:ago-demo-shop1" \
-             "demo-shop2.${DOMAIN}:ago-demo-shop2" "${DOMAIN}:ago-landing"; do
+             "demo-shop2.${DOMAIN}:ago-demo-shop2" "${DOMAIN}:ago-landing" \
+             "calendar-console.${DOMAIN}:ago-calendar-console"; do
   host="${entry%%:*}"; deploy="${entry##*:}"
   commit=$(curl -s --max-time 20 "https://${host}/version.json" \
            | sed -n 's/.*"commit":"\([^"]*\)".*/\1/p' | head -1)
@@ -222,7 +240,7 @@ fi
 
 echo
 echo "Edge"
-for h in "chat" "auth" "console" "demo-shop1" "demo-shop2"; do
+for h in "chat" "auth" "console" "demo-shop1" "demo-shop2" "calendar" "calendar-console"; do
   c=$(code "https://${h}.${DOMAIN}/")
   # auth's root redirects; anything that is not a connection failure means the listener is alive.
   [ "$c" != "000" ] && ok "${h}.${DOMAIN} answers ($c)" || bad "${h}.${DOMAIN} did not answer"

@@ -114,6 +114,25 @@ spec:
         mode: Terminate
         certificateRefs:
           - name: ago-public-tls
+    # `20-20`: AGO Calendar's own two listeners. `calendar.` and `calendar-console.` are this item's
+    # own working-default hostname proposal, not a settled name - flagged in this item's report, since
+    # changing either later costs a DNS record and a certificate SAN, not a rebuild.
+    - name: https-calendar
+      port: 443
+      protocol: HTTPS
+      hostname: calendar-api.reserve-me.ru
+      tls:
+        mode: Terminate
+        certificateRefs:
+          - name: ago-public-tls
+    - name: https-calendar-console
+      port: 443
+      protocol: HTTPS
+      hostname: calendar.reserve-me.ru
+      tls:
+        mode: Terminate
+        certificateRefs:
+          - name: ago-public-tls
 ---
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
@@ -281,6 +300,50 @@ spec:
             value: /
       backendRefs:
         - name: ago-landing
+          port: 80
+---
+# `20-20`: AGO Calendar's own REST API. No `/hubs` prefix - this host maps no SignalR hub at all
+# (`Ago.Calendar.Api/Program.cs` has no `MapHub` call; checked against the source, not assumed). No
+# `/healthz` prefix either, matching calendar-api.yaml's own header: this host serves no such route
+# today, so a route naming it would 404 on every request rather than proxy anything real.
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: ago-calendar-api
+spec:
+  parentRefs:
+    - name: ago-chat-gateway
+      sectionName: https-calendar
+  hostnames:
+    - calendar-api.reserve-me.ru
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+      backendRefs:
+        - name: ago-calendar-api
+          port: 80
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: ago-calendar-console
+spec:
+  parentRefs:
+    - name: ago-chat-gateway
+      sectionName: https-calendar-console
+  hostnames:
+    - calendar.reserve-me.ru
+  rules:
+    # ago-calendar-console Service: calendar-console-static.yaml - the whole app, not a path prefix,
+    # same shape as ago-console's own route above.
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+      backendRefs:
+        - name: ago-calendar-console
           port: 80
 ---
 apiVersion: gateway.nginx.org/v1alpha1

@@ -18,6 +18,13 @@ resources:
   - api.yaml
   - worker.yaml
   - webhooks.yaml
+  # `20-20`: AGO Calendar's own three deployables, same ordering convention as the three above -
+  # listed migrator-first for a reader, though (unlike `ago-chat`'s hosts) `Ago.Calendar.Api`/
+  # `-Worker` have no schema-version guard of their own to enforce it at runtime; see
+  # calendar-api.yaml's own header for that gap.
+  - calendar-migrator.yaml
+  - calendar-api.yaml
+  - calendar-worker.yaml
   - jaeger.yaml
   - prometheus.yaml
   - grafana.yaml

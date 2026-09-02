@@ -1,0 +1,99 @@
+# `20-20`: the `ago-calendar-console` static bundle, modelled directly on `console-static.yaml` - same
+# shape, same reasoning, only the app name and hostname differ. Demo-overlay-only, not `k8s/base/`, for
+# the identical reason console-static.yaml gives: there is no local-dev counterpart this needs to stay
+# consistent with.
+#
+# **This bundle is published but not yet runnable, and that is worth saying plainly rather than
+# leaving a pod that CrashLoopBackOffs to say it instead.** `ago-calendar-console`'s own `Dockerfile`
+# and `config.ts` are explicit that `VITE_API_BASE_URL`, `VITE_KEYCLOAK_AUTHORITY` and
+# `VITE_KEYCLOAK_CLIENT_ID` are baked in at *build* time (`adr/0051`'s rule: a frontend image takes no
+# environment input from its build command) from a committed `.env.production` - and that file does
+# not exist yet in `ago-calendar-console`, on the stated grounds that the product had no deployment to
+# point it at. It has one now, but committing that file is a change to `ago-calendar-console`, out of
+# this item's own scope (`ago-deploy` only). Until it lands, the bundle this Deployment serves throws
+# `Error: Missing required environment variable VITE_API_BASE_URL` in the browser console on load -
+# this manifest still renders and the pod still starts (nginx serves static files regardless of what
+# the bundle inside them does at runtime), but the console will not actually work. See this item's
+# report for the exact three values that file needs, once this Deployment's own hostname proposal is
+# settled.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ago-calendar-console
+spec:
+  replicas: 1 # a static bundle behind nginx - same reasoning as ago-console, no state to scale for
+  selector:
+    matchLabels:
+      app: ago-calendar-console
+  template:
+    metadata:
+      labels:
+        app: ago-calendar-console
+    spec:
+      # `17-05`. Same gap as `ago-console` and for the identical reason: this image is built `FROM
+      # nginx:1.31-alpine-slim` (checked against `ago-calendar-console`'s own Dockerfile), whose master
+      # process runs as root to bind `:80`. Not fixed from here - see console-static.yaml's own header
+      # for why that change belongs in the image's own repository, not this one.
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: ago-calendar-console
+          # The overlay's `images:` block below rewrites this to
+          # ghcr.io/golyakoff/ago-calendar-console:<40-char commit SHA>. The bare name stays `:local`
+          # so a plain `docker build` loop still resolves to something meaningful, matching every other
+          # static site in this overlay.
+          image: ago-calendar-console:local
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+              # Same five, load-bearing for nginx-as-root, not a copied list - see console-static.yaml's
+              # own remarks for what each one is for.
+              add: ["CHOWN", "SETGID", "SETUID", "NET_BIND_SERVICE", "KILL"]
+          ports:
+            - containerPort: 80
+          volumeMounts:
+            - name: nginx-cache
+              mountPath: /var/cache/nginx
+            - name: nginx-run
+              mountPath: /run
+            - name: tmp
+              mountPath: /tmp
+          resources:
+            # Same budget as ago-console: a small, fixed footprint for a static bundle.
+            requests:
+              memory: 32Mi
+              cpu: 25m
+            limits:
+              memory: 64Mi
+              cpu: 100m
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 80
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 80
+            periodSeconds: 10
+      volumes:
+        - name: nginx-cache
+          emptyDir: {}
+        - name: nginx-run
+          emptyDir: {}
+        - name: tmp
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ago-calendar-console
+spec:
+  selector:
+    app: ago-calendar-console
+  ports:
+    - port: 80
+      targetPort: 80

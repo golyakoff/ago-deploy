@@ -1,0 +1,172 @@
+# `20-20`: `Ago.Calendar.Api`. Same shape as `api.yaml` where the two products genuinely agree
+# (chiselled-base uid, `readOnlyRootFilesystem`, the preStop/terminationGrace pairing), and
+# deliberately smaller where they do not - this product has no RabbitMQ, no S3, no webhook-secret
+# cipher and (today) no broker at all (`Ago.Calendar.Infrastructure.Redis`'s own remarks: "AGO
+# Calendar has no broker wired yet - nothing in it publishes anything until `20-05`"), so this env
+# block is a fraction of `api.yaml`'s because the host genuinely needs a fraction of the configuration,
+# not because something was left out.
+#
+# **No `/healthz/*` on this host, and that is a real, confirmed gap rather than an oversight in this
+# manifest.** `ago-chat`'s three hosts each map `/healthz/live`, `/healthz/ready` and
+# `/healthz/version` in their own `Program.cs` (`3-06`/`15-06`) - `Ago.Calendar.Api`'s `Program.cs`
+# maps none of them; the only route it serves with no path prefix is `GET /` -> the loaded module's
+# name (`"Ago.Calendar"`), a plain 200 with no dependency check and no build-commit payload behind it.
+# Checked directly against the `ago-calendar` source at the commit these images are pinned to
+# (`ee3b38a...`) rather than assumed. The probes below use that one real endpoint because it is the
+# only one that exists; `smoke.sh`'s own Calendar section says plainly what it cannot check as a
+# result. This is named here because a probe that quietly downgrades to "the process is listening,
+# nothing about whether it can actually do its job" should never look identical to one that checked
+# something real.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ago-calendar-api
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ago-calendar-api
+  template:
+    metadata:
+      labels:
+        app: ago-calendar-api
+    spec:
+      # No SignalR/hub on this host (unlike `ago-chat-api`) - a stateless REST API, so the drain
+      # reasoning `edge.md` documents for `ago-chat-api`'s 45s does not transfer. Kept modest instead:
+      # preStop's own sleep (below) covers the readiness-propagation worst case, plus a margin for an
+      # in-flight HTTP request to finish - there is no `ConnectionDrainCoordinator` step to add on top.
+      terminationGracePeriodSeconds: 30
+      # `17-05`/`adr/0054`: stated, not inherited. `ago-calendar`'s own Dockerfile deliberately copies
+      # `ago-chat`'s chiselled-base shape (`8-00`) rather than inventing a second one, so the same
+      # non-root uid applies for the same reason `api.yaml` states it - a base-image change that
+      # reversed the default would otherwise do so silently. `readOnlyRootFilesystem` costs one
+      # `emptyDir` at `/tmp` and nothing else: this host writes no files of its own.
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1654
+        runAsGroup: 1654
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: api
+          image: ago-calendar-api:local
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          ports:
+            - containerPort: 8080
+          envFrom:
+            - secretRef:
+                name: infra-credentials
+          env:
+            # `CalendarModule.ConfigureServices` reads this synchronously and throws if it is unset -
+            # required, the same way `AGO_CHAT_CONNECTION_STRING` is for every `Ago.Chat.*` host. A
+            # separate database from `$(POSTGRES_DB)` on the same Postgres instance (`adr/0026`'s
+            # one-node sizing, `20-20`'s own brief: "not a second instance - one node, one small
+            # tenant"), owned by the existing `ago` role - `calendar-migrator.yaml`'s init container is
+            # what makes this database exist at all.
+            - name: AGO_CALENDAR_CONNECTION_STRING
+              value: "Host=postgres;Port=5432;Database=ago_calendar;Username=$(POSTGRES_USER);Password=$(POSTGRES_PASSWORD)"
+            # `Ago.Calendar.Infrastructure.Redis`'s own rate limiter - lazy (the connection multiplexer
+            # is a factory that only runs on first resolution), so this host pays nothing for the
+            # setting until `BookEventHandler`'s or `InitiatePhoneVerificationHandler`'s rate check
+            # actually fires. Same Service, no auth, as every other Redis consumer in this namespace.
+            - name: Redis__ConnectionString
+              value: "redis:6379"
+            # `AuthenticationSetup.AddCalendarOperatorAuthentication`'s one required setting - the host
+            # refuses to start without it (see that file's own remarks: "There is no fallback and no
+            # dev stub"). Same realm as `Ago.Chat.Api` - `adr/0027`: one Keycloak realm, two entirely
+            # separate `operators` tables, unified only through the validated `sub`.
+            - name: Operator__Authority
+              value: "http://keycloak:8080/realms/ago-chat"
+            # Optional in code (`ValidateAudience = audience is not null`) but set here deliberately,
+            # mirroring `ago-console`'s own client exactly: `keycloak-realm-import.json`'s new
+            # `ago-calendar-console` client carries an `oidc-audience-mapper` stamping this same string
+            # into `aud`, so a token minted for any *other* client is rejected here rather than merely
+            # trusted because it came from the same realm.
+            - name: Operator__Audience
+              value: "ago-calendar-console"
+            # `5-18`'s equivalent for this product - `TenantOriginCorsPolicyProvider` reads this list
+            # via `ConsoleOrigins`. Without it every console connection would be rejected by CORS
+            # before the request-scoped, per-tenant database check ever runs. `calendar-console.` is
+            # this item's own hostname proposal (report: "flagged as such") - not a settled name.
+            # `localhost:5173` is `ago-calendar-console`'s own Vite dev server default, kept so a
+            # developer running the console locally against this API works with no second setting -
+            # same convenience `Console__AllowedOrigins__1` gives `ago-console`.
+            - name: Operator__ConsoleOrigins__0
+              value: "https://calendar.reserve-me.ru"
+            - name: Operator__ConsoleOrigins__1
+              value: "http://localhost:5173"
+            # `adr/0090`/`20-19`: "ships disabled and stays disabled." `PublicBookingApiOptions.Enabled`
+            # already defaults to `false` when the whole `PublicBookingApi` section is absent - this
+            # line is not required for that default to hold, it exists so the decision is a visible
+            # line in this manifest rather than an absence someone has to already know the meaning of.
+            - name: PublicBookingApi__Enabled
+              value: "false"
+            # `20-07`'s chat entry point (`ChatModuleTaskOptions`) is deliberately left unset. It binds
+            # with safe empty defaults (`TenantPublicKey = ""`, `CalendarId = Guid.Empty`) and every
+            # `/api/v1/module-tasks` request answers `chat_module_task.not_configured` until it is set
+            # - by that class's own design ("leaving this unset does not stop the host from booting -
+            # it disables one feature"). There is no calendar tenant provisioned on this cluster yet to
+            # point it at (`RegisterTenantHandler` has no caller wired into any provisioning flow this
+            # item covers), so setting a value here would name a tenant/calendar pair that does not
+            # exist. Set this once a real tenant exists, in the same change that provisions it.
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+          resources:
+            # Starting point, not measured (CLAUDE.md) - lighter than `api.yaml`'s budget because this
+            # host holds no long-lived SignalR connections and has no traffic yet.
+            requests:
+              memory: 64Mi
+              cpu: 50m
+            limits:
+              memory: 256Mi
+              cpu: 500m
+          # `GET /` is the only endpoint this host serves with no dependency behind it (see this
+          # file's own header) - so unlike `api.yaml`'s `/healthz/ready`, this probe cannot say
+          # "Postgres and Redis both answered," only "Kestrel is up." Named rather than left to look
+          # equivalent.
+          startupProbe:
+            httpGet:
+              path: /
+              port: 8080
+            failureThreshold: 30
+            periodSeconds: 2
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 8080
+            periodSeconds: 5
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 8080
+            periodSeconds: 10
+          lifecycle:
+            preStop:
+              # `17-05`'s own lesson applied from the start rather than rediscovered: `sleep` is
+              # Kubernetes' own preStop action (GA since 1.30), executed by the kubelet rather than
+              # inside the container, so it needs nothing from this chiselled, shell-less image.
+              # Duration matches the readiness probe's own worst case above (periodSeconds *
+              # failureThreshold = 15s) before kubelet marks the pod NotReady and the Gateway stops
+              # routing here - the same pairing `edge.md` documents for `ago-chat-api`.
+              sleep:
+                seconds: 15
+      volumes:
+        - name: tmp
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ago-calendar-api
+spec:
+  selector:
+    app: ago-calendar-api
+  ports:
+    - port: 80
+      targetPort: 8080

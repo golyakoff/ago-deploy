@@ -137,7 +137,7 @@ spec:
             - name: Billing__PricePerSeatRub
               value: "590"
             - name: Billing__CheckoutReturnUrl
-              value: "https://console.reserve-me.ru/settings/billing"
+              value: "https://chat.reserve-me.ru/settings/billing"
             - name: Billing__YooKassa__ShopId
               value: "STUB-NOT-A-REAL-YOOKASSA-ACCOUNT"
             - name: Billing__YooKassa__SecretKey
@@ -178,8 +178,15 @@ spec:
             #
             # localhost:5173 is ago-console's own Vite dev server, kept so a developer running the
             # console locally against this API works without a second setting.
+            #
+            # `adr/0091` step 3, 2026-09-03: the console moved to `chat.reserve-me.ru`. **This list is
+            # the setting that makes that move real**, and it was very nearly missed: the hostnames
+            # were repointed and verified by content type, which proves what each name serves and
+            # nothing about whether the console can reach the API from its new origin. It could not -
+            # every operator connection would have been dropped after the handshake, exactly as the
+            # paragraph above describes, and nothing would have said so.
             - name: Console__AllowedOrigins__0
-              value: "https://console.reserve-me.ru"
+              value: "https://chat.reserve-me.ru"
             - name: Console__AllowedOrigins__1
               value: "http://localhost:5173"
             - name: Otel__Exporter__Endpoint

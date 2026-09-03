@@ -157,25 +157,33 @@ spec:
             limits:
               memory: 256Mi
               cpu: 500m
-          # `GET /` is the only endpoint this host serves with no dependency behind it (see this
-          # file's own header) - so unlike `api.yaml`'s `/healthz/ready`, this probe cannot say
-          # "Postgres and Redis both answered," only "Kestrel is up." Named rather than left to look
-          # equivalent.
+          # `20-24`: these pointed at `GET /` until now, and this comment used to explain why - it was
+          # the only endpoint the host served with no dependency behind it, so the probe could say
+          # "Kestrel is up" and nothing more. A pod could serve happily with Postgres and Redis both
+          # gone. `Ago.Calendar.Api` now maps the same three routes `Ago.Chat.Api` does, so the shape
+          # below is `api.yaml`'s, not a second convention.
+          #
+          # **This change and the image pin move together.** `/healthz/ready` does not exist in any
+          # calendar image built before `20-24`, so repointing the probes at a tag that predates it
+          # fails every probe and takes the deployment down. They are in one commit for that reason.
           startupProbe:
             httpGet:
-              path: /
+              path: /healthz/ready
               port: 8080
             failureThreshold: 30
             periodSeconds: 2
           readinessProbe:
             httpGet:
-              path: /
+              path: /healthz/ready
               port: 8080
             periodSeconds: 5
             failureThreshold: 3
           livenessProbe:
+            # Liveness asks whether the process is alive, never whether its dependencies are - a
+            # liveness probe wired to `/healthz/ready` restarts the pod every time Postgres blinks,
+            # which is the one response guaranteed not to help. `api.yaml` splits them the same way.
             httpGet:
-              path: /
+              path: /healthz/live
               port: 8080
             periodSeconds: 10
           lifecycle:

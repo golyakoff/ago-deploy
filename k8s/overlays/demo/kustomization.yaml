@@ -183,20 +183,25 @@ images:
   # `20-20`: AGO Calendar's own four images. The three backend ones move together and never
   # independently, same rule as the ago-chat-* four above and the same reason: `calendar-migrator.yaml`
   # applies the migrations *this* commit's Domain carries, so a migrator on a different SHA from the
-  # hosts is the exact mismatch `8-08` exists to prevent - there just is no `deploy.sh` for this
-  # product yet to enforce it by construction, so it is enforced here by all three sharing one line to
-  # edit. Published today at this commit (confirmed against `ago-calendar`'s own `origin/main`,
-  # `ee3b38aaac2aceeb2377a7c431671d1657c0fbfe`) - unverified from this machine that GHCR actually holds
-  # the built artifacts at that tag; see this item's own report.
+  # hosts is the exact mismatch `8-08` exists to prevent. `20-25` gave this product a `deploy.sh`
+  # scope of its own, so the three no longer rest on a hand convention alone - but they still share
+  # one line to edit here, because `deploy.sh` moves the running image without touching this file.
+  #
+  # `20-24`: moved to `8e3507fb74c6084b78dd6e1178f784b407c580db`, the commit that gave
+  # `Ago.Calendar.Api` `/healthz/live`, `/healthz/ready` and `/healthz/version`. Confirmed published
+  # rather than assumed: `ago-calendar`'s CI run for this commit finished with `publish-images:
+  # success`. **This pin and `calendar-api.yaml`'s probes move together** - those probes now ask for
+  # `/healthz/ready`, which no earlier image serves, so pinning one without the other takes the
+  # deployment down.
   - name: ago-calendar-api
     newName: ghcr.io/golyakoff/ago-calendar-api
-    newTag: ee3b38aaac2aceeb2377a7c431671d1657c0fbfe
+    newTag: 8e3507fb74c6084b78dd6e1178f784b407c580db
   - name: ago-calendar-worker
     newName: ghcr.io/golyakoff/ago-calendar-worker
-    newTag: ee3b38aaac2aceeb2377a7c431671d1657c0fbfe
+    newTag: 8e3507fb74c6084b78dd6e1178f784b407c580db
   - name: ago-calendar-migrator
     newName: ghcr.io/golyakoff/ago-calendar-migrator
-    newTag: ee3b38aaac2aceeb2377a7c431671d1657c0fbfe
+    newTag: 8e3507fb74c6084b78dd6e1178f784b407c580db
   # The console is its own repository with its own release cadence (`repositories.md`'s "each
   # deployable surface gets its own repo" pattern, same reasoning `ago-console`'s own entry above
   # documents) - it does NOT share a tag with the three backend images. Pinned to

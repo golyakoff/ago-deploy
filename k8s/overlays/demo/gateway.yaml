@@ -216,7 +216,7 @@ spec:
         - name: ago-chat-api
           port: 80
     # `adr/0092`: the one thing on this host that is not the API. The widget bundle a tenant's own
-    # page loads - `<script src="https://chat-api.reserve-me.ru/widget/ago-chat.js">`.
+    # page loads - `<script src="https://chat-api.reserve-me.ru/widget/widget.js">`.
     #
     # **Why on the API's host rather than a `widget.`/`cdn.` one of its own.** The widget bakes its
     # API origin in at build time, and that single property is what forced `adr/0091`'s rename into a
@@ -234,7 +234,7 @@ spec:
     #
     # `ReplacePrefixMatch` strips `/widget` so the image serves its files from its own root - which
     # keeps it identical to the demo images' layout, and is what lets `ui/moduleLoader.ts` resolve
-    # `ago-chat-module-booking.js` as a sibling of `ago-chat.js` (`adr/0058`) without knowing this
+    # `widget-module-booking.js` as a sibling of `widget.js` (`adr/0058`) without knowing this
     # prefix exists.
     #
     # The API pods never see these requests. Matched on `/widget` rather than `/widget/` so the bare

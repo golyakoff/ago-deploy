@@ -1,5 +1,5 @@
 # 8-02: the public demo landing page + the widget's own built bundle, served together from one
-# origin (demo-shop1.reserve-me.ru) - the demo page's <script src="./ago-chat.js" ...> tag depends
+# origin (demo-shop1.reserve-me.ru) - the demo page's <script src="./widget.js" ...> tag depends
 # on both being same-origin, which this single Deployment/Service/image guarantees by construction
 # rather than by convention. demo-shop2-static.yaml is a second, independent copy of this same
 # shape (own image tag, own site) - deliberately not parameterized into one shared template, since

@@ -31,13 +31,21 @@ kind: Certificate
 metadata:
   name: ago-public-tls
 spec:
-  # One cert for seven hostnames. Six are served; `grafana.reserve-me.ru` is deliberately kept as a
-  # SAN after its listener and route were removed 2026-08-25 (gateway.yaml has the reasoning). Taking
-  # a name *out* of a Certificate makes cert-manager re-issue the whole thing, which means fresh
-  # HTTP-01 challenges for the six that are still working - a real operation with a real failure mode,
-  # bought for no security gain, since a SAN is not an exposure and every one of these names has been
-  # in public Certificate Transparency logs since the day it was first issued. Left in on purpose; if
-  # this certificate is ever re-issued for some other reason, drop the name then.
+  # `grafana.reserve-me.ru` was kept here after its listener and route were removed on 2026-08-25, and
+  # the reasoning was sound at the time: taking a name out of a Certificate re-issues the whole thing,
+  # a real operation with a real failure mode bought for no security gain, since a SAN is not an
+  # exposure and every one of these names is in public Certificate Transparency logs anyway.
+  #
+  # **That reasoning rested on the DNS record still existing, and on 2026-09-03 the author deleted it.**
+  # The conclusion inverts with the premise. Issuance is HTTP-01, so Let's Encrypt fetches over each
+  # name in the list - a name that no longer resolves cannot be validated, and one failed authorisation
+  # fails the *whole* certificate, not just its own entry. Left in, it would have looked healthy until
+  # the 2026-11-01 renewal and then taken all eight working names TLS-invalid at once on 2026-12-01,
+  # with nothing pointing back at a DNS record deleted two months earlier.
+  #
+  # The old comment ended "if this certificate is ever re-issued for some other reason, drop the name
+  # then". That moment arrived on the same day, when `console.reserve-me.ru` was retired - except this
+  # is no longer an opportunity to tidy up, it is the repair.
   # One cert for all of them (rather than one per host) - fewer moving parts than one Certificate per host, and Let's Encrypt's own rate
   # limits (certificates per registered domain per week) are friendlier to a single multi-SAN cert
   # than separate ones for a domain this size. Re-applying this file adds one more SAN to the
@@ -54,7 +62,6 @@ spec:
     # this is applied - issuance is HTTP-01, and Let's Encrypt fetches over the name itself.
     - chat-api.reserve-me.ru
     - auth.reserve-me.ru
-    - grafana.reserve-me.ru
     - demo-shop1.reserve-me.ru
     - demo-shop2.reserve-me.ru
     - reserve-me.ru

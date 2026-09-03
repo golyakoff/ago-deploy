@@ -136,9 +136,14 @@ images:
   # are the same sentence told to two audiences (a signed-in tenant, and a stranger reading the
   # marketing page), and leaving one on the old text while the other moved is the kind of split that
   # gets noticed by a customer rather than by us.
+  #
+  # `11-14`, 2026-09-03: also carries the mobile navigation drawer. Fifteen nav items have never
+  # fitted a 375px bar, and the count grows with every tenant-facing screen rather than being a fixed
+  # property to work around. The drawer renders from the same permission-filtered array as the bar -
+  # one list, two renderers - so the two cannot disagree about what a tenant may see.
   - name: ago-console
     newName: ghcr.io/golyakoff/ago-console
-    newTag: 05e231cfecba90badd398c3e9cb6215318f735c2
+    newTag: 20bdea90544b97cd2c253ab2d0d63ef9d8460e5b
   # All three come from one `ago-widget` commit, and that is the point rather than tidiness: the two
   # demo pages and a real tenant's embed then run byte-identical bundles, which is checkable (three
   # `version.json` files naming one commit) instead of assumed.
@@ -148,15 +153,22 @@ images:
   # `demo-shop1.reserve-me.ru/ago-chat.js` from the node and finding zero occurrences of `chat-api.`.
   # Step 3 of that migration repoints `chat.` at the console, which would have broken both public
   # demo pages the moment it happened. This is what unblocks it.
+  #
+  # `#337`, 2026-09-03: this commit also makes the widget derive its API origin from the origin its
+  # own script was loaded from, ending the build-time bake that made `adr/0091`'s rename a three-step
+  # migration. **The demo pages are the reason all three must move together**: they serve their own
+  # copy of the bundle from their own origin, so `demo-boot` now sets `data-api` explicitly and they
+  # win the resolution before inference is reached. Deploying `ago-widget-assets` without them would
+  # leave two public pages running a bundle whose sibling behaves differently.
   - name: ago-demo-shop1
     newName: ghcr.io/golyakoff/ago-demo-shop1
-    newTag: 97067197475496a58d3e9e924f1d484f3053d357
+    newTag: 1d62205f650ceec4dcbd15f813fcf3f749393b2a
   - name: ago-demo-shop2
     newName: ghcr.io/golyakoff/ago-demo-shop2
-    newTag: 97067197475496a58d3e9e924f1d484f3053d357
+    newTag: 1d62205f650ceec4dcbd15f813fcf3f749393b2a
   - name: ago-widget-assets
     newName: ghcr.io/golyakoff/ago-widget-assets
-    newTag: 97067197475496a58d3e9e924f1d484f3053d357
+    newTag: 1d62205f650ceec4dcbd15f813fcf3f749393b2a
   # `adr/0092`: the copy-me snippet on the public landing page had been handing out
   # `chat.reserve-me.ru/widget.js` - a 404, under a filename that never existed anywhere. Until this
   # is deployed, the page a prospective customer reads still gives them a script tag that does not

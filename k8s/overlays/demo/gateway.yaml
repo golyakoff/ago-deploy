@@ -1,4 +1,5 @@
-# adr/0026: the public edge for chat.reserve-me.ru, auth.reserve-me.ru, console.reserve-me.ru,
+# adr/0026, as amended by adr/0091: the public edge. chat.reserve-me.ru is the operator console and
+# chat-api.reserve-me.ru is the API - console.reserve-me.ru is retired. Also auth.reserve-me.ru,
 # demo-shop1.reserve-me.ru/demo-shop2.reserve-me.ru (`8-02`/`8-05` - a
 # second, independent tenant seeded specifically to demonstrate tenant isolation live), and the
 # domain's own apex, reserve-me.ru (the public marketing page, `ago-landing` - a separate
@@ -21,9 +22,10 @@
 # chat.reserve-me.ru/healthz/ready, which already exercises Postgres, RabbitMQ and Redis (ago-root's
 # backlog/15-03).
 #
-# console.reserve-me.ru's own listener/HTTPRoute below were designed by 8-01 ahead of this item -
-# 8-02 only had to create the `ago-console` Service (console-static.yaml) the existing backendRef
-# already names; nothing in this file needed to change for that route to start working.
+# The console's own listener/HTTPRoute below were designed by 8-01 ahead of this item - 8-02 only had
+# to create the `ago-console` Service (console-static.yaml) the existing backendRef already names;
+# nothing in this file needed to change for that route to start working. The name it answers on has
+# since changed from console. to chat. (adr/0091); the Service and the route are the same ones.
 apiVersion: gateway.networking.k8s.io/v1
 kind: Gateway
 metadata:
@@ -85,17 +87,15 @@ spec:
         mode: Terminate
         certificateRefs:
           - name: ago-public-tls
-    # console-static.yaml (8-02) creates the ago-console Service this listener's own HTTPRoute
-    # (below) already names as its backendRef - designed by 8-01 ahead of the Service actually
-    # existing, now real and servable end to end.
-    - name: https-console
-      port: 443
-      protocol: HTTPS
-      hostname: console.reserve-me.ru
-      tls:
-        mode: Terminate
-        certificateRefs:
-          - name: ago-public-tls
+    # `adr/0091` step 3 completed, 2026-09-03: there is no `https-console` listener any more. The
+    # console lives at `chat.reserve-me.ru`, the bare product name, which is the whole point of that
+    # decision - `console.` was a role word with no product in it and could not survive a second
+    # product having a console too.
+    #
+    # The ADR planned to keep `console.` for one release as a grace period for bookmarks and links.
+    # The author retired it immediately instead, on the ground the grace period was protecting
+    # nobody: this is a live demo stand with no tenants, and the only person who ever opened that
+    # address was the author. A grace period with no one in it is just a second name to maintain.
     # 8-02: demo-shop1-static.yaml creates the ago-demo-shop1 Service this route's own backendRef
     # names - the public demo landing page + the widget's own built bundle, served together
     # (demo-shop1-static.yaml's own header comment has the same-origin reasoning).
@@ -290,11 +290,8 @@ spec:
   parentRefs:
     - name: ago-chat-gateway
       sectionName: https-chat
-    - name: ago-chat-gateway
-      sectionName: https-console
   hostnames:
     - chat.reserve-me.ru
-    - console.reserve-me.ru
   rules:
     # ago-console Service: console-static.yaml (8-02), port 80 matching every other Service in
     # this overlay's own convention (base/*.yaml).

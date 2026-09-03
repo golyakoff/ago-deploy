@@ -54,7 +54,6 @@ spec:
     # this is applied - issuance is HTTP-01, and Let's Encrypt fetches over the name itself.
     - chat-api.reserve-me.ru
     - auth.reserve-me.ru
-    - console.reserve-me.ru
     - grafana.reserve-me.ru
     - demo-shop1.reserve-me.ru
     - demo-shop2.reserve-me.ru

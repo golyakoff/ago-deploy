@@ -280,7 +280,7 @@ echo "Edge"
 # deleted after that. `calendar-console` is gone from this list because that name was never created:
 # the scheme settled on `calendar.` for the console and `calendar-api.` for the API before anything
 # was deployed under the first proposal.
-for h in "chat" "chat-api" "auth" "console" "demo-shop1" "demo-shop2" "calendar" "calendar-api"; do
+for h in "chat" "chat-api" "auth" "demo-shop1" "demo-shop2" "calendar" "calendar-api"; do
   c=$(code "https://${h}.${DOMAIN}/")
   # auth's root redirects; anything that is not a connection failure means the listener is alive.
   [ "$c" != "000" ] && ok "${h}.${DOMAIN} answers ($c)" || bad "${h}.${DOMAIN} did not answer"

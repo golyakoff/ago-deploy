@@ -5,7 +5,9 @@
 # could reach belonged to a demo shop, because each demo image bundles its own - so `10-06` could
 # build the whole install screen except the one thing a tenant actually pastes. `ago-landing`'s
 # copy-me snippet had been handing out `chat.reserve-me.ru/widget.js`, a 404 under a filename that
-# does not exist either (the file is `ago-chat.js`).
+# did not exist anywhere at the time (the file was `ago-chat.js`). `#342` closed that gap from the
+# other side: the bundle itself is now built as `widget.js`, so the address this snippet always
+# claimed is finally the real one.
 #
 # Same Deployment/Service shape as `demo-shop1-static.yaml`, deliberately - it is the same nginx
 # serving the same bundle, built from the same Dockerfile with `--target assets`. Two differences,

@@ -250,32 +250,40 @@ done
 wcommit=$(curl -s --max-time 20 "https://demo-shop1.${DOMAIN}/version.json" \
           | sed -n 's/.*"commit":"\([^"]*\)".*/\1/p' | head -1)
 if [ -n "$wcommit" ] && [ "$wcommit" != "unknown" ]; then
-  curl -s --max-time 20 "https://demo-shop1.${DOMAIN}/ago-chat.js" | grep -q "$wcommit" \
+  curl -s --max-time 20 "https://demo-shop1.${DOMAIN}/widget.js" | grep -q "$wcommit" \
     && ok "the widget bundle itself carries that same commit" \
     || bad "the widget bundle does not contain ${wcommit:0:12} - either a pre-15-07 bundle, or the bundle and the version.json beside it did not come from one build"
 fi
 
-# `adr/0092`: the URL a real tenant's page actually loads the widget from. Checked separately from
-# demo-shop1 above, because for a long time *only* the demo shops served a bundle at all - each image
-# carries its own copy - while `chat.reserve-me.ru/widget.js`, the address `ago-landing` was handing
-# out for people to paste, was a 404. Nobody noticed, because nothing asked.
+# `adr/0092`/`#342`: the URL a real tenant's page actually loads the widget from. Checked separately
+# from demo-shop1 above, because for a long time *only* the demo shops served a bundle at all - each
+# image carries its own copy - while `chat.reserve-me.ru/widget.js`, the address `ago-landing` was
+# handing out for people to paste, was a 404. Nobody noticed, because nothing asked. `#342` closed the
+# other half of that gap: the file `ago-widget` actually builds is `widget.js` now too, not
+# `ago-chat.js` - the internal product name no longer leaks into a tenant's HTML.
 #
 # Two assertions, and the second is the one that matters. A 200 alone proves nothing here: an SPA
 # catch-all answers 200 for any path whatsoever, which is exactly how `console.reserve-me.ru/widget.js`
 # looked healthy while serving `index.html` - a control request to a nonsense path returned the
-# identical bytes. So the content type is checked too.
-wct=$(curl -s -o /dev/null --max-time 20 -w '%{content_type}' "https://${CHAT_API}/widget/ago-chat.js")
+# identical bytes. So the content type is checked too, and a control request to a nonsense path under
+# the same prefix is checked against a real 404 - this image's nginx `try_files ... =404` (nginx.conf),
+# not a catch-all, so a path nothing serves must actually 404 rather than fall through to something
+# that happens to answer 200.
+wct=$(curl -s -o /dev/null --max-time 20 -w '%{content_type}' "https://${CHAT_API}/widget/widget.js")
 case "$wct" in
-  *javascript*) ok "the widget is served at https://${CHAT_API}/widget/ago-chat.js (${wct})" ;;
-  *) bad "https://${CHAT_API}/widget/ago-chat.js returned content-type '${wct}', not JavaScript - a tenant pasting the install snippet gets a script tag that does not load" ;;
+  *javascript*) ok "the widget is served at https://${CHAT_API}/widget/widget.js (${wct})" ;;
+  *) bad "https://${CHAT_API}/widget/widget.js returned content-type '${wct}', not JavaScript - a tenant pasting the install snippet gets a script tag that does not load" ;;
 esac
+wnf=$(code "https://${CHAT_API}/widget/this-file-does-not-exist.js")
+[ "$wnf" = "404" ] && ok "a nonsense path under /widget/ genuinely 404s (not an SPA catch-all in disguise)" \
+                    || bad "a nonsense path under /widget/ returned $wnf, not 404 - the content-type check above could be passing vacuously"
 # The booking module has to be a sibling: ui/moduleLoader.ts resolves it relative to the widget's own
-# <script src> (adr/0058), so an origin serving ago-chat.js without it breaks booking at runtime and
+# <script src> (adr/0058), so an origin serving widget.js without it breaks booking at runtime and
 # only for the tenants who enabled it - the quietest possible failure.
-bct=$(curl -s -o /dev/null --max-time 20 -w '%{content_type}' "https://${CHAT_API}/widget/ago-chat-module-booking.js")
+bct=$(curl -s -o /dev/null --max-time 20 -w '%{content_type}' "https://${CHAT_API}/widget/widget-module-booking.js")
 case "$bct" in
   *javascript*) ok "the booking module is served beside it" ;;
-  *) bad "https://${CHAT_API}/widget/ago-chat-module-booking.js returned '${bct}' - booking would fail at runtime for tenants who enabled it" ;;
+  *) bad "https://${CHAT_API}/widget/widget-module-booking.js returned '${bct}' - booking would fail at runtime for tenants who enabled it" ;;
 esac
 
 echo

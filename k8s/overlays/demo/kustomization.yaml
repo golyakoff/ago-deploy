@@ -143,7 +143,7 @@ images:
   # one list, two renderers - so the two cannot disagree about what a tenant may see.
   - name: ago-console
     newName: ghcr.io/golyakoff/ago-console
-    newTag: 20bdea90544b97cd2c253ab2d0d63ef9d8460e5b
+    newTag: 78ada068fa05496ea0f462ecdd3a9bef326709f5
   # All three come from one `ago-widget` commit, and that is the point rather than tidiness: the two
   # demo pages and a real tenant's embed then run byte-identical bundles, which is checkable (three
   # `version.json` files naming one commit) instead of assumed.
@@ -162,13 +162,13 @@ images:
   # leave two public pages running a bundle whose sibling behaves differently.
   - name: ago-demo-shop1
     newName: ghcr.io/golyakoff/ago-demo-shop1
-    newTag: 1d62205f650ceec4dcbd15f813fcf3f749393b2a
+    newTag: ac79181eef17f24f11319de3bb93f6bb817c8e7b
   - name: ago-demo-shop2
     newName: ghcr.io/golyakoff/ago-demo-shop2
-    newTag: 1d62205f650ceec4dcbd15f813fcf3f749393b2a
+    newTag: ac79181eef17f24f11319de3bb93f6bb817c8e7b
   - name: ago-widget-assets
     newName: ghcr.io/golyakoff/ago-widget-assets
-    newTag: 1d62205f650ceec4dcbd15f813fcf3f749393b2a
+    newTag: ac79181eef17f24f11319de3bb93f6bb817c8e7b
   # `adr/0092`: the copy-me snippet on the public landing page had been handing out
   # `chat.reserve-me.ru/widget.js` - a 404, under a filename that never existed anywhere. Until this
   # is deployed, the page a prospective customer reads still gives them a script tag that does not
@@ -179,7 +179,7 @@ images:
   # and after (537px -> 375px page width), not eyeballed.
   - name: ago-landing
     newName: ghcr.io/golyakoff/ago-landing
-    newTag: 7616b3e6afabb6014de569fa90565ba26b568e1f
+    newTag: ea24729626958acea29330b572bf003d95b88f50
   # `20-20`: AGO Calendar's own four images. The three backend ones move together and never
   # independently, same rule as the ago-chat-* four above and the same reason: `calendar-migrator.yaml`
   # applies the migrations *this* commit's Domain carries, so a migrator on a different SHA from the

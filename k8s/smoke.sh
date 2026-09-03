@@ -121,9 +121,51 @@ echo "Calendar API"
 # `GET /` returning the loaded module's name). So "answers" is real; "reports its commit" and "tag
 # matches the binary" are not checkable today and are SKIPped rather than faked against `GET /`, which
 # carries no commit information to compare.
+# **This check used to hit `calendar.`, which is the console.** It was written before the naming
+# settled (see this file's own note at the frontends list below) and never moved, so it asserted the
+# API was up by fetching a static SPA - which answers 200 to everything, including while the API is
+# in a restart loop. That is exactly what happened on `20-20`'s first deploy: `ago-calendar-api` was
+# crash-looping on a 500 and this check would have passed.
+#
+# So it now hits `calendar-api.` and asserts the **body**, not the status. A status alone cannot tell
+# an API apart from a static site; `Ago.Calendar` in the response body can only come from the API.
+b=$(curl -s --max-time 20 "https://calendar-api.${DOMAIN}/")
+case "$b" in
+  *Ago.Calendar*) ok "calendar API answers (GET / returned its module name, the only route it maps)" ;;
+  *)              bad "calendar API did not answer with its module name (got: $(printf '%s' "$b" | head -c 60))" ;;
+esac
+
+# The control that makes the line above mean something. A host that 200s every path would pass any
+# single positive check; this one must 404. It is also what makes the dev-endpoint absence below
+# readable - without it, a 404 there is indistinguishable from the whole host being unreachable.
+c=$(code "https://calendar-api.${DOMAIN}/nonsense-control-path")
+[ "$c" = "404" ] && ok "calendar API 404s an unmapped path (so it is a real API host, not a catch-all)" \
+                 || bad "calendar API answered $c on a path that should not exist - a catch-all would make every check above meaningless"
+
+# **The check that would have caught this deploy's actual defect.** `Operator__RequireHttpsMetadata`
+# was unset, so JwtBearer refused the in-cluster `http://` authority and threw on every request that
+# reached the authentication middleware - a 500, not a 401. A guarded route answering 401 proves the
+# JWT handler constructed itself and then refused; 500 proves it could not construct at all, and 404
+# would mean the route is not mapped. All three are distinguishable here, which is the point.
+c=$(code "https://calendar-api.${DOMAIN}/api/v1/console/configuration")
+[ "$c" = "401" ] && ok "calendar API refuses an unauthenticated console call with 401 (the JWT handler initialised)" \
+                 || bad "calendar API answered $c, not 401, on a guarded route - 500 means the authentication handler cannot construct (check Operator__RequireHttpsMetadata against the authority scheme); 404 means the route is not mapped"
+
+# `ago-root#354`: DevProvisioningEndpoints and PhoneVerificationDevEndpoints map only outside
+# Production, and the manifests now state the environment rather than inheriting it. That gate is
+# covered by a test in `ago-calendar`; this asserts it on the deployed thing, which is the only place
+# the manifest and the binary meet. 404 here is meaningful only against the control above.
+for p in "/dev/tenants" "/dev/phone-verifications/last-code"; do
+  c=$(code "https://calendar-api.${DOMAIN}${p}")
+  [ "$c" = "404" ] && ok "calendar dev endpoint ${p} is absent (404)" \
+                   || bad "calendar dev endpoint ${p} answered $c - tenant provisioning is exposed in Production"
+done
+
+# The console is a separate host and gets its own check rather than standing in for the API.
 c=$(code "https://calendar.${DOMAIN}/")
-[ "$c" = "200" ] && ok "calendar API answers (200 from GET /, the only route it maps with no dependency check behind it)" \
-                 || bad "calendar API did not answer (got $c)"
+[ "$c" = "200" ] && ok "calendar console answers" \
+                 || bad "calendar console did not answer (got $c)"
+
 skip "calendar API self-reported commit (Ago.Calendar.Api maps no /healthz/version - 20-20's own report names this gap)"
 skip "calendar API image-tag-vs-commit match (needs the check above)"
 

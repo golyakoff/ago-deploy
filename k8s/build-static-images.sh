@@ -23,6 +23,11 @@
 #     produces exactly the names each repository's CI would have pushed, so the manifests do not
 #     care which route the bytes took. Building on the node is now the exception, not the mechanism.
 #
+# `22-06`: ago-calendar-console left the set again. Its screens are part of ago-console now and its
+# repository holds no Dockerfile any more, so a build_image call for it does not fail informatively -
+# it fails at `docker build` with a missing file, in the middle of a redeploy, after the .NET images
+# have already been built. Removed here rather than left to discover.
+#
 # `20-26`: ago-calendar-console joined the set. It needed no new mechanism - it is one more static
 # nginx bundle behind a name, exactly the shape the other four already are, so it is one more
 # CALENDAR_CONSOLE_REPO variable and one more build_image call, not a second script. Same reasoning
@@ -32,7 +37,6 @@
 #   CONSOLE_REPO           path to the ago-console checkout           (default: ../../ago-console)
 #   WIDGET_REPO            path to the ago-widget checkout            (default: ../../ago-widget)
 #   LANDING_REPO           path to the ago-landing checkout           (default: ../../ago-landing)
-#   CALENDAR_CONSOLE_REPO  path to the ago-calendar-console checkout  (default: ../../ago-calendar-console)
 #   IMAGE_REPO             registry/owner prefix, no trailing slash   (default: empty - bare local names)
 #   IMAGE_TAG              `local`, `commit`, or an explicit tag      (default: local)
 #
@@ -54,7 +58,6 @@ set -euo pipefail
 CONSOLE_REPO="${CONSOLE_REPO:-../../ago-console}"
 WIDGET_REPO="${WIDGET_REPO:-../../ago-widget}"
 LANDING_REPO="${LANDING_REPO:-../../ago-landing}"
-CALENDAR_CONSOLE_REPO="${CALENDAR_CONSOLE_REPO:-../../ago-calendar-console}"
 IMAGE_REPO="${IMAGE_REPO:-}"
 # `local` stays the default so nothing outside the demo node changes - there a mutable tag costs
 # nothing. It is the demo node where a mutable tag cost a day of a stale console bundle.
@@ -88,10 +91,9 @@ build_image() {
   docker build --build-arg "GIT_COMMIT=${commit}" "$@" -t "$image" "$src"
 }
 
-for repo in "$CONSOLE_REPO" "$WIDGET_REPO" "$LANDING_REPO" "$CALENDAR_CONSOLE_REPO"; do warn_if_dirty "$repo"; done
+for repo in "$CONSOLE_REPO" "$WIDGET_REPO" "$LANDING_REPO"; do warn_if_dirty "$repo"; done
 
 build_image ago-console          "$CONSOLE_REPO"
 build_image ago-demo-shop1       "$WIDGET_REPO"
 build_image ago-demo-shop2       "$WIDGET_REPO" --build-arg DEMO_PAGE_DIR=public-demo-2
 build_image ago-landing          "$LANDING_REPO"
-build_image ago-calendar-console "$CALENDAR_CONSOLE_REPO"

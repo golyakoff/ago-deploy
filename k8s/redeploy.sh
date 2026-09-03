@@ -55,7 +55,10 @@ step "1. Checkouts"
 # tree mid-run rather than being read back out as a build input. Being pulled without being read is
 # fine and expected; read_sha() only refuses the opposite - a directory read without being pulled,
 # which is the actual failure mode.
-PULLED_DIRS=(ago-platform ago-chat ago-console ago-widget ago-landing ago-calendar ago-calendar-console ago-deploy)
+# `22-06`: ago-calendar-console left this array when its screens moved into ago-console. The
+# repository still exists and still has its history, but it holds no application source and no
+# Dockerfile any more, so pulling it would only be to build an image that cannot be built.
+PULLED_DIRS=(ago-platform ago-chat ago-console ago-widget ago-landing ago-calendar ago-deploy)
 if [ "${SKIP_PULL:-0}" = "1" ]; then
   echo "   SKIP_PULL=1 - building what is already here"
 else
@@ -134,14 +137,15 @@ WIDGET_SHA="$(read_sha ago-widget)"
 LANDING_SHA="$(read_sha ago-landing)"
 # `20-26`: ago-calendar's three hosts move as one commit, same reasoning as CHAT_SHA above -
 # `calendar-migrator.yaml` applies the migrations *this* commit's Domain carries, so the migrator must
-# never be tagged from a different SHA than the two hosts it runs ahead of (`8-08`). The console is its
-# own repository with its own cadence, same as CONSOLE_SHA/WIDGET_SHA/LANDING_SHA above.
+# never be tagged from a different SHA than the two hosts it runs ahead of (`8-08`).
+#
+# `22-06`: there is no CALENDAR_CONSOLE_SHA any more. That console's screens are part of ago-console
+# now, so its commit is CONSOLE_SHA - there is no second frontend repository moving on its own cadence
+# to read a SHA from.
 CALENDAR_SHA="$(read_sha ago-calendar)"
-CALENDAR_CONSOLE_SHA="$(read_sha ago-calendar-console)"
 echo "   ago-chat at $CHAT_SHA"
 echo "   ago-console at ${CONSOLE_SHA:0:7}, ago-widget at ${WIDGET_SHA:0:7}, ago-landing at ${LANDING_SHA:0:7}"
 echo "   ago-calendar at $CALENDAR_SHA"
-echo "   ago-calendar-console at ${CALENDAR_CONSOLE_SHA:0:7}"
 cd "$AGO_ROOT/ago-chat"
 CHAT_REPO=. NUGET_FEED=../ago-deploy/.nuget-feed DOCKER_BUILDKIT=1 \
   IMAGE_REPO="$REGISTRY" IMAGE_TAG="$CHAT_SHA" ../ago-deploy/k8s/build-images.sh
@@ -154,7 +158,6 @@ CALENDAR_REPO=. NUGET_FEED=../ago-deploy/.nuget-feed DOCKER_BUILDKIT=1 \
   IMAGE_REPO="$REGISTRY" IMAGE_TAG="$CALENDAR_SHA" ../ago-deploy/k8s/build-calendar-images.sh
 cd "$AGO_ROOT/ago-deploy/k8s"
 CONSOLE_REPO=../../ago-console WIDGET_REPO=../../ago-widget LANDING_REPO=../../ago-landing \
-  CALENDAR_CONSOLE_REPO=../../ago-calendar-console \
   IMAGE_REPO="$REGISTRY" IMAGE_TAG=commit ./build-static-images.sh
 
 step "4. Import into containerd"
@@ -175,7 +178,7 @@ for img in ago-calendar-api ago-calendar-worker ago-calendar-migrator; do
   printf "   %-18s " "$img"
   docker save "${REGISTRY}/${img}:${CALENDAR_SHA}" | sudo k3s ctr -n k8s.io images import - >/dev/null && echo "imported"
 done
-for entry in "ago-console:$CONSOLE_SHA" "ago-demo-shop1:$WIDGET_SHA" "ago-demo-shop2:$WIDGET_SHA" "ago-landing:$LANDING_SHA" "ago-calendar-console:$CALENDAR_CONSOLE_SHA"; do
+for entry in "ago-console:$CONSOLE_SHA" "ago-demo-shop1:$WIDGET_SHA" "ago-demo-shop2:$WIDGET_SHA" "ago-landing:$LANDING_SHA"; do
   printf "   %-18s " "${entry%%:*}"
   docker save "${REGISTRY}/${entry}" | sudo k3s ctr -n k8s.io images import - >/dev/null && echo "imported"
 done
@@ -283,14 +286,19 @@ done
 
 step "7. Move the frontends onto their own commits"
 # `15-07`: `set image`, not `rollout restart`, for exactly the reason step 6 gives for the hosts - a
-# restart re-reads a tag that has not changed and records nothing a rollback can return to. Five
-# images, four commits now (`20-26` adds ago-calendar-console, its own repository's own commit),
-# because these come out of four repositories that move independently.
-for entry in "ago-console:$CONSOLE_SHA" "ago-demo-shop1:$WIDGET_SHA" "ago-demo-shop2:$WIDGET_SHA" "ago-landing:$LANDING_SHA" "ago-calendar-console:$CALENDAR_CONSOLE_SHA"; do
+# restart re-reads a tag that has not changed and records nothing a rollback can return to. Four
+# images, three commits (`22-06` removed ago-calendar-console, whose screens are part of ago-console
+# now), because these come out of three repositories that move independently.
+#
+# `22-06`: the ago-calendar-console Deployment is deliberately left running on whatever image it last
+# received. Retiring the workload, its route, its certificate SAN and its DNS record is `22-09`, in
+# that strict order - deleting DNS while the name is still in the SAN fails the next HTTP-01 renewal
+# and one failed authorization takes the whole certificate down with every other hostname on it.
+for entry in "ago-console:$CONSOLE_SHA" "ago-demo-shop1:$WIDGET_SHA" "ago-demo-shop2:$WIDGET_SHA" "ago-landing:$LANDING_SHA"; do
   d="${entry%%:*}"
   kc set image "deployment/$d" "${d}=${REGISTRY}/${entry}" -n "$NS"
 done
-for d in ago-console ago-demo-shop1 ago-demo-shop2 ago-landing ago-calendar-console; do
+for d in ago-console ago-demo-shop1 ago-demo-shop2 ago-landing; do
   kc rollout status "deployment/$d" -n "$NS" --timeout=180s
 done
 
@@ -321,5 +329,4 @@ applies to their tags exactly as much as to the hosts they run ahead of):
     ago-demo-shop{1,2}                        $WIDGET_SHA
     ago-landing                               $LANDING_SHA
     ago-calendar-{api,worker,migrator}        $CALENDAR_SHA
-    ago-calendar-console                      $CALENDAR_CONSOLE_SHA
 EOF

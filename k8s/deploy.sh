@@ -61,6 +61,13 @@ CALENDAR_HOSTS=("ago-calendar-api:api" "ago-calendar-worker:worker")
 
 # `15-07`: name-as-typed:deployment. The container name equals the Deployment name for all five
 # (overlays/demo/*-static.yaml), so one field is enough here where the hosts needed two.
+# `22-06`: `calendar-console` stays in this table on purpose, even though its screens moved into
+# ago-console and `redeploy.sh` no longer builds or rolls it. The Deployment is still running and
+# still serving, until `22-09` retires the workload, its route, its certificate SAN and its DNS
+# record in that strict order. This script operates on images that already exist, by SHA, so it is
+# the one way left to move that workload while it exists - removing the entry now would take away
+# the ability to operate something that is still deployed.
+#
 # `20-25`: `calendar-console` added - the identical shape as the other four, one static nginx bundle
 # behind a name, so it needed a new array entry and nothing else.
 FRONTENDS=("console:ago-console" "demo-shop1:ago-demo-shop1" "demo-shop2:ago-demo-shop2" "landing:ago-landing" "calendar-console:ago-calendar-console")

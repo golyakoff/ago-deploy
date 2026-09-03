@@ -15,6 +15,12 @@
 #     and it is the one aimed squarely at the incident - which was a *console* bundle.
 #   - 2026-08-25: Grafana was taken off the public edge; a re-apply of an old manifest would put it
 #     back without anyone noticing.
+#   - 2026-09-03, twice: the console moved hostname (to `chat.` in the morning, to `office.` in the
+#     evening) and both times only the manifest half of CORS - `Console:AllowedOrigins`, which gates
+#     the operator hub - was updated and verified. `sites.allowed_origins` - the database half, which
+#     gates REST through `SiteOriginCorsPolicyProvider` - was not, so the console held a hub connection
+#     and could not fetch a single thing. 43 checks stayed green through both, because only the hub
+#     side had a check (`5-18`). The "REST CORS" section below is the other half, closing `15-14`.
 #
 # Run from anywhere for the HTTP checks. The migration check needs cluster access and is skipped with
 # a warning without it - run it on the node to get the check that matters most.
@@ -40,6 +46,13 @@ DOMAIN="${1:-reserve-me.ru}"
 # this is red, the flip is not safe yet - and it will be red until the DNS record exists and the
 # certificate has been re-issued to cover it.
 CHAT_API="chat-api.${DOMAIN}"
+# `adr/0091` step 3 / `22-10`: the console's own origin, used by both origin checks below - the
+# operator hub's (`5-18`, gated by the `Console:AllowedOrigins` manifest setting) and REST's
+# (`15-14`, gated by the `sites.allowed_origins` database column). One variable rather than two
+# separately-hardcoded literals is deliberate: `15-14` exists precisely because these two checks
+# live in different places and are easy to update one at a time - the least this file can do is not
+# repeat that mistake at its own console-hostname literal.
+CONSOLE_ORIGIN="https://office.${DOMAIN}"
 PUBLIC_KEY="${PUBLIC_KEY:-demo_site}"
 CHAT_REPO="${CHAT_REPO:-}"
 NS="${NS:-ago-chat}"
@@ -231,15 +244,17 @@ else
     bad "the minted operator could not obtain a token - the credential 8-07 hands a stranger does not work"
   else
     ok "a minted operator signs in (the credential a stranger is given actually works)"
-    # `adr/0091` step 3: the console lives at `chat.` now and `console.` is retired. This line is not
-    # cosmetic - the Origin header *is* this check (see the paragraph above), so a stale value here
-    # does not weaken the test, it inverts it: the hub correctly refuses a retired origin, and the
-    # check reports that correct refusal as "no operator can hold a connection". It did exactly that
-    # on the first run after the migration.
-    OORIGIN="https://office.${DOMAIN}"
+    # `adr/0091` step 3: the console lives at `office.` now and `chat.`/`console.` are retired. This
+    # line is not cosmetic - the Origin header *is* this check (see the paragraph above), so a stale
+    # value here does not weaken the test, it inverts it: the hub correctly refuses a retired origin,
+    # and the check reports that correct refusal as "no operator can hold a connection". It did
+    # exactly that on the first run after each of the two 2026-09-03 migrations. `CONSOLE_ORIGIN` is
+    # defined once, near `CHAT_API` at the top of this file - see its own comment for why: `15-14`'s
+    # REST CORS check (below) needs the identical origin, and having it live in two places is exactly
+    # how both origin checks went stale independently on 2026-09-03.
     octoken=$(curl -s --max-time 20 -X POST \
       "https://${CHAT_API}/hubs/operator/negotiate?negotiateVersion=1" \
-      -H "Authorization: Bearer ${otok}" -H "Origin: ${OORIGIN}" \
+      -H "Authorization: Bearer ${otok}" -H "Origin: ${CONSOLE_ORIGIN}" \
       | grep -oE '"connectionToken":"[^"]+"' | cut -d'"' -f4)
 
     if [ -z "$octoken" ]; then
@@ -249,13 +264,13 @@ else
       ossefile=$(mktemp)
       ( curl -s --max-time 6 -o "$ossefile" \
           "https://${CHAT_API}/hubs/operator?id=${octoken}" \
-          -H "Authorization: Bearer ${otok}" -H "Origin: ${OORIGIN}" \
+          -H "Authorization: Bearer ${otok}" -H "Origin: ${CONSOLE_ORIGIN}" \
           -H 'Accept: text/event-stream' >/dev/null 2>&1 ) &
       osse=$!
       sleep 1
       curl -s --max-time 10 -o /dev/null -X POST \
         "https://${CHAT_API}/hubs/operator?id=${octoken}" \
-        -H "Authorization: Bearer ${otok}" -H "Origin: ${OORIGIN}" \
+        -H "Authorization: Bearer ${otok}" -H "Origin: ${CONSOLE_ORIGIN}" \
         --data-binary "$(printf '{"protocol":"json","version":1}\036')"
       wait $osse 2>/dev/null || true
 
@@ -267,6 +282,57 @@ else
       rm -f "$ossefile"
     fi
   fi
+fi
+
+echo
+echo "REST CORS"
+# `15-14`: the check that would have caught the console losing its own API twice on 2026-09-03 - once
+# moving to `chat.` in the morning, once to `office.` in the evening. Both times
+# `Console:AllowedOrigins` (the manifest half, gating the operator hub - `5-18` above) was updated and
+# verified; `sites.allowed_origins` (the database half, gating REST through
+# `SiteOriginCorsPolicyProvider` -> `CheckCorsOriginHandler`, "does any site allow this origin at
+# all") was not. A console can hold a hub connection - the check above, green - and still be unable to
+# fetch a single thing over REST, which is exactly the state both moves produced and exactly what 43
+# green checks failed to notice, twice, in one day.
+#
+# Any operator-only route works as the probe; a 401 is the expected, correct answer to an
+# unauthenticated request and is not what this checks. `RequireOperatorIdentity` runs *after* CORS -
+# the policy provider sets (or withholds) the header before authorization ever sees the request - so
+# the header is present or absent on a 401 exactly as it would be on a 200. The guid does not need to
+# name a real site: `AnyAllowsOriginAsync` answers for the deployment, not for one tenant.
+#
+# `CheckCorsOriginHandler` caches in *both* directions, on different timers, and only one direction is
+# the false-red this check's own failure text below explains. A *positive* result (own comment:
+# "an origin approved moments ago... should not read as denied for long" is the 30s side of this) is
+# cached for 5 minutes - so if `sites.allowed_origins` genuinely loses the console's origin, a run
+# within 5 minutes of the last time anything (a real console request, an earlier smoke run) checked
+# that origin can still show green on a real regression. Verified live while writing this: removing
+# `office.reserve-me.ru` from both sites that had it did not turn this line red until the positive
+# cache entry's remaining TTL (`redis-cli TTL cors-origin:https://office.reserve-me.ru`) ran out. A
+# false green is the more dangerous direction for a smoke test - there is no general fix here short of
+# a cache-bypassing probe, which would test a code path no real browser ever takes.
+REST_PROBE="https://${CHAT_API}/api/v1/sites/00000000-0000-0000-0000-000000000000/widget-config"
+header_value() {
+  # $1: Origin to send. -D - dumps response headers to stdout; -o /dev/null discards the body, which
+  # is the (irrelevant, 401) problem-details JSON every time - only the CORS header matters here.
+  curl -s --max-time 20 -o /dev/null -D - "$REST_PROBE" -H "Origin: $1" \
+    | tr -d '\r' | grep -i '^access-control-allow-origin:' \
+    | sed -E 's/^[Aa]ccess-[Cc]ontrol-[Aa]llow-[Oo]rigin:[[:space:]]*//'
+}
+
+allow=$(header_value "$CONSOLE_ORIGIN")
+if [ "$allow" = "$CONSOLE_ORIGIN" ]; then
+  ok "the API grants ${CONSOLE_ORIGIN} CORS access on REST (sites.allowed_origins has it - the console can actually fetch, not just hold a hub connection)"
+else
+  bad "the API did not return access-control-allow-origin: ${CONSOLE_ORIGIN} on REST (got: '${allow}') - the console can hold a hub connection (5-18, above) and still fetch nothing. Two explanations, and only one is real: (a) ${CONSOLE_ORIGIN} is genuinely missing from every site's allowed_origins in the database - the actual 2026-09-03 failure, fix it there, not in the manifest; (b) it was just added and CheckCorsOriginHandler's 30-second negative cache is still serving the denial it recorded before the fix - re-run this check in 30s before concluding (a)."
+fi
+
+BOGUS_ORIGIN="https://not-a-real-origin.invalid"
+control=$(header_value "$BOGUS_ORIGIN")
+if [ -z "$control" ]; then
+  ok "an unknown origin gets no access-control-allow-origin on REST (the control - proves the policy discriminates rather than permits; the positive check above would pass against a wildcard without this)"
+else
+  bad "an unknown origin (${BOGUS_ORIGIN}) got access-control-allow-origin: ${control} on REST - the CORS policy is not per-site, it is wide open, which makes the positive check above meaningless"
 fi
 
 echo

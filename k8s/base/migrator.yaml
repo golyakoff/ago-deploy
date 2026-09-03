@@ -46,6 +46,14 @@ spec:
   # Long enough to read the logs of a failed run without racing a cleanup, short enough that finished
   # Jobs do not accumulate one per deploy. Not measured; a completed Job holds no resources but its own
   # record.
+  #
+  # `8-12`/ago-root#361: that same window is why a completed Job routinely still exists when
+  # `spec.template` next changes (this migrator's tag moves with the hosts, `8-08`), and
+  # `spec.template` is immutable - `kubectl apply -k overlays/demo` fails outright until the old Job
+  # is deleted. `apply-demo.sh` (this directory's parent) does that delete, checking `.status.active`
+  # first so it never removes a migration that is still running; run it instead of a bare `apply -k`
+  # after a pin bump. This TTL was deliberately left unchanged rather than shortened to make that
+  # window disappear - see `apply-demo.sh`'s own header for why.
   ttlSecondsAfterFinished: 3600
   template:
     metadata:

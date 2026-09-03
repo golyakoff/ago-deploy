@@ -67,6 +67,10 @@ spec:
   # human - and see the header above for why "the database was not up yet" must never be allowed to
   # count as that one attempt.
   backoffLimit: 0
+  # `8-12`/ago-root#361: same trap as `migrator.yaml`'s identical field - a completed Job's immutable
+  # `spec.template` outlives this TTL long enough to reject the next `apply -k` after a pin bump.
+  # `apply-demo.sh` deletes a finished Job first; see that field's own comment in `migrator.yaml` for
+  # the full reasoning, not repeated here for the same reason this file's own header gives.
   ttlSecondsAfterFinished: 3600
   template:
     metadata:

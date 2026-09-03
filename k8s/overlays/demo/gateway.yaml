@@ -74,14 +74,6 @@ spec:
         mode: Terminate
         certificateRefs:
           - name: ago-public-tls
-    - name: https-chat
-      port: 443
-      protocol: HTTPS
-      hostname: chat.reserve-me.ru
-      tls:
-        mode: Terminate
-        certificateRefs:
-          - name: ago-public-tls
     # The chat API's new, permanent name. Both listeners serve the same API for now, on purpose:
     # `chat.` is what the widget, the console and the landing page's copy-me snippet all point at
     # today, and it becomes the chat *console* at the end of this migration. Serving both first is
@@ -310,11 +302,8 @@ spec:
   parentRefs:
     - name: ago-chat-gateway
       sectionName: https-office
-    - name: ago-chat-gateway
-      sectionName: https-chat
   hostnames:
     - office.reserve-me.ru
-    - chat.reserve-me.ru
   rules:
     # ago-console Service: console-static.yaml (8-02), port 80 matching every other Service in
     # this overlay's own convention (base/*.yaml).

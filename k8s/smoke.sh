@@ -236,7 +236,7 @@ else
     # does not weaken the test, it inverts it: the hub correctly refuses a retired origin, and the
     # check reports that correct refusal as "no operator can hold a connection". It did exactly that
     # on the first run after the migration.
-    OORIGIN="https://chat.${DOMAIN}"
+    OORIGIN="https://office.${DOMAIN}"
     octoken=$(curl -s --max-time 20 -X POST \
       "https://${CHAT_API}/hubs/operator/negotiate?negotiateVersion=1" \
       -H "Authorization: Bearer ${otok}" -H "Origin: ${OORIGIN}" \
@@ -286,7 +286,7 @@ echo "Frontends"
 # names for the length of the move, so seeing one commit twice is the point rather than
 # redundancy. It is what proves the new listener and route reach the console, rather than
 # reaching a 200 from somewhere.
-for entry in "office.${DOMAIN}:ago-console" "chat.${DOMAIN}:ago-console" "demo-shop1.${DOMAIN}:ago-demo-shop1" \
+for entry in "office.${DOMAIN}:ago-console" "demo-shop1.${DOMAIN}:ago-demo-shop1" \
              "demo-shop2.${DOMAIN}:ago-demo-shop2" "${DOMAIN}:ago-landing" \
              "calendar.${DOMAIN}:ago-calendar-console"; do
   host="${entry%%:*}"; deploy="${entry##*:}"
@@ -364,7 +364,7 @@ echo "Edge"
 # `22-10`: `office.` joins while `chat.` is still here. Both answer for the length of the move,
 # and `chat.` leaves this list in the same change that removes it from the route, the listener
 # and the SAN - in that order, with the A-record last of all.
-for h in "office" "chat" "chat-api" "auth" "demo-shop1" "demo-shop2" "calendar" "calendar-api"; do
+for h in "office" "chat-api" "auth" "demo-shop1" "demo-shop2" "calendar" "calendar-api"; do
   c=$(code "https://${h}.${DOMAIN}/")
   # auth's root redirects; anything that is not a connection failure means the listener is alive.
   [ "$c" != "000" ] && ok "${h}.${DOMAIN} answers ($c)" || bad "${h}.${DOMAIN} did not answer"

@@ -56,7 +56,6 @@ spec:
     name: letsencrypt-prod
     kind: ClusterIssuer
   dnsNames:
-    - chat.reserve-me.ru
     # `chat-api.` joins while `chat.` is still the API: adding a SAN re-issues the certificate in
     # place, so the six names already working keep working through it. The name must resolve before
     # this is applied - issuance is HTTP-01, and Let's Encrypt fetches over the name itself.

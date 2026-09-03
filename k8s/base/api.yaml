@@ -149,7 +149,7 @@ spec:
             - name: Billing__PricePerSeatRub
               value: "590"
             - name: Billing__CheckoutReturnUrl
-              value: "https://chat.reserve-me.ru/settings/billing"
+              value: "https://office.reserve-me.ru/settings/billing"
             - name: Billing__YooKassa__ShopId
               value: "STUB-NOT-A-REAL-YOOKASSA-ACCOUNT"
             - name: Billing__YooKassa__SecretKey
@@ -205,8 +205,6 @@ spec:
             - name: Console__AllowedOrigins__0
               value: "https://office.reserve-me.ru"
             - name: Console__AllowedOrigins__1
-              value: "https://chat.reserve-me.ru"
-            - name: Console__AllowedOrigins__2
               value: "http://localhost:5173"
             - name: Otel__Exporter__Endpoint
               value: "http://jaeger:4317"

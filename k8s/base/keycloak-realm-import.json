@@ -44,12 +44,12 @@
       "redirectUris": [
         "http://localhost:8080/*",
         "http://localhost:5173/*",
-        "https://chat.reserve-me.ru/*"
+        "https://office.reserve-me.ru/*"
       ],
       "webOrigins": [
         "http://localhost:8080",
         "http://localhost:5173",
-        "https://chat.reserve-me.ru"
+        "https://office.reserve-me.ru"
       ],
       "protocolMappers": [
         {

@@ -87,19 +87,19 @@ configMapGenerator:
 images:
   - name: ago-chat-api
     newName: ghcr.io/golyakoff/ago-chat-api
-    newTag: 6a0099e9510cceef13ee0f0c1be1e04bfeccff8f
+    newTag: a1894b04092ffeed15301c15f0b2284653e45c30
   - name: ago-chat-worker
     newName: ghcr.io/golyakoff/ago-chat-worker
-    newTag: 6a0099e9510cceef13ee0f0c1be1e04bfeccff8f
+    newTag: a1894b04092ffeed15301c15f0b2284653e45c30
   - name: ago-chat-webhooks
     newName: ghcr.io/golyakoff/ago-chat-webhooks
-    newTag: 6a0099e9510cceef13ee0f0c1be1e04bfeccff8f
+    newTag: a1894b04092ffeed15301c15f0b2284653e45c30
   # `8-08`: the migrator moves with the three hosts and never independently - it applies the
   # migrations *that commit* carries, so a migrator on a different SHA from the hosts is the exact
   # mismatch this item exists to prevent. deploy.sh sets all four from one argument for that reason.
   - name: ago-chat-migrator
     newName: ghcr.io/golyakoff/ago-chat-migrator
-    newTag: 6a0099e9510cceef13ee0f0c1be1e04bfeccff8f
+    newTag: a1894b04092ffeed15301c15f0b2284653e45c30
   # `15-07`/`adr/0051`: the four static bundles, which `15-06` could not reach - and the one it did
   # not reach is the one the 2026-08-25 incident happened to. Their four `imagePullPolicy: Never`
   # patches are gone from *-static.yaml for the same reason the three above went.
@@ -143,7 +143,7 @@ images:
   # one list, two renderers - so the two cannot disagree about what a tenant may see.
   - name: ago-console
     newName: ghcr.io/golyakoff/ago-console
-    newTag: 104f587e9704ea0fc072a7919acfd590244384c2
+    newTag: 0e8eee6bdf0e69941731a2ea4af850dbc67809ab
   # All three come from one `ago-widget` commit, and that is the point rather than tidiness: the two
   # demo pages and a real tenant's embed then run byte-identical bundles, which is checkable (three
   # `version.json` files naming one commit) instead of assumed.
@@ -179,7 +179,7 @@ images:
   # and after (537px -> 375px page width), not eyeballed.
   - name: ago-landing
     newName: ghcr.io/golyakoff/ago-landing
-    newTag: ea24729626958acea29330b572bf003d95b88f50
+    newTag: 4557b4e888b95c0237315c2a24c50a6520d4f9aa
   # `20-20`: AGO Calendar's own four images. The three backend ones move together and never
   # independently, same rule as the ago-chat-* four above and the same reason: `calendar-migrator.yaml`
   # applies the migrations *this* commit's Domain carries, so a migrator on a different SHA from the
@@ -187,7 +187,16 @@ images:
   # scope of its own, so the three no longer rest on a hand convention alone - but they still share
   # one line to edit here, because `deploy.sh` moves the running image without touching this file.
   #
-  # `22-02`/`22-04`: moved to `0f988c5d320739c2e7991b4d6122e3f7b7d4d1bb`, the commit that made the
+  # `22-05`/`17-10`: moved to `3c1d4c7c5ee1be8be595312b98cae2a5953dcf5c` - the calendar stops holding
+  # identity (`operators`, `roles`, `operator_roles` dropped) and reads a projection replicated from
+  # the account side, on `Ago.Platform.* 0.19.0`. **This pin and `22-13`'s `Messaging__RabbitMq__*` on
+  # both calendar hosts move together**: `22-05` registers `AddRabbitMqMessaging` in `CalendarModule`,
+  # which every calendar host loads, and that binding validates on start - so this image without those
+  # settings does not crash on first use, it never finishes starting. Observed, not predicted: the
+  # deploy that produced this pin left `ago-calendar-api` in CrashLoopBackOff until the settings were
+  # applied, because `redeploy.sh` moves images with `set image` and applies no manifest at all.
+  #
+  # `22-02`/`22-04`: previously `0f988c5d`, the commit that made the
   # chat-to-module channel require a per-site signed assertion. **smoke.sh's check for that
   # refusal moves with this pin, in this same change.** Before it, an anonymous module call
   # answers 500 rather than 401 - so shipping the check first would turn a green deployment red,
@@ -199,13 +208,13 @@ images:
   # deployment down.
   - name: ago-calendar-api
     newName: ghcr.io/golyakoff/ago-calendar-api
-    newTag: 0f988c5d320739c2e7991b4d6122e3f7b7d4d1bb
+    newTag: 3c1d4c7c5ee1be8be595312b98cae2a5953dcf5c
   - name: ago-calendar-worker
     newName: ghcr.io/golyakoff/ago-calendar-worker
-    newTag: 0f988c5d320739c2e7991b4d6122e3f7b7d4d1bb
+    newTag: 3c1d4c7c5ee1be8be595312b98cae2a5953dcf5c
   - name: ago-calendar-migrator
     newName: ghcr.io/golyakoff/ago-calendar-migrator
-    newTag: 0f988c5d320739c2e7991b4d6122e3f7b7d4d1bb
+    newTag: 3c1d4c7c5ee1be8be595312b98cae2a5953dcf5c
   # The console is its own repository with its own release cadence (`repositories.md`'s "each
   # deployable surface gets its own repo" pattern, same reasoning `ago-console`'s own entry above
   # documents) - it does NOT share a tag with the three backend images. Pinned to

@@ -88,6 +88,22 @@ spec:
             # actually fires. Same Service, no auth, as every other Redis consumer in this namespace.
             - name: Redis__ConnectionString
               value: "redis:6379"
+            # `22-13`: this host never opens a broker connection - it resolves neither `IEventPublisher`
+            # nor `IEventConsumer`, and `RabbitMqConnection` is lazy. It needs these three anyway,
+            # because `22-05` put `AddRabbitMqMessaging` in `CalendarModule`, which *every* calendar
+            # host loads, and that call validates `RabbitMqOptions` on start with all three `[Required]`
+            # ([Required] on a string fails on empty as well as null). Without them this pod does not
+            # crash on first use - it never finishes starting, and the reason a booking API will not
+            # boot is a role-projection change in another repository. `network-policies.yaml`
+            # deliberately does **not** add this host to `rabbitmq-ingress`: it has no reason to reach
+            # the broker, and an allowance granted "for symmetry" is one nobody removes later. If a
+            # future code path here does publish, it fails loudly at connect rather than silently.
+            - name: Messaging__RabbitMq__HostName
+              value: "rabbitmq"
+            - name: Messaging__RabbitMq__UserName
+              value: "$(RABBITMQ_USER)"
+            - name: Messaging__RabbitMq__Password
+              value: "$(RABBITMQ_PASSWORD)"
             # `AuthenticationSetup.AddCalendarOperatorAuthentication`'s one required setting - the host
             # refuses to start without it (see that file's own remarks: "There is no fallback and no
             # dev stub"). Same realm as `Ago.Chat.Api` - `adr/0027`: one Keycloak realm, two entirely

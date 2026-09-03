@@ -95,6 +95,20 @@ spec:
             # file.
             - name: Redis__ConnectionString
               value: "redis:6379"
+            # `22-13`/`22-05`: unlike `calendar-api.yaml`'s copy of these three, this host really does
+            # dial the broker - `RoleAssignmentsChangedConsumer` subscribes to `ago-chat`'s own
+            # `RoleAssignmentsChanged` topic. The values must name the **same broker and vhost**
+            # `ago-chat`'s Worker publishes to, which is why they are the same literals `worker.yaml`
+            # uses rather than a second set: two products, one broker, one default vhost (`adr/0026`'s
+            # one-node sizing). Same credential as `ago-chat` too - a reader-scoped user would be the
+            # better answer and is not available without a RabbitMQ user-provisioning step that does
+            # not exist here yet; recorded rather than quietly treated as fine.
+            - name: Messaging__RabbitMq__HostName
+              value: "rabbitmq"
+            - name: Messaging__RabbitMq__UserName
+              value: "$(RABBITMQ_USER)"
+            - name: Messaging__RabbitMq__Password
+              value: "$(RABBITMQ_PASSWORD)"
           volumeMounts:
             - name: tmp
               mountPath: /tmp

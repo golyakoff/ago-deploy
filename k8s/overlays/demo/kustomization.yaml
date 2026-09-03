@@ -187,7 +187,11 @@ images:
   # scope of its own, so the three no longer rest on a hand convention alone - but they still share
   # one line to edit here, because `deploy.sh` moves the running image without touching this file.
   #
-  # `20-24`: moved to `8e3507fb74c6084b78dd6e1178f784b407c580db`, the commit that gave
+  # `22-02`/`22-04`: moved to `0f988c5d320739c2e7991b4d6122e3f7b7d4d1bb`, the commit that made the
+  # chat-to-module channel require a per-site signed assertion. **smoke.sh's check for that
+  # refusal moves with this pin, in this same change.** Before it, an anonymous module call
+  # answers 500 rather than 401 - so shipping the check first would turn a green deployment red,
+  # which is the split rule 15 forbids. Previously `8e3507fb`, which gave
   # `Ago.Calendar.Api` `/healthz/live`, `/healthz/ready` and `/healthz/version`. Confirmed published
   # rather than assumed: `ago-calendar`'s CI run for this commit finished with `publish-images:
   # success`. **This pin and `calendar-api.yaml`'s probes move together** - those probes now ask for
@@ -195,13 +199,13 @@ images:
   # deployment down.
   - name: ago-calendar-api
     newName: ghcr.io/golyakoff/ago-calendar-api
-    newTag: 8e3507fb74c6084b78dd6e1178f784b407c580db
+    newTag: 0f988c5d320739c2e7991b4d6122e3f7b7d4d1bb
   - name: ago-calendar-worker
     newName: ghcr.io/golyakoff/ago-calendar-worker
-    newTag: 8e3507fb74c6084b78dd6e1178f784b407c580db
+    newTag: 0f988c5d320739c2e7991b4d6122e3f7b7d4d1bb
   - name: ago-calendar-migrator
     newName: ghcr.io/golyakoff/ago-calendar-migrator
-    newTag: 8e3507fb74c6084b78dd6e1178f784b407c580db
+    newTag: 0f988c5d320739c2e7991b4d6122e3f7b7d4d1bb
   # The console is its own repository with its own release cadence (`repositories.md`'s "each
   # deployable surface gets its own repo" pattern, same reasoning `ago-console`'s own entry above
   # documents) - it does NOT share a tag with the three backend images. Pinned to

@@ -173,6 +173,19 @@ for p in "/dev/tenants" "/dev/phone-verifications/last-code"; do
                    || bad "calendar dev endpoint ${p} answered $c - tenant provisioning is exposed in Production"
 done
 
+# `22-02`/`adr/0094`: the chat -> module channel. This route took the site id from the request body and
+# believed it - probed from outside the cluster on 2026-09-03, an unauthenticated POST reached the
+# handler while a nonsense sibling path returned 404, so it was live and anonymous rather than merely
+# untested. It now requires an assertion chat signs, and `22-04` made the secret per site.
+#
+# **401, deliberately, and not 404.** The refusal has to stay distinguishable from an unmapped route or
+# no check built on it can tell "protected" from "unreachable" - the same reason the `/widget/`
+# checks pair a positive with a nonsense-path control (`20-24`). The control for this one is the
+# dev-endpoint 404s directly above: they prove this host answers 404 for things that are not there, so
+# a 401 here means refused rather than missing.
+c=$(curl -s --max-time 20 -o /dev/null -w "%{http_code}" -X POST   -H "Content-Type: application/json" -d '{}' "https://calendar-api.${DOMAIN}/api/v1/module-tasks/")
+[ "$c" = "401" ] && ok "calendar module channel refuses an unauthenticated call (401, not 404 - refused rather than missing)"                  || bad "calendar module channel answered $c to an anonymous POST - 200 means it is open, 404 means the route moved and this check now proves nothing, 500 means it got past authentication into handler logic"
+
 # The console is a separate host and gets its own check rather than standing in for the API.
 c=$(code "https://calendar.${DOMAIN}/")
 [ "$c" = "200" ] && ok "calendar console answers" \

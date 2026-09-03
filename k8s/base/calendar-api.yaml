@@ -61,6 +61,19 @@ spec:
             - secretRef:
                 name: infra-credentials
           env:
+            # `ago-root#354`: stated rather than left to .NET's own default-to-Production behaviour.
+            # `DevProvisioningEndpoints`/`PhoneVerificationDevEndpoints` (Program.cs) map only outside
+            # Production - `DevProvisioningEndpoints` creates tenants and is deliberately not behind
+            # the operator policy, because it is not supposed to exist anywhere reachable. That gate has
+            # held so far only because this variable happened to be unset everywhere, which is a
+            # framework default doing load-bearing security work with no line in this manifest saying
+            # so. The quiet failure this closes: someone sets ASPNETCORE_ENVIRONMENT=Development on this
+            # pod to get verbose logs during an incident, and tenant-provisioning endpoints appear on
+            # the public internet, with nothing logging the change and no probe failing. An explicit
+            # Production here means reopening that gate takes changing a value that states its own
+            # purpose, not adding one that was never there.
+            - name: ASPNETCORE_ENVIRONMENT
+              value: "Production"
             # `CalendarModule.ConfigureServices` reads this synchronously and throws if it is unset -
             # required, the same way `AGO_CHAT_CONNECTION_STRING` is for every `Ago.Chat.*` host. A
             # separate database from `$(POSTGRES_DB)` on the same Postgres instance (`adr/0026`'s

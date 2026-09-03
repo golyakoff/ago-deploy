@@ -70,6 +70,18 @@ spec:
             - secretRef:
                 name: infra-credentials
           env:
+            # `ago-root#354`: same stated-intent reason as calendar-api.yaml's own comment, but note
+            # the **prefix differs on this one host, and it is the prefix that decides whether the
+            # line does anything at all.** `Ago.Calendar.Worker/Program.cs` builds on
+            # `Host.CreateApplicationBuilder` (the bare generic host - see this file's header), not
+            # `WebApplication.CreateBuilder`; only the latter layers `ASPNETCORE_`-prefixed
+            # configuration over the generic host's own `DOTNET_`-prefixed one. So `ASPNETCORE_`
+            # here would be read by nothing - a manifest line that looks like a control and refuses
+            # nothing, which is the exact failure this item exists to close rather than an instance
+            # of closing it. Every other host in this overlay carries `ASPNETCORE_ENVIRONMENT`
+            # because every other host is a `WebApplication.CreateBuilder` one.
+            - name: DOTNET_ENVIRONMENT
+              value: "Production"
             # Same requirement as calendar-api.yaml - see that manifest's own comment.
             - name: AGO_CALENDAR_CONNECTION_STRING
               value: "Host=postgres;Port=5432;Database=ago_calendar;Username=$(POSTGRES_USER);Password=$(POSTGRES_PASSWORD)"

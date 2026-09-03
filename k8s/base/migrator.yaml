@@ -74,6 +74,13 @@ spec:
             - secretRef:
                 name: infra-credentials
           env:
+            # `ago-root#354` considered `ASPNETCORE_ENVIRONMENT` here and deliberately left it unset:
+            # `Ago.Chat.Migrator/Program.cs` (this file's own header, above) is "no generic host, no DI
+            # container, no configuration binding" - it reads exactly `AGO_CHAT_CONNECTION_STRING` and
+            # the one optional wait-timeout variable via `Environment.GetEnvironmentVariable`, nothing
+            # that constructs an `IHostEnvironment` or consults this variable at all. Setting it here
+            # would be a line that names nothing this process reads - the opposite of what `#354` is
+            # for, which is a manifest that says what it actually depends on.
             # The only configuration this deployable *requires*. It reads no broker, no cache and no
             # object store - it does not use ChatModule at all - which is why this env block is six
             # lines where api.yaml's is sixty, and why a migration can be applied while RabbitMQ is

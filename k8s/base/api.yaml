@@ -44,6 +44,18 @@ spec:
             - secretRef:
                 name: infra-credentials
           env:
+            # `ago-root#354`: stated rather than left to .NET's own default-to-Production behaviour.
+            # DevProvisioningEndpoints/PhoneVerificationDevEndpoints (Ago.Calendar.Api's equivalent -
+            # this host has no dev-only routes of its own today) map only outside Production; that gate
+            # has held so far only because this variable happened to be unset everywhere, which is a
+            # framework default doing load-bearing security work with no line in any manifest saying
+            # so. The quiet failure this closes: someone sets ASPNETCORE_ENVIRONMENT=Development on a
+            # pod to get verbose logs during an incident, and a route that is not supposed to be
+            # reachable anywhere becomes reachable, with nothing logging the change and no probe
+            # failing. An explicit Production here means reopening that gate takes changing a value
+            # that states its own purpose, not adding one that was never there.
+            - name: ASPNETCORE_ENVIRONMENT
+              value: "Production"
             # ChatModule.ConfigureServices requires this (chat/src/Ago.Chat.Module/ChatModule.cs) -
             # in-cluster it points at the postgres Service, not the docker-compose host from
             # local-dev.md. $(VAR) here expands against the envFrom keys above (k8s dependent env

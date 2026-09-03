@@ -149,6 +149,13 @@ spec:
             - secretRef:
                 name: infra-credentials
           env:
+            # `ago-root#354` considered `ASPNETCORE_ENVIRONMENT` here and deliberately left it unset,
+            # for the identical reason `migrator.yaml`'s own comment gives for `ago-chat-migrator`:
+            # `Ago.Calendar.Migrator/Program.cs` is "no generic host, no DI container, no configuration
+            # binding" (see that file's own remarks) - it reads exactly the two variables below via
+            # `Environment.GetEnvironmentVariable`, never constructing an `IHostEnvironment` that this
+            # setting could reach. A line naming a variable this process never looks at would work
+            # against `#354`'s own point, not serve it.
             # `ago-calendar`'s `Ago.Calendar.Migrator/Program.cs` reads exactly this one variable and
             # nothing else - no DI container, no configuration binding (see that file's own remarks).
             # A different database from every other workload's `$(POSTGRES_DB)` on purpose: this

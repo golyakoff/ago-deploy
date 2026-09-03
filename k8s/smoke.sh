@@ -167,7 +167,12 @@ else
     bad "the minted operator could not obtain a token - the credential 8-07 hands a stranger does not work"
   else
     ok "a minted operator signs in (the credential a stranger is given actually works)"
-    OORIGIN="https://console.${DOMAIN}"
+    # `adr/0091` step 3: the console lives at `chat.` now and `console.` is retired. This line is not
+    # cosmetic - the Origin header *is* this check (see the paragraph above), so a stale value here
+    # does not weaken the test, it inverts it: the hub correctly refuses a retired origin, and the
+    # check reports that correct refusal as "no operator can hold a connection". It did exactly that
+    # on the first run after the migration.
+    OORIGIN="https://chat.${DOMAIN}"
     octoken=$(curl -s --max-time 20 -X POST \
       "https://${CHAT_API}/hubs/operator/negotiate?negotiateVersion=1" \
       -H "Authorization: Bearer ${otok}" -H "Origin: ${OORIGIN}" \
@@ -213,7 +218,7 @@ echo "Frontends"
 # it is served at `calendar.` (the bare product name is the human-facing console), and its own
 # Dockerfile writes /version.json the identical way (adr/0051's pattern,
 # copied rather than reinvented), so this loop needs no special case for it.
-for entry in "console.${DOMAIN}:ago-console" "demo-shop1.${DOMAIN}:ago-demo-shop1" \
+for entry in "chat.${DOMAIN}:ago-console" "demo-shop1.${DOMAIN}:ago-demo-shop1" \
              "demo-shop2.${DOMAIN}:ago-demo-shop2" "${DOMAIN}:ago-landing" \
              "calendar.${DOMAIN}:ago-calendar-console"; do
   host="${entry%%:*}"; deploy="${entry##*:}"

@@ -72,3 +72,13 @@ spec:
     # describes for a SAN change.
     - calendar-api.reserve-me.ru
     - calendar.reserve-me.ru
+    # `22-10`/`adr/0093`: the console gets a name that is not a product, because there is no console
+    # per product any more. `office.` joins *before* anything is served from it and long before
+    # `chat.` and `calendar.` leave - adding a SAN re-issues in place, so the eight names already
+    # working keep working through it.
+    #
+    # The A-record was created 2026-09-03 and confirmed resolving from the node before this was
+    # applied. That order is a gate, not a courtesy: issuance is HTTP-01, Let's Encrypt fetches over
+    # the name itself, and **one failed authorization fails the whole certificate** - every other
+    # hostname would lose TLS with it.
+    - office.reserve-me.ru

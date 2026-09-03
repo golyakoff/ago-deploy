@@ -282,7 +282,11 @@ echo "Frontends"
 # it is served at `calendar.` (the bare product name is the human-facing console), and its own
 # Dockerfile writes /version.json the identical way (adr/0051's pattern,
 # copied rather than reinvented), so this loop needs no special case for it.
-for entry in "chat.${DOMAIN}:ago-console" "demo-shop1.${DOMAIN}:ago-demo-shop1" \
+# `22-10`: `office.` is checked beside `chat.` deliberately - the same Deployment answers at both
+# names for the length of the move, so seeing one commit twice is the point rather than
+# redundancy. It is what proves the new listener and route reach the console, rather than
+# reaching a 200 from somewhere.
+for entry in "office.${DOMAIN}:ago-console" "chat.${DOMAIN}:ago-console" "demo-shop1.${DOMAIN}:ago-demo-shop1" \
              "demo-shop2.${DOMAIN}:ago-demo-shop2" "${DOMAIN}:ago-landing" \
              "calendar.${DOMAIN}:ago-calendar-console"; do
   host="${entry%%:*}"; deploy="${entry##*:}"
@@ -357,7 +361,10 @@ echo "Edge"
 # deleted after that. `calendar-console` is gone from this list because that name was never created:
 # the scheme settled on `calendar.` for the console and `calendar-api.` for the API before anything
 # was deployed under the first proposal.
-for h in "chat" "chat-api" "auth" "demo-shop1" "demo-shop2" "calendar" "calendar-api"; do
+# `22-10`: `office.` joins while `chat.` is still here. Both answer for the length of the move,
+# and `chat.` leaves this list in the same change that removes it from the route, the listener
+# and the SAN - in that order, with the A-record last of all.
+for h in "office" "chat" "chat-api" "auth" "demo-shop1" "demo-shop2" "calendar" "calendar-api"; do
   c=$(code "https://${h}.${DOMAIN}/")
   # auth's root redirects; anything that is not a connection failure means the listener is alive.
   [ "$c" != "000" ] && ok "${h}.${DOMAIN} answers ($c)" || bad "${h}.${DOMAIN} did not answer"

@@ -2,12 +2,21 @@
 # Deploy a specific, identifiable build to the demo cluster.
 #
 #   ./deploy.sh <commit-sha>            the three Ago.Chat.* hosts, together
-#   ./deploy.sh <frontend> <commit-sha> one frontend: console | demo-shop1 | demo-shop2 | landing
+#   ./deploy.sh calendar <commit-sha>   the two Ago.Calendar.* hosts, together
+#   ./deploy.sh <frontend> <commit-sha> one frontend: console | demo-shop1 | demo-shop2 | landing |
+#                                       calendar-console
 #   ./deploy.sh --current               print what is running and stop
 #
 # One commit argument for the hosts because all three are built from one repository, and one
-# frontend at a time because the four are built from three repositories that move independently -
-# `15-07`. A single tag applied to all seven would be a lie about at least two of them.
+# frontend at a time because the four (now five) are built from repositories that move independently -
+# `15-07`. A single tag applied to all seven (now nine) would be a lie about at least two of them.
+#
+# `20-25`: AGO Calendar gets its own named component, "calendar", rather than being folded into the
+# bare no-argument form above. `ago-chat` and `ago-calendar` are different repositories with different
+# release cadences - the same reason a frontend is never rolled with the bare form - so a single commit
+# SHA cannot honestly name a build of both. `ago-calendar-console` needed no new mechanism at all: it
+# is one static bundle addressed by name, which is exactly what FRONTENDS already models, so it is one
+# more entry in that array rather than a second array.
 #
 # `15-06`/`adr/0047`. Before this existed, a deploy meant rebuilding on the node under the mutable
 # tag `:local` - so there was no earlier artifact to go back to, and nothing about a running pod
@@ -41,9 +50,20 @@ step() { printf "\n\033[1m== %s\033[0m\n" "$1"; }
 # deployment:container - `kubectl set image` addresses the container by name, not by position.
 HOSTS=("ago-chat-api:api" "ago-chat-worker:worker" "ago-chat-webhooks:webhooks")
 
-# `15-07`: name-as-typed:deployment. The container name equals the Deployment name for all four
+# `20-25`: AGO Calendar's own running hosts - api and worker, not three. `ago-calendar-migrator` is a
+# Job (base/calendar-migrator.yaml), never a Deployment, so it is not a `kubectl set image` target here
+# any more than `ago-chat-migrator` is one in HOSTS above - moving it is redeploy.sh's job, not this
+# script's (see the closing "Migrations and rollback" note at the bottom of this file: this script has
+# never run migrations for either product). Kept as its own array rather than appended to HOSTS for the
+# reason above the FRONTENDS array gives - it is a different repository's commit, so a bare SHA cannot
+# honestly move both.
+CALENDAR_HOSTS=("ago-calendar-api:api" "ago-calendar-worker:worker")
+
+# `15-07`: name-as-typed:deployment. The container name equals the Deployment name for all five
 # (overlays/demo/*-static.yaml), so one field is enough here where the hosts needed two.
-FRONTENDS=("console:ago-console" "demo-shop1:ago-demo-shop1" "demo-shop2:ago-demo-shop2" "landing:ago-landing")
+# `20-25`: `calendar-console` added - the identical shape as the other four, one static nginx bundle
+# behind a name, so it needed a new array entry and nothing else.
+FRONTENDS=("console:ago-console" "demo-shop1:ago-demo-shop1" "demo-shop2:ago-demo-shop2" "landing:ago-landing" "calendar-console:ago-calendar-console")
 
 # The commit a running pod reports about itself, asked over the API server's own pod proxy. Two
 # shapes, one idea:
@@ -79,6 +99,25 @@ show_current() {
     d="${entry%%:*}"
     show_row "$d" "$(pod_commit "$d" 8080 healthz/version)"
   done
+  # `20-25`: same call as the chat hosts above, and today it prints "unreadable" for both, for two
+  # different reasons worth telling apart rather than treating as one blank column:
+  #   - `ago-calendar-api` answers on 8080 but maps no `/healthz/version` (confirmed against
+  #     `Ago.Calendar.Api/Program.cs`; smoke.sh's own "Calendar API" section names the same gap and
+  #     SKIPs the checks that would need it, `20-24`). The proxy call succeeds; there is nothing to
+  #     parse a commit out of.
+  #   - `ago-calendar-worker` binds no port at all - `Program.cs` uses the bare generic host, not
+  #     `WebApplication` (confirmed against `base/calendar-worker.yaml`'s own header, which is explicit
+  #     that this is unlike `ago-chat-worker`, which DOES sit in HOSTS above and DOES answer
+  #     `/healthz/version` on a health-only Kestrel listener). The proxy call itself fails to connect.
+  # Calling pod_commit identically for both anyway, rather than a special-cased blank column, is
+  # deliberate: the day `Ago.Calendar.Api` gains `/healthz/version` (tracked outside this item, `20-24`
+  # in flight in parallel with this one), its row starts reporting a real commit with no change needed
+  # here. The worker's row has no equivalent day - it would need the same `WebApplication` change
+  # `calendar-worker.yaml`'s header names as a gap, not merely a new route.
+  for entry in "${CALENDAR_HOSTS[@]}"; do
+    d="${entry%%:*}"
+    show_row "$d" "$(pod_commit "$d" 8080 healthz/version)"
+  done
   # `15-07`: the frontends are here for the same reason the hosts are, and it is not symmetry for
   # its own sake - the 2026-08-25 stale bundle was a *console*, so this half of the table is the
   # half that would have caught the incident this whole mechanism exists for.
@@ -95,21 +134,26 @@ if [ "${1:-}" = "--current" ]; then
 fi
 
 usage() {
-  echo "usage: $0 <commit-sha> | $0 <console|demo-shop1|demo-shop2|landing> <commit-sha> | $0 --current" >&2
+  echo "usage: $0 <commit-sha> | $0 calendar <commit-sha> |" >&2
+  echo "       $0 <console|demo-shop1|demo-shop2|landing|calendar-console> <commit-sha> | $0 --current" >&2
   exit 2
 }
 
-# One argument means the three hosts (unchanged from 15-06). Two means a single frontend.
+# One argument means the three chat hosts (unchanged from 15-06). Two means either the named
+# "calendar" group (`20-25`) or a single frontend - checked in that order because "calendar" is not a
+# FRONTENDS entry (it moves two Deployments, not one) and must not fall through to "unknown component".
 COMPONENT=""
+DEPLOYMENT=""
 if [ "$#" -eq 2 ]; then
   COMPONENT="$1"; TAG="$2"
-  DEPLOYMENT=""
-  for entry in "${FRONTENDS[@]}"; do
-    [ "${entry%%:*}" = "$COMPONENT" ] && DEPLOYMENT="${entry##*:}"
-  done
-  if [ -z "$DEPLOYMENT" ]; then
-    echo "unknown component '$COMPONENT'." >&2
-    usage
+  if [ "$COMPONENT" != "calendar" ]; then
+    for entry in "${FRONTENDS[@]}"; do
+      [ "${entry%%:*}" = "$COMPONENT" ] && DEPLOYMENT="${entry##*:}"
+    done
+    if [ -z "$DEPLOYMENT" ]; then
+      echo "unknown component '$COMPONENT'." >&2
+      usage
+    fi
   fi
 elif [ "$#" -eq 1 ]; then
   TAG="$1"
@@ -133,7 +177,19 @@ fi
 # the manifest reminder, smoke - is written once (`15-07`).
 TARGETS=()   # deployment names
 IMAGES=()    # deployment=image, for `kubectl set image`
-if [ -n "$COMPONENT" ]; then
+if [ "$COMPONENT" = "calendar" ]; then
+  for entry in "${CALENDAR_HOSTS[@]}"; do
+    d="${entry%%:*}"; c="${entry##*:}"
+    TARGETS+=("$d")
+    IMAGES+=("${c}=${REGISTRY}/${d}:${TAG}")
+  done
+  DESCRIPTION="${REGISTRY}/ago-calendar-{api,worker}:${TAG}"
+  # `8-08`'s coupling stated here for the same reason it is stated in deploy.sh's chat path below:
+  # this command never touches `ago-calendar-migrator` (a Job, not a Deployment - see CALENDAR_HOSTS's
+  # own comment above), so nothing enforces by construction that the migrator's pinned tag moves with
+  # it. The reminder names both.
+  MANIFEST_HINT="both ago-calendar-* newTag values (api, worker - and ago-calendar-migrator's, to hold 8-08's coupling) in"
+elif [ -n "$COMPONENT" ]; then
   TARGETS=("$DEPLOYMENT")
   IMAGES=("$DEPLOYMENT=${REGISTRY}/${DEPLOYMENT}:${TAG}")
   DESCRIPTION="${REGISTRY}/${DEPLOYMENT}:${TAG}"
@@ -232,3 +288,34 @@ CHAT_REPO="${CHAT_REPO:-$AGO_ROOT/ago-chat}" "$HERE/smoke.sh" "$DOMAIN"
 #   which would try to add a monthly `RANGE` partition to a table that is now partitioned by hash.
 #   Across this boundary the recovery from a bad deploy is restore-from-backup (15-02), not a rollback.
 #   Rolling back *within* the post-15-09 range is unaffected.
+#
+# `20-25`: AGO Calendar - `ago_calendar` is a separate database on the same Postgres instance
+# (`AGO_CALENDAR_CONNECTION_STRING`, calendar-migrator.yaml), but it inherits the identical asymmetry,
+# by identical construction: confirmed directly against `Ago.Calendar.Migrator/Program.cs` at the
+# pinned commit - "there is deliberately no --down and no --target: EF generates Down() methods and
+# this project has never executed one" - the same sentence `adr/0056` wrote for `Ago.Chat.Migrator`.
+# This script has never touched the calendar migrator in either direction (it moves Deployments; the
+# migrator is a Job).
+#
+# UNLIKE THE PARAGRAPH ABOVE, this is not "no boundary migration is known" - checked, not assumed, and
+# the answer is not clean: `20260901115524_Stage20AddWorkerScheduleAndRemoveCalendarBuffer` (`20-14`)
+# drops `calendars.buffer_minutes` after backfilling it into the new `worker_schedules` table it
+# creates - a genuinely destructive change, the same shape as `15-09` above. What makes it a non-issue
+# *today*, checked rather than assumed: `ee3b38a` (this overlay's current pin) is the commit that made
+# `ago-calendar` "buildable, migratable and publishable" at all (`20-20`) - the first image this product
+# ever had, already carrying all eleven migrations including this one. There is no earlier calendar
+# image anywhere in this cluster's revision history to roll back to, so `./rollback.sh calendar` (bare,
+# undo-one-revision) cannot cross this boundary yet - there is nothing behind it. That stops being true
+# the moment a second calendar commit is deployed: `./rollback.sh calendar <sha>` accepts any SHA, not
+# only ones this cluster has run, and a SHA from before `ee3b38a` would cross it. If a further
+# destructive AGO Calendar migration is ever written, name it here the same way - this file is where an
+# operator reads the boundary before rolling anything back.
+#
+# **What this script does NOT close, stated rather than left implicit: nothing anywhere runs the
+# calendar migrator Job at all yet.** redeploy.sh's step 5 applies `ago-chat-migrator`; it has no
+# equivalent step for `ago-calendar-migrator` (grep it - the string does not appear in that script).
+# 8-08's "the migrator's image moves with the hosts and never independently" is upheld today only by a
+# convention documented in kustomization.yaml's own comment (all three calendar images are bumped
+# together, by hand, in one commit) - there is no script enforcing it by construction the way
+# redeploy.sh's `sed` substitution does for ago-chat. That is a real gap and a different one from what
+# this item closes; see this item's own report.

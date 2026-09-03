@@ -38,23 +38,54 @@ kc() { if kubectl version >/dev/null 2>&1; then kubectl "$@"; else sudo k3s kube
 step() { printf "\n\033[1m== %s\033[0m\n" "$1"; }
 
 step "1. Checkouts"
+# `15-13`: PULLED_DIRS is the single list of checkouts this step brings to their tip, and it is also
+# the list every `*_SHA=` read below (step 3) is checked against by read_sha() - the same array, not
+# a second one that has to be kept in sync by hand. That is what closes the gap this item found:
+# ago-landing's commit used to be read (LANDING_SHA, ~90 lines below where the pull loop used to end)
+# from a checkout this loop never touched, so a build-from-source run tagged the image with whatever
+# the box happened to be sitting on - and *tagged* it with that stale SHA, so smoke.sh's tag-vs-binary
+# check agreed with itself while the content served was fourteen commits old. ago-landing joining this
+# array is the one-word fix; read_sha() below is what stops the next component from repeating it by
+# construction rather than by someone remembering to check both lists, which is exactly how this one
+# survived - they sat roughly ninety lines apart with nothing relating them.
+#
+# ago-platform and ago-deploy are pulled here but read no `*_SHA=` from read_sha(): ago-platform is
+# packed into the local NuGet feed by the version in its own CHANGELOG (step 2), never tagged as an
+# image, and ago-deploy is the checkout this script itself is running from, pulling its own working
+# tree mid-run rather than being read back out as a build input. Being pulled without being read is
+# fine and expected; read_sha() only refuses the opposite - a directory read without being pulled,
+# which is the actual failure mode.
+PULLED_DIRS=(ago-platform ago-chat ago-console ago-widget ago-landing ago-calendar ago-calendar-console ago-deploy)
 if [ "${SKIP_PULL:-0}" = "1" ]; then
   echo "   SKIP_PULL=1 - building what is already here"
 else
-  # `20-26`: ago-calendar and ago-calendar-console join the checkouts pulled here, the same way
-  # ago-chat/ago-console/ago-widget already do - the source of "the fix is not live" this step exists
-  # to close (see this script's own header) applies to the calendar checkouts identically. Note that
-  # ago-landing is not in this list either, and was not added before this SHA is read from it further
-  # down (line ~90 as it stood before this item) - a pre-existing gap this item found but did not
-  # touch, since it is a different product's checkout and a different promise from "teach this script
-  # the calendar" (see this item's own report).
-  for d in ago-platform ago-chat ago-console ago-widget ago-calendar ago-calendar-console ago-deploy; do
+  for d in "${PULLED_DIRS[@]}"; do
     cd "$AGO_ROOT/$d"
     before=$(git rev-parse --short HEAD)
     git fetch -q origin && git checkout -q main && git pull -q --ff-only origin main
     printf "   %-14s %s -> %s\n" "$d" "$before" "$(git rev-parse --short HEAD)"
   done
 fi
+
+# Every `*_SHA=` in step 3 goes through this rather than calling `git -C ... rev-parse HEAD` directly,
+# so a directory added to the SHA reads without being added to PULLED_DIRS above fails the run instead
+# of silently reading whatever the box happens to be sitting on - the exact shape of the ago-landing
+# gap `15-13` closed. Checked against the array unconditionally, including when SKIP_PULL=1 skipped
+# the actual pulling above: SKIP_PULL only changes whether step 1 fetches, never which directories are
+# legitimate to read a commit from.
+read_sha() {
+  local dir="$1" candidate
+  for candidate in "${PULLED_DIRS[@]}"; do
+    if [ "$candidate" = "$dir" ]; then
+      git -C "$AGO_ROOT/$dir" rev-parse HEAD
+      return 0
+    fi
+  done
+  echo "BUG: read_sha $dir - '$dir' is not in PULLED_DIRS (step 1), so its commit would be read from" >&2
+  echo "     whatever this box happens to be sitting on instead of its pulled tip. Add '$dir' to" >&2
+  echo "     PULLED_DIRS, or read its commit some other way deliberately and say so." >&2
+  exit 1
+}
 
 # git does not preserve the executable bit on clone or through some pulls, and both build scripts
 # lose it. This bit them during the first bring-up and again on 2026-08-25; restoring it every run
@@ -97,16 +128,16 @@ step "3. Build images"
 # Note what is no longer passed: AGO_API_BASE_URL. Each frontend Dockerfile carries the deployment's
 # own value as a committed default, so an image is a function of its commit alone (adr/0051) - and an
 # image built here is byte-comparable with the one CI publishes for the same commit.
-CHAT_SHA="$(git -C "$AGO_ROOT/ago-chat" rev-parse HEAD)"
-CONSOLE_SHA="$(git -C "$AGO_ROOT/ago-console" rev-parse HEAD)"
-WIDGET_SHA="$(git -C "$AGO_ROOT/ago-widget" rev-parse HEAD)"
-LANDING_SHA="$(git -C "$AGO_ROOT/ago-landing" rev-parse HEAD)"
+CHAT_SHA="$(read_sha ago-chat)"
+CONSOLE_SHA="$(read_sha ago-console)"
+WIDGET_SHA="$(read_sha ago-widget)"
+LANDING_SHA="$(read_sha ago-landing)"
 # `20-26`: ago-calendar's three hosts move as one commit, same reasoning as CHAT_SHA above -
 # `calendar-migrator.yaml` applies the migrations *this* commit's Domain carries, so the migrator must
 # never be tagged from a different SHA than the two hosts it runs ahead of (`8-08`). The console is its
 # own repository with its own cadence, same as CONSOLE_SHA/WIDGET_SHA/LANDING_SHA above.
-CALENDAR_SHA="$(git -C "$AGO_ROOT/ago-calendar" rev-parse HEAD)"
-CALENDAR_CONSOLE_SHA="$(git -C "$AGO_ROOT/ago-calendar-console" rev-parse HEAD)"
+CALENDAR_SHA="$(read_sha ago-calendar)"
+CALENDAR_CONSOLE_SHA="$(read_sha ago-calendar-console)"
 echo "   ago-chat at $CHAT_SHA"
 echo "   ago-console at ${CONSOLE_SHA:0:7}, ago-widget at ${WIDGET_SHA:0:7}, ago-landing at ${LANDING_SHA:0:7}"
 echo "   ago-calendar at $CALENDAR_SHA"

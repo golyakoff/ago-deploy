@@ -129,22 +129,42 @@ spec:
             # `auth.reserve-me.ru` name is what the *browser* uses - see `edge.md`.
             - name: Operator__RequireHttpsMetadata
               value: "false"
-            # Optional in code (`ValidateAudience = audience is not null`) but set here deliberately,
-            # mirroring `ago-console`'s own client exactly: `keycloak-realm-import.json`'s new
-            # `ago-calendar-console` client carries an `oidc-audience-mapper` stamping this same string
-            # into `aud`, so a token minted for any *other* client is rejected here rather than merely
-            # trusted because it came from the same realm.
+            # Optional in code (`ValidateAudience = audience is not null`) but set here deliberately:
+            # a token minted for any *other* client is rejected rather than merely trusted because it
+            # came from the same realm.
+            #
+            # `22-06`: `ago-console`, not `ago-calendar-console`. The calendar's screens are part of
+            # the one console now, which presents a token minted for the `ago-console` client - and
+            # that client already carries its own `oidc-audience-mapper` stamping `ago-console` into
+            # `aud`, so this needs no Keycloak change at all (checked in the realm import, not assumed).
+            #
+            # **Switched in one step rather than accepting both during a transition**, which is a
+            # deliberate departure from this stage's own rollout order (`roadmap.md`, "widen before
+            # narrowing"). The reason that rule exists is to leave an overlap to verify in - but
+            # `ValidAudience` here is single-valued, so accepting both would mean a code change in
+            # `Ago.Calendar.Api` for a fallback to a console being retired by this very item, with no
+            # real users to protect. The old console stops being able to call this API the moment this
+            # lands; that is the intent, not a side effect.
             - name: Operator__Audience
-              value: "ago-calendar-console"
+              value: "ago-console"
             # `5-18`'s equivalent for this product - `TenantOriginCorsPolicyProvider` reads this list
             # via `ConsoleOrigins`. Without it every console connection would be rejected by CORS
-            # before the request-scoped, per-tenant database check ever runs. `calendar-console.` is
-            # this item's own hostname proposal (report: "flagged as such") - not a settled name.
-            # `localhost:5173` is `ago-calendar-console`'s own Vite dev server default, kept so a
-            # developer running the console locally against this API works with no second setting -
-            # same convenience `Console__AllowedOrigins__1` gives `ago-console`.
+            # before the request-scoped, per-tenant database check ever runs.
+            #
+            # `22-06`/`22-10`: `office.` is the one console's hostname, so it is the origin the
+            # calendar API has to allow. `calendar.` is gone from this list - the bundle still served
+            # there is frozen and about to be retired by `22-09`, and it could not authenticate
+            # against this API anyway now that `Operator__Audience` names the other client.
+            #
+            # **A missing origin here does not look like a configuration error.** `15-14` exists
+            # because exactly this class of mistake produced a console that held a websocket and could
+            # not fetch anything, while 43 smoke checks stayed green.
+            #
+            # `localhost:5173` is the Vite dev server default, kept so a developer running the console
+            # locally against this API works with no second setting - the same convenience
+            # `Console__AllowedOrigins__1` gives `ago-console`.
             - name: Operator__ConsoleOrigins__0
-              value: "https://calendar.reserve-me.ru"
+              value: "https://office.reserve-me.ru"
             - name: Operator__ConsoleOrigins__1
               value: "http://localhost:5173"
             # `adr/0090`/`20-19`: "ships disabled and stays disabled." `PublicBookingApiOptions.Enabled`

@@ -173,7 +173,13 @@ spec:
             matchExpressions:
               - key: app
                 operator: In
-                values: [ago-chat-api, ago-chat-worker, ago-chat-webhooks]
+                # `22-13`/`22-05`: `ago-calendar-worker` added - it consumes `ago-chat`'s own
+                # `RoleAssignmentsChanged` off this broker, the first time anything outside
+                # `Ago.Chat.*` has needed it. `ago-calendar-api` is deliberately **not** here: it
+                # loads the same module and therefore carries the same three settings, but it
+                # resolves no publisher or consumer and `RabbitMqConnection` is lazy, so it never
+                # dials. An ingress allowance added for symmetry is one nobody removes later.
+                values: [ago-chat-api, ago-chat-worker, ago-chat-webhooks, ago-calendar-worker]
         - ipBlock:
             cidr: 10.42.0.1/32
         - ipBlock:

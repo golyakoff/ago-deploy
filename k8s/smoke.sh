@@ -218,6 +218,44 @@ else
 fi
 
 echo
+echo "Calendar role projection"
+# `22-13`/`22-05`: the calendar learns who may do what by consuming `ago-chat`'s own
+# `RoleAssignmentsChanged` off RabbitMQ. Everything about that is quiet when it breaks - a worker that
+# cannot reach the broker keeps running, keeps passing its own probes, and simply never projects a role
+# change; the operator's calendar screens then say "you have no permissions here" and nothing anywhere
+# says why. That is the failure this section exists for, and it is the fourth Done-when of `22-13`:
+# a pod that will not start is loud, a pod that started and is not subscribed is not.
+#
+# Asserting on the *queue and its consumer*, not on pod health, is the whole point. `Ago.Platform.
+# Messaging.RabbitMq.RabbitMqEventConsumer` names a competing-mode queue `<topic>.<consumerName>`, so
+# `Ago.Calendar.Worker`'s subscription is exactly the name below - it exists only once that worker has
+# actually connected and declared it, and it carries a consumer only while one is attached. A missing
+# queue means the worker never reached the broker (no credentials, blocked by `network-policies.yaml`,
+# wrong vhost); a queue with zero consumers means it connected once and is not listening now.
+CAL_QUEUE="RoleAssignmentsChanged.calendar-role-assignment-projection"
+if command -v kubectl >/dev/null 2>&1 && kubectl get ns "$NS" >/dev/null 2>&1; then
+  queues=$(kubectl exec -n "$NS" deployment/rabbitmq -- \
+    rabbitmqctl list_queues --quiet --no-table-headers name consumers 2>/dev/null)
+  if [ -z "$queues" ]; then
+    bad "could not list RabbitMQ queues - rabbitmqctl answered nothing, so this check proves nothing either way"
+  else
+    line=$(echo "$queues" | awk -v q="$CAL_QUEUE" '$1 == q { print }')
+    if [ -z "$line" ]; then
+      bad "no queue named ${CAL_QUEUE} - Ago.Calendar.Worker has never reached the broker (credentials, network policy, or vhost), so no role change can ever arrive"
+    else
+      consumers=$(echo "$line" | awk '{ print $2 }')
+      if [ "${consumers:-0}" -ge 1 ]; then
+        ok "the calendar's role-projection queue exists and has ${consumers} consumer(s) attached"
+      else
+        bad "queue ${CAL_QUEUE} exists but has no consumer - the worker connected at some point and is not listening now; role changes are piling up unprojected"
+      fi
+    fi
+  fi
+else
+  skip "calendar role-projection queue check (needs cluster access - run this on the node)"
+fi
+
+echo
 echo "Operator hub"
 # `5-18`: the check that would have caught the console never connecting - and the reason it does more
 # than negotiate is that **negotiate succeeded the whole time it was broken**.

@@ -181,13 +181,15 @@ kind: HTTPRoute
 metadata:
   name: ago-chat-api
 spec:
+  # `adr/0091` step 3, 2026-09-03: `chat.` is gone from here. The API answered on both names for one
+  # release so every consumer could move and be verified on `chat-api.` first - the widget's build
+  # default, the console's `.env.production`, both demo images, `smoke.sh`. All were moved, deployed
+  # and checked live (zero occurrences of the bare `chat.` origin in any served bundle) before this
+  # line was deleted, which is what made deleting it a non-event rather than a cutover.
   parentRefs:
-    - name: ago-chat-gateway
-      sectionName: https-chat
     - name: ago-chat-gateway
       sectionName: https-chat-api
   hostnames:
-    - chat.reserve-me.ru
     - chat-api.reserve-me.ru
   rules:
     # Same three prefixes as overlays/local/gateway.yaml - unchanged by the public/TLS shift, only the
@@ -277,10 +279,21 @@ kind: HTTPRoute
 metadata:
   name: ago-console
 spec:
+  # `adr/0091` step 3: the bare product name now belongs to the human-facing console, which is the
+  # whole point of that decision - `chat.reserve-me.ru` is the address a customer would guess, and
+  # `console.` was a role word with no product in it.
+  #
+  # **`console.` stays for one more release on purpose.** A bookmark, a link somebody was sent, and
+  # the operator-login button on the landing page all still name it; deleting the two at once would
+  # make every one of them fail on the same day. Removing it - here, from the certificate's SAN list,
+  # from the Keycloak client's redirect URIs, and from DNS - is the release after this one.
   parentRefs:
+    - name: ago-chat-gateway
+      sectionName: https-chat
     - name: ago-chat-gateway
       sectionName: https-console
   hostnames:
+    - chat.reserve-me.ru
     - console.reserve-me.ru
   rules:
     # ago-console Service: console-static.yaml (8-02), port 80 matching every other Service in

@@ -81,6 +81,25 @@ spec:
             # separate `operators` tables, unified only through the validated `sub`.
             - name: Operator__Authority
               value: "http://keycloak:8080/realms/ago-chat"
+            # **Required because the authority above is `http://`.** JwtBearer refuses a non-HTTPS
+            # authority unless this is off, and `AuthenticationSetup` defaults it to `true` - so
+            # without this line the host boots, then throws on the first request that reaches the
+            # authentication middleware, which is every request including the startup probe. The pod
+            # restart-loops with a 500 rather than failing at startup, which reads as a broken app
+            # rather than a missing setting. Found by deploying (`20-20`); nothing short of a real
+            # deploy would have caught it, because the value is right in every local compose run.
+            #
+            # `Ago.Chat.Api` has the same in-cluster authority and defaults its own equivalent to
+            # `false` (Program.cs: "no host in this project terminates TLS internally"), which is why
+            # that host never hit this. Stating it here rather than changing the calendar's default
+            # keeps the safe default in code and puts the deployment fact where the deployment is
+            # described - the same choice `ago-root#354` made for the environment name.
+            #
+            # Safe here specifically: `keycloak:8080` is a ClusterIP Service address, so the metadata
+            # request never leaves the pod network. TLS terminates at the Gateway, and the public
+            # `auth.reserve-me.ru` name is what the *browser* uses - see `edge.md`.
+            - name: Operator__RequireHttpsMetadata
+              value: "false"
             # Optional in code (`ValidateAudience = audience is not null`) but set here deliberately,
             # mirroring `ago-console`'s own client exactly: `keycloak-realm-import.json`'s new
             # `ago-calendar-console` client carries an `oidc-audience-mapper` stamping this same string

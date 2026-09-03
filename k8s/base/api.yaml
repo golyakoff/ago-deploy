@@ -197,9 +197,16 @@ spec:
             # nothing about whether the console can reach the API from its new origin. It could not -
             # every operator connection would have been dropped after the handshake, exactly as the
             # paragraph above describes, and nothing would have said so.
+            # `22-10`: `office.` is added *alongside* `chat.`, never instead of it. A single-value
+            # switch would drop every operator connection from the old name the instant the new one
+            # worked, with no overlap to verify in - and the failure presents as a hub that closes
+            # after the handshake, which is exactly the shape `5-18` exists because of. The old entry
+            # goes when `chat.` retires, in this item's last step.
             - name: Console__AllowedOrigins__0
-              value: "https://chat.reserve-me.ru"
+              value: "https://office.reserve-me.ru"
             - name: Console__AllowedOrigins__1
+              value: "https://chat.reserve-me.ru"
+            - name: Console__AllowedOrigins__2
               value: "http://localhost:5173"
             - name: Otel__Exporter__Endpoint
               value: "http://jaeger:4317"

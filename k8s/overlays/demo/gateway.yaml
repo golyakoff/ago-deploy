@@ -58,6 +58,22 @@ spec:
       port: 80
       protocol: HTTP
       hostname: reserve-me.ru
+    # `22-10`/`adr/0093`: the console's own name, and the reason it is not a product name. There is no
+    # console per product any more, so `adr/0091`'s rule - the bare product name belongs to that
+    # product's console - describes a thing that stopped existing; `office.` is a hostname no product
+    # can claim.
+    #
+    # It goes up *beside* `https-chat` rather than replacing it. Both names serve the console while
+    # the move is verified, and `chat.` retires in this item's own last step, once a real sign-in at
+    # `office.` has been seen - not once it returns 200, which `20-20` already proved means nothing.
+    - name: https-office
+      port: 443
+      protocol: HTTPS
+      hostname: office.reserve-me.ru
+      tls:
+        mode: Terminate
+        certificateRefs:
+          - name: ago-public-tls
     - name: https-chat
       port: 443
       protocol: HTTPS
@@ -287,10 +303,17 @@ spec:
   # the operator-login button on the landing page all still name it; deleting the two at once would
   # make every one of them fail on the same day. Removing it - here, from the certificate's SAN list,
   # from the Keycloak client's redirect URIs, and from DNS - is the release after this one.
+  # `22-10`: two parents and two hostnames, deliberately, for the length of the move. The same
+  # bundle answers at both names, so a bookmark keeps working while `office.` is proven. Retiring
+  # `chat.` is removing one entry from each of these two lists - and then, in strict order, the
+  # certificate SAN and only after that the A-record.
   parentRefs:
+    - name: ago-chat-gateway
+      sectionName: https-office
     - name: ago-chat-gateway
       sectionName: https-chat
   hostnames:
+    - office.reserve-me.ru
     - chat.reserve-me.ru
   rules:
     # ago-console Service: console-static.yaml (8-02), port 80 matching every other Service in

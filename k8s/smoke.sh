@@ -114,13 +114,12 @@ fi
 
 echo
 echo "Calendar API"
-# `20-20`: the same three checks every other host gets - answers, reports its commit, tag matches the
-# binary - with one real difference from the "API" section above, named rather than silently narrowed:
-# `Ago.Calendar.Api` has no `/healthz/ready` and no `/healthz/version` (confirmed against the
-# `ago-calendar` source at the pinned commit - `Program.cs` maps no health route at all, only a bare
-# `GET /` returning the loaded module's name). So "answers" is real; "reports its commit" and "tag
-# matches the binary" are not checkable today and are SKIPped rather than faked against `GET /`, which
-# carries no commit information to compare.
+# `20-20`/`20-24`: the same checks every other host gets - answers, reports its commit, tag matches the
+# binary, dependencies answer - now for real. `20-20` found `Ago.Calendar.Api` mapping no health route
+# at all, only a bare `GET /` returning the loaded module's name, and SKIPped the commit/tag checks
+# rather than faking them against a route with no commit information to compare. `20-24` closed that:
+# `Program.cs` now maps `/healthz/live`, `/healthz/ready` and `/healthz/version` the same way
+# `Ago.Chat.Api` does (`3-06`/`15-06`), so the two checks that used to SKIP below are real now.
 # **This check used to hit `calendar.`, which is the console.** It was written before the naming
 # settled (see this file's own note at the frontends list below) and never moved, so it asserted the
 # API was up by fetching a static SPA - which answers 200 to everything, including while the API is
@@ -166,8 +165,31 @@ c=$(code "https://calendar.${DOMAIN}/")
 [ "$c" = "200" ] && ok "calendar console answers" \
                  || bad "calendar console did not answer (got $c)"
 
-skip "calendar API self-reported commit (Ago.Calendar.Api maps no /healthz/version - 20-20's own report names this gap)"
-skip "calendar API image-tag-vs-commit match (needs the check above)"
+c=$(code "https://calendar-api.${DOMAIN}/healthz/ready")
+[ "$c" = "200" ] && ok "calendar API healthz/ready 200 (Postgres, Redis both answered)" || bad "calendar API healthz/ready returned $c"
+
+# `20-24`: the check that would have caught a stale or mismatched calendar image - `20-20`'s own gap,
+# closed the same way `15-06` closed it for `Ago.Chat.Api`. The commit comes out of the compiled binary
+# (`BuildInfoResponse` / `-p:SourceRevisionId`), not out of a manifest, so this says what is running
+# rather than what was asked for.
+version=$(curl -s --max-time 20 "https://calendar-api.${DOMAIN}/healthz/version")
+commit=$(echo "$version" | sed -n 's/.*"commit":"\([^"]*\)".*/\1/p')
+if [ -z "$commit" ]; then
+  bad "calendar API healthz/version answered nothing usable - a pre-20-24 image is deployed, and it cannot name its own commit"
+elif [ "$commit" = "unknown" ]; then
+  bad "calendar API healthz/version reports commit=unknown - built without GIT_COMMIT, so this deploy is unidentifiable"
+else
+  ok "calendar API reports commit ${commit:0:7} (built from a known source tree)"
+  tag=$(kubectl get deployment ago-calendar-api -n "$NS" \
+        -o jsonpath='{.spec.template.spec.containers[0].image}' 2>/dev/null | sed 's/.*://')
+  if [ -z "$tag" ]; then
+    skip "calendar API image-tag comparison (needs cluster access)"
+  elif [ "$tag" = "$commit" ]; then
+    ok "the calendar API image tag matches the commit inside the binary"
+  else
+    bad "calendar API image tag ${tag:0:12} but the binary reports ${commit:0:12} - the tag is lying about its contents"
+  fi
+fi
 
 echo
 echo "Operator hub"

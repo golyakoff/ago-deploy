@@ -47,6 +47,12 @@ spec:
             - secretRef:
                 name: infra-credentials
           env:
+            # `ago-root#354`: same reasoning as api.yaml's own comment, set uniformly across every
+            # serving host rather than only where a dev-only route is mapped today - a manifest that
+            # only carries this where it currently matters is one refactor away (a future dev-only
+            # route added to this host) from inheriting an unstated framework default again.
+            - name: ASPNETCORE_ENVIRONMENT
+              value: "Production"
             # Same requirement as ago-chat-api - see the comment there.
             - name: AGO_CHAT_CONNECTION_STRING
               value: "Host=postgres;Port=5432;Database=$(POSTGRES_DB);Username=$(POSTGRES_USER);Password=$(POSTGRES_PASSWORD)"

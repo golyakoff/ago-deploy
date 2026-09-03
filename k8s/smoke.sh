@@ -183,8 +183,46 @@ done
 # checks pair a positive with a nonsense-path control (`20-24`). The control for this one is the
 # dev-endpoint 404s directly above: they prove this host answers 404 for things that are not there, so
 # a 401 here means refused rather than missing.
-c=$(curl -s --max-time 20 -o /dev/null -w "%{http_code}" -X POST   -H "Content-Type: application/json" -d '{}' "https://calendar-api.${DOMAIN}/api/v1/module-tasks/")
-[ "$c" = "401" ] && ok "calendar module channel refuses an unauthenticated call (401, not 404 - refused rather than missing)"                  || bad "calendar module channel answered $c to an anonymous POST - 200 means it is open, 404 means the route moved and this check now proves nothing, 500 means it got past authentication into handler logic"
+# `22-18`: **this check inverted, and the inversion is the point.** It used to assert 401 from the
+# public host - refused rather than missing - which was right while the channel was published. It is
+# not published any more: chat reaches this API by Service DNS inside the cluster, so from outside
+# these two prefixes must be *absent*, and a 401 here would now mean the route came back.
+#
+# The 401 has not stopped mattering, it moved: it is asserted from inside the cluster below, where the
+# channel actually lives. Both halves are needed - "absent outside" alone would also pass against an
+# API that had stopped serving the channel entirely.
+for p in module-tasks module-registrations/00000000-0000-0000-0000-000000000000; do
+  c=$(curl -s --max-time 20 -o /dev/null -w "%{http_code}" -X POST -H "Content-Type: application/json" -d '{}' "https://calendar-api.${DOMAIN}/api/v1/${p}")
+  [ "$c" = "404" ] && ok "calendar ${p%%/*} is not served publicly (404 - the channel is inside the cluster, 22-18)" \
+                   || bad "calendar ${p%%/*} answered $c from the public host - it should not be routed there at all; 401 means the route is back and the provisioning secret is reachable from the internet"
+done
+
+if command -v kubectl >/dev/null 2>&1 && kubectl get ns "$NS" >/dev/null 2>&1; then
+  # In-cluster, where the channel does live. 401 rather than 404, for the same reason the public check
+  # used to make: a refusal has to stay distinguishable from an unmapped route, or nothing built on it
+  # can tell "protected" from "gone".
+  #
+  # Reached by the Service's ClusterIP from the node rather than by `kubectl exec` into a pod. The
+  # obvious form - exec into `ago-chat-api`, the one process that legitimately makes this call - does
+  # not work and fails *silently*: that image is Chiseled (`8-00`) and has no curl, so the exec
+  # produces an empty body and this check would compare "" against 401 and report a failure that is
+  # about the image rather than the channel. Tried, observed, and replaced rather than worked around.
+  #
+  # k3s programs Service ClusterIPs into the node's own iptables, so the node reaches them directly -
+  # verified before relying on it. The address is resolved at run time; never hardcode it, it changes
+  # whenever the Service is recreated.
+  cal_ip=$(kubectl get svc ago-calendar-api -n "$NS" -o jsonpath='{.spec.clusterIP}' 2>/dev/null)
+  if [ -z "$cal_ip" ]; then
+    bad "could not resolve ago-calendar-api's ClusterIP - this check proves nothing either way"
+  else
+    c=$(curl -s --max-time 10 -o /dev/null -w "%{http_code}" -X POST \
+          -H "Content-Type: application/json" -d '{}' "http://${cal_ip}/api/v1/module-tasks/")
+    [ "$c" = "401" ] && ok "calendar module channel refuses an unauthenticated in-cluster call (401, not 404 - refused rather than missing)" \
+                     || bad "calendar module channel answered $c to an anonymous in-cluster POST - 200 means it is open, 404 means the route moved and this check now proves nothing, 500 means it got past authentication into handler logic"
+  fi
+else
+  skip "in-cluster module-channel refusal (needs cluster access - run this on the node)"
+fi
 
 # The console is a separate host and gets its own check rather than standing in for the API.
 c=$(code "https://calendar.${DOMAIN}/")

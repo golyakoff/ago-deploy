@@ -391,11 +391,46 @@ spec:
       sectionName: https-calendar
   hostnames:
     - calendar-api.reserve-me.ru
+  # `22-18`: the public surface is enumerated rather than left as `PathPrefix /`, because two prefixes
+  # must not be on it. `/api/v1/module-tasks` (`adr/0065`) and `/api/v1/module-registrations`
+  # (`adr/0095`) are the chat-to-module channel: chat and this API run in the same cluster and can
+  # reach each other by Service DNS, so those calls never need to leave the pod network - and the
+  # provisioning routes are authenticated by a **deployment-wide** secret whose holder can register,
+  # rotate or delete the registration for *any* site this deployment serves (`adr/0095`'s own
+  # Consequences). Publishing them buys nothing and costs that.
+  #
+  # Gateway API has no negative matcher, so exclusion means listing what stays. That is the risk in
+  # this change and it is stated rather than hidden: a prefix omitted here stops being served, and the
+  # failure looks like a broken screen rather than a routing change. The list below was read out of
+  # `Ago.Calendar.Api/Program.cs`'s own registrations rather than assumed:
+  #
+  #   /                       the module-name probe (`MapGet("/", () => module.Name)`) - Exact, not a
+  #                           prefix, precisely so it cannot re-admit everything beneath it
+  #   /healthz                live, ready, version
+  #   /api/v1/console         the operator console (`MapConsoleEndpoints`)
+  #   /api/v1/calendars       booking and phone verification
+  #   /api/v1/embed           the public booking surface (`adr/0090` - gated off in code, routed anyway
+  #                           so enabling it is a configuration change and not also a routing one)
+  #
+  # `/dev/*` is deliberately absent: those endpoints map only outside Production (`ago-root#354`), and
+  # smoke.sh asserts they 404. A route for them would make that check prove less, not more.
   rules:
     - matches:
         - path:
-            type: PathPrefix
+            type: Exact
             value: /
+        - path:
+            type: PathPrefix
+            value: /healthz
+        - path:
+            type: PathPrefix
+            value: /api/v1/console
+        - path:
+            type: PathPrefix
+            value: /api/v1/calendars
+        - path:
+            type: PathPrefix
+            value: /api/v1/embed
       backendRefs:
         - name: ago-calendar-api
           port: 80

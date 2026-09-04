@@ -122,6 +122,14 @@ spec:
                     ago-calendar-api,
                     ago-calendar-worker,
                     ago-calendar-migrator,
+                    # `22-27`: and it was relearned anyway. `22-16` shipped
+                    # `Ago.Chat.RoleAssignmentBackfill` - a workload that talks to Postgres - and did
+                    # not add it here, so the Job failed with "Failed to connect" against a Postgres
+                    # that was accepting connections, exactly as `8-08`'s migrator did. The sentence
+                    # above was already on the page. Being written down is not the same as being
+                    # checked, and nothing checks this: the list is a hand-kept mirror of a fact that
+                    # lives in the manifests.
+                    ago-chat-roleassignment-backfill,
                   ]
         - ipBlock:
             cidr: 10.42.0.1/32

@@ -411,6 +411,16 @@ spec:
   #   /api/v1/calendars       booking and phone verification
   #   /api/v1/embed           the public booking surface (`adr/0090` - gated off in code, routed anyway
   #                           so enabling it is a configuration change and not also a routing one)
+  #   /api/v1/me              which shops this identity can reach a calendar in (`22-14`/`adr/0100`),
+  #                           called by the console from the browser, so it belongs with
+  #                           `/api/v1/console` rather than with the module channel
+  #
+  # `22-23`: that last line was added the same day `22-18` landed, and its absence would have been the
+  # first proof of the risk stated above. `22-14` gave `Ago.Calendar.Api` a new browser-facing route a
+  # few hours after this list was read out of `Program.cs`, and neither item could see the other: the
+  # route would have 404ed at the gateway, and the console would have rendered "you have no calendar" -
+  # which is the exact symptom `22-14` exists to remove. **A route added to that host is not served
+  # until it is named here.**
   #
   # `/dev/*` is deliberately absent: those endpoints map only outside Production (`ago-root#354`), and
   # smoke.sh asserts they 404. A route for them would make that check prove less, not more.
@@ -431,6 +441,9 @@ spec:
         - path:
             type: PathPrefix
             value: /api/v1/embed
+        - path:
+            type: PathPrefix
+            value: /api/v1/me
       backendRefs:
         - name: ago-calendar-api
           port: 80

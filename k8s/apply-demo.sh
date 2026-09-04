@@ -87,6 +87,51 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 kc() { if kubectl version >/dev/null 2>&1; then kubectl "$@"; else sudo k3s kubectl "$@"; fi; }
 step() { printf "\n\033[1m== %s\033[0m\n" "$1"; }
 
+# `22-24`: **refuse to roll a deployment backwards.** `redeploy.sh` moves images imperatively with
+# `kubectl set image` and closes by asking the operator to commit the tags it just used. Until that
+# commit happens the manifest still pins the *previous* tags, so `apply -k` on top of a redeploy is
+# not a no-op - it is a rollback, silently, ending in a success message.
+#
+# That happened on 2026-09-04. A redeploy moved three chat hosts, two calendar hosts and the console
+# forward; this script ran next; every one of them went back to the tag in the file. The migrations
+# had already been applied forward, so the cluster ran older code against a newer schema until it was
+# noticed. `redeploy.sh`'s own smoke had passed minutes earlier - against the pods that were then
+# replaced - and the only visible symptom was one failing check whose cause was three layers away.
+#
+# The check is a set comparison rather than a per-deployment one, deliberately: mapping a rendered
+# manifest back to each Deployment needs indentation-sensitive parsing that fails quietly, and the
+# question here does not need it. "Would this apply introduce an image tag that is nothing is running
+# right now?" is enough to catch a rollback, and it cannot mis-attribute.
+#
+# `--force-rollback` keeps a deliberate rollback possible while an accidental one is not.
+FORCE_ROLLBACK=0
+for arg in "$@"; do [ "$arg" = "--force-rollback" ] && FORCE_ROLLBACK=1; done
+
+step "Comparing the manifest's image tags against what is running"
+manifest_imgs="$(kc kustomize "$HERE/overlays/demo" 2>/dev/null   | grep -oE "image: ghcr\.io/golyakoff/[a-z-]+:[0-9a-f]{40}" | sed 's/image: //' | sort -u)"
+running_imgs="$(kc get deploy,job -n "$NS"   -o jsonpath='{range .items[*]}{.spec.template.spec.containers[0].image}{"
+"}{end}'   | grep -E "^ghcr\.io/golyakoff/" | sort -u)"
+would_introduce="$(comm -23 <(printf '%s
+' "$manifest_imgs") <(printf '%s
+' "$running_imgs"))"
+
+if [ -n "$would_introduce" ]; then
+  echo "   this apply would move these to a tag nothing is running:" >&2
+  printf '%s
+' "$would_introduce" | sed 's|ghcr.io/golyakoff/|     |' >&2
+  if [ "$FORCE_ROLLBACK" = "1" ]; then
+    echo "   --force-rollback given, continuing." >&2
+  else
+    echo >&2
+    echo "   Refusing to apply. If a redeploy just ran, the manifest is behind the cluster:" >&2
+    echo "   commit the tags it used (its own \"Keep the manifest honest\" note) and run this again." >&2
+    echo "   If you really do mean the tags in the file: $0 --force-rollback" >&2
+    exit 1
+  fi
+else
+  echo "   every image the manifest pins is already running"
+fi
+
 step "Clearing finished migrator Jobs out of apply -k's way"
 for job in ago-chat-migrator ago-calendar-migrator; do
   if ! kc get job "$job" -n "$NS" >/dev/null 2>&1; then

@@ -197,6 +197,19 @@ for p in module-tasks module-registrations/00000000-0000-0000-0000-000000000000;
                    || bad "calendar ${p%%/*} answered $c from the public host - it should not be routed there at all; 401 means the route is back and the provisioning secret is reachable from the internet"
 done
 
+# `22-23`: the other half of `22-18`'s own stated risk - "a prefix omitted here stops being served,
+# and the failure looks like a broken screen rather than a routing change". `22-14` added
+# `/api/v1/me/tenancies` to this host hours after that list was read out of `Program.cs`, and the
+# console calls it from the browser. Absent from the gateway it would 404, and the console would
+# render "you have no calendar" - the exact symptom `22-14` exists to remove, arriving as a design
+# regression nobody would have traced to a routing change.
+#
+# **401, not 404, and that is the whole check.** Unauthenticated it must be *refused*, which proves
+# the route is served; a 404 here means it was left out of the kept-prefix list again. The control is
+# the same one the block above relies on: this host answers 404 for things that are not there.
+c=$(curl -s --max-time 20 -o /dev/null -w "%{http_code}" "https://calendar-api.${DOMAIN}/api/v1/me/tenancies")
+[ "$c" = "401" ] && ok "calendar /api/v1/me/tenancies is served and refuses an anonymous caller (401, 22-14/22-23)"                  || bad "calendar /api/v1/me/tenancies answered $c - 404 means the gateway is not routing it and the console's 'your calendar is in another shop' notice is silently dead"
+
 if command -v kubectl >/dev/null 2>&1 && kubectl get ns "$NS" >/dev/null 2>&1; then
   # In-cluster, where the channel does live. 401 rather than 404, for the same reason the public check
   # used to make: a refusal has to stay distinguishable from an unmapped route, or nothing built on it

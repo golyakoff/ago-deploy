@@ -103,22 +103,28 @@ step() { printf "\n\033[1m== %s\033[0m\n" "$1"; }
 # question here does not need it. "Would this apply introduce an image tag that is nothing is running
 # right now?" is enough to catch a rollback, and it cannot mis-attribute.
 #
+# **Deployments only, not Jobs.** The migrator Jobs are deleted and recreated by this very script,
+# and `8-08` ties their tags to their hosts', so between a redeploy and this apply they legitimately
+# carry the older tag - including them made the guard refuse a correct forward apply. Found by
+# running it, not by reasoning about it.
+#
+# A migrator image appears *only* in a Job, never in a Deployment, so it has to leave the manifest
+# side of the comparison as well - otherwise it is permanently "not running" and the guard refuses
+# every apply. That is the second thing running it taught: the guard protects the workloads that
+# serve traffic, and the migrator is recreated from the manifest on every run by design.
+#
 # `--force-rollback` keeps a deliberate rollback possible while an accidental one is not.
 FORCE_ROLLBACK=0
 for arg in "$@"; do [ "$arg" = "--force-rollback" ] && FORCE_ROLLBACK=1; done
 
 step "Comparing the manifest's image tags against what is running"
-manifest_imgs="$(kc kustomize "$HERE/overlays/demo" 2>/dev/null   | grep -oE "image: ghcr\.io/golyakoff/[a-z-]+:[0-9a-f]{40}" | sed 's/image: //' | sort -u)"
-running_imgs="$(kc get deploy,job -n "$NS"   -o jsonpath='{range .items[*]}{.spec.template.spec.containers[0].image}{"
-"}{end}'   | grep -E "^ghcr\.io/golyakoff/" | sort -u)"
-would_introduce="$(comm -23 <(printf '%s
-' "$manifest_imgs") <(printf '%s
-' "$running_imgs"))"
+manifest_imgs="$(kc kustomize "$HERE/overlays/demo" 2>/dev/null   | grep -oE "image: ghcr\.io/golyakoff/[a-z-]+:[0-9a-f]{40}" | sed 's/image: //'   | grep -v -- "-migrator:" | sort -u)"
+running_imgs="$(kc get deploy -n "$NS"   -o jsonpath='{range .items[*]}{.spec.template.spec.containers[0].image}{"\n"}{end}'   | grep -E "^ghcr\.io/golyakoff/" | sort -u)"
+would_introduce="$(comm -23 <(printf '%s\n' "$manifest_imgs") <(printf '%s\n' "$running_imgs"))"
 
 if [ -n "$would_introduce" ]; then
   echo "   this apply would move these to a tag nothing is running:" >&2
-  printf '%s
-' "$would_introduce" | sed 's|ghcr.io/golyakoff/|     |' >&2
+  printf '%s\n' "$would_introduce" | sed 's|ghcr.io/golyakoff/|     |' >&2
   if [ "$FORCE_ROLLBACK" = "1" ]; then
     echo "   --force-rollback given, continuing." >&2
   else

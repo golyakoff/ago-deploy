@@ -44,7 +44,12 @@ if ! git -C "$CHAT_REPO" diff --quiet HEAD 2>/dev/null; then
   echo "WARNING: $CHAT_REPO has uncommitted changes - ${GIT_COMMIT:0:7} will not describe what is in this image." >&2
 fi
 
-for project in Ago.Chat.Api Ago.Chat.Worker Ago.Chat.Webhooks Ago.Chat.Migrator; do
+# `22-27`: the backfill joins the list so its image exists wherever the hosts' images do. It is a
+# one-shot corrective rather than a serving workload, so it gets no Deployment and is not in the
+# overlay - `backfill-job.yaml` beside this script is applied by hand when it is needed. Building
+# it here anyway is the cheap half: `22-26` found the image could not be built at all, and the
+# reason nobody noticed is that nothing built it.
+for project in Ago.Chat.Api Ago.Chat.Worker Ago.Chat.Webhooks Ago.Chat.Migrator Ago.Chat.RoleAssignmentBackfill; do
   name="$(echo "$project" | sed 's/Ago\.Chat\.//' | tr '[:upper:]' '[:lower:]')"
   image="${IMAGE_REPO:+${IMAGE_REPO}/}ago-chat-${name}:${IMAGE_TAG}"
   echo "Building ${image} from ${project} (commit ${GIT_COMMIT:0:7})..."

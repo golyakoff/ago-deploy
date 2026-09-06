@@ -7,6 +7,10 @@ resources:
   - ../../base
   - gateway.yaml
   - tls.yaml
+  # `22-24`/`adr/0137`: the internal CA and the one leaf certificate it signs - TLS for the chat ->
+  # calendar module hop, and nothing else. See that file's own header for why this is a namespaced
+  # `Issuer` and a bring-your-own-CA secret rather than cert-manager's own self-signed pattern.
+  - internal-tls.yaml
   # 8-02: static-file-serving Deployments/Services for the console bundle, the widget's own public
   # demo pages, and the public marketing page at the apex - demo-overlay-only, see each file's own
   # header comment for why none of these belong in ../../base.
@@ -45,6 +49,33 @@ secretGenerator:
   # single-line-JSON constraint that implies is explained in the .example file.
   - name: telegram-relay-credentials
     envs: [.env.telegram-relay]
+  # `22-24`/`adr/0137`: the internal CA's key pair, as a real `kubernetes.io/tls` Secret - `files:`,
+  # not `envs:`, because a PEM has literal newlines the KEY=VALUE-per-line `.env` format cannot carry
+  # (contrast `.env.telegram-relay`'s single-line-JSON workaround for the same constraint). `tls.crt`
+  # is the real, committed `internal-ca.crt`; `tls.key` is `internal-ca.key`, gitignored, supplied
+  # before this overlay is ever applied for real - see `internal-ca.key.example`'s own bootstrap
+  # sequence. `internal-tls.yaml`'s own `Issuer` reads this Secret as-is and signs the one leaf
+  # `22-24` scopes to.
+  #
+  # `disableNameSuffixHash: true`, unlike both generators above - found by actually rendering this
+  # overlay rather than assumed. kustomize's hash suffix exists to roll a Deployment automatically
+  # when a referenced Secret's content changes, and it rewrites that reference automatically only in
+  # the built-in fields it knows (a Volume's `secret.secretName`, `envFrom.secretRef.name` - see
+  # `telegram-relay-credentials` above, correctly rewritten in the rendered output). `Issuer.spec.ca.
+  # secretName` is a cert-manager CRD field kustomize's name-reference transformer does not know, so a
+  # hashed name here would leave `internal-tls.yaml`'s `Issuer` pointing at a Secret name that does not
+  # exist - confirmed by rendering with the hash still enabled before this line was added. A fixed
+  # name is also the right shape for what this Secret actually is: `secrets.md`'s Section D lists
+  # cert-manager's own ACME account key the identical way, "never rotated by this hash mechanism, by
+  # design" - this CA's own rotation is manual and rare (see `internal-ca.key.example`), not something
+  # a content-hash roll should try to automate.
+  - name: ago-internal-ca
+    type: kubernetes.io/tls
+    files:
+      - tls.crt=internal-ca.crt
+      - tls.key=internal-ca.key
+    options:
+      disableNameSuffixHash: true
 
 # `15-03`. NOTE THAT NOTHING WAS ADDED TO .env OR .env.example BY THIS ITEM, and the absence is the
 # point rather than an omission: the notification channel is the node's own Postfix over the cluster
@@ -474,3 +505,70 @@ patches:
           - "--hostname-strict=false"
           - "--proxy-headers=xforwarded"
           - "--http-enabled=true"
+
+  # `22-24`/`adr/0137`: a second Kestrel endpoint on `ago-calendar-api`, not a replacement for the
+  # first. `gateway.yaml`'s own HTTPRoutes still forward plain HTTP to this Service's port 80/8080,
+  # exactly as `adr/0014`'s public edge already decided - that boundary is untouched by this change.
+  # Port 8443 exists only for a caller inside this namespace that wants the encrypted listener, which
+  # is the module channel and nothing else today (see this item's own report for how far it reaches).
+  #
+  # Both endpoints are named explicitly (`Kestrel:Endpoints:Http`/`:Https`) rather than leaving `Http`
+  # to the base image's own `ASPNETCORE_HTTP_PORTS=8080` default: ASP.NET Core's own documented
+  # endpoint-configuration precedence is that once any `Kestrel:Endpoints:*` key exists in
+  # configuration, it is what Kestrel binds from - an implicit default is not a safe thing to keep
+  # relying on once one explicit endpoint is added. Stating both is what keeps the startup/
+  # readiness/liveness probes on 8080 working exactly as they do today, unchanged - no code change,
+  # this is Kestrel's own configuration-driven endpoint binding, which `Ago.Calendar.Api/Program.cs`
+  # never overrides (checked before writing this patch, not assumed).
+  #
+  # `internal-tls`: mounts `ago-calendar-api-internal-tls`, the leaf Certificate `internal-tls.yaml`
+  # issues off this cluster's own root CA. A Secret volume, not a write this container performs -
+  # `readOnlyRootFilesystem: true` above is unaffected.
+  - target:
+      kind: Deployment
+      name: ago-calendar-api
+    patch: |
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: ago-calendar-api
+      spec:
+        template:
+          spec:
+            containers:
+              - name: api
+                ports:
+                  - containerPort: 8443
+                env:
+                  - name: Kestrel__Endpoints__Http__Url
+                    value: "http://+:8080"
+                  - name: Kestrel__Endpoints__Https__Url
+                    value: "https://+:8443"
+                  - name: Kestrel__Endpoints__Https__Certificate__Path
+                    value: "/etc/internal-tls/tls.crt"
+                  - name: Kestrel__Endpoints__Https__Certificate__KeyPath
+                    value: "/etc/internal-tls/tls.key"
+                volumeMounts:
+                  - name: internal-tls
+                    mountPath: /etc/internal-tls
+                    readOnly: true
+            volumes:
+              - name: internal-tls
+                secret:
+                  secretName: ago-calendar-api-internal-tls
+  # The Service side of the same change - port 443 alongside the existing 80, never instead of it.
+  # `base/calendar-api.yaml`'s own port just gained a `name` for exactly this: a Service with more
+  # than one port must name every one of them.
+  - target:
+      kind: Service
+      name: ago-calendar-api
+    patch: |
+      apiVersion: v1
+      kind: Service
+      metadata:
+        name: ago-calendar-api
+      spec:
+        ports:
+          - name: https
+            port: 443
+            targetPort: 8443

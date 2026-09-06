@@ -244,5 +244,11 @@ spec:
   selector:
     app: ago-calendar-api
   ports:
-    - port: 80
+    # `22-24`/`adr/0137`: named, where it used to be the Service's only (unnamed) port. Kubernetes
+    # requires every port to be named once a Service carries more than one - the demo overlay's own
+    # patch adds a second, `https`, for the in-cluster module-call TLS hop. Naming this one here in
+    # base/ rather than only in the demo patch keeps the object identical in shape across both
+    # overlays; local overlay's Gateway still references this Service by port number, unaffected.
+    - name: http
+      port: 80
       targetPort: 8080

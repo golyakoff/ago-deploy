@@ -153,6 +153,14 @@ tests:
         values: "1728000x150"
       - series: 'certmanager_certificate_expiration_timestamp_seconds{job="cert-manager", instance="cert-manager.cert-manager.svc.cluster.local:9402", loop="k8s", namespace="ago-chat", name="some-healthy-cert", issuer_name="letsencrypt-prod", issuer_kind="ClusterIssuer"}'
         values: "2160000x150"
+      # `22-24`/`adr/0137`: the expiry story for the internal leaf `internal-tls.yaml` issues. This
+      # rule's own `expr` carries no `name=`/`issuer_kind=` matcher - it was already generic before
+      # this item, which `some-healthy-cert` above exists to prove - so an internal, `Issuer`-backed
+      # certificate needs no rule of its own. This series is the demonstration: a cert-manager
+      # Certificate under a namespaced `ca`-type `Issuer` rather than the public `ClusterIssuer`,
+      # aged to the same 20-days-remaining point, must page exactly like `ago-public-tls` does.
+      - series: 'certmanager_certificate_expiration_timestamp_seconds{job="cert-manager", instance="cert-manager.cert-manager.svc.cluster.local:9402", loop="k8s", namespace="ago-chat", name="ago-calendar-api-internal-tls", issuer_name="ago-internal-ca-issuer", issuer_kind="Issuer"}'
+        values: "1728000x150"
     alert_rule_test:
       # The condition is already true here; `for: 1h` is what keeps it out of the inbox.
       - eval_time: 30m
@@ -174,4 +182,18 @@ tests:
               summary: "TLS certificate ago-chat/ago-public-tls expires in 19d 22h 59m 0s"
               meaning: "cert-manager renews 30 days before expiry; under 21 days left means renewal has been failing for over a week. Nothing is broken yet - everything public breaks on the expiry date."
               first_check: "kubectl describe certificate -n ago-chat ago-public-tls, then the challenge/order objects, then cert-manager's logs"
+              runbook: "ago-root docs/runbooks/alerting.md#tlscertificaterenewaloverdue"
+          - exp_labels:
+              severity: page
+              job: cert-manager
+              instance: cert-manager.cert-manager.svc.cluster.local:9402
+              loop: k8s
+              namespace: ago-chat
+              name: ago-calendar-api-internal-tls
+              issuer_name: ago-internal-ca-issuer
+              issuer_kind: Issuer
+            exp_annotations:
+              summary: "TLS certificate ago-chat/ago-calendar-api-internal-tls expires in 19d 22h 59m 0s"
+              meaning: "cert-manager renews 30 days before expiry; under 21 days left means renewal has been failing for over a week. Nothing is broken yet - everything public breaks on the expiry date."
+              first_check: "kubectl describe certificate -n ago-chat ago-calendar-api-internal-tls, then the challenge/order objects, then cert-manager's logs"
               runbook: "ago-root docs/runbooks/alerting.md#tlscertificaterenewaloverdue"

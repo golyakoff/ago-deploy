@@ -47,15 +47,14 @@ DEPLOYMENTS=(ago-chat-api ago-chat-worker ago-chat-webhooks)
 # `20-25`: the calendar's own two running hosts - see deploy.sh's CALENDAR_HOSTS for why two and not
 # three (the migrator is a Job, never a rollout target in either script).
 CALENDAR_DEPLOYMENTS=(ago-calendar-api ago-calendar-worker)
-# `22-06`: `calendar-console` stays in this table on purpose, even though its screens moved into
-# ago-console and `redeploy.sh` no longer builds or rolls it. The Deployment is still running and
-# still serving, until `22-09` retires the workload, its route, its certificate SAN and its DNS
-# record in that strict order. This script operates on images that already exist, by SHA, so it is
-# the one way left to move that workload while it exists - removing the entry now would take away
-# the ability to operate something that is still deployed.
+# `22-09`, 2026-09-06: `calendar-console` is out of this table. `22-06` had kept it deliberately -
+# its screens had moved into ago-console but the Deployment was still running and still serving, and
+# this script was the one way left to operate it. `22-09` retired the route, the listener, the
+# certificate SAN, the Keycloak client and the workload itself, in that order, so there is nothing
+# left for an entry here to operate.
 #
-# `15-07`: name-as-typed:deployment, the same table deploy.sh keeps. `20-25` adds calendar-console.
-FRONTENDS=("console:ago-console" "demo-shop1:ago-demo-shop1" "demo-shop2:ago-demo-shop2" "landing:ago-landing" "calendar-console:ago-calendar-console")
+# `15-07`: name-as-typed:deployment, the same table deploy.sh keeps.
+FRONTENDS=("console:ago-console" "demo-shop1:ago-demo-shop1" "demo-shop2:ago-demo-shop2" "landing:ago-landing")
 
 frontend_deployment() {
   local entry
@@ -99,7 +98,7 @@ if [ -n "${1:-}" ] && ! printf '%s' "$1" | grep -qE '^[0-9a-f]{40}$'; then
     shift
   else
     echo "unknown component '$1'." >&2
-    echo "usage: $0 [console|demo-shop1|demo-shop2|landing|calendar-console|calendar] [<commit-sha>] | $0 --history" >&2
+    echo "usage: $0 [console|demo-shop1|demo-shop2|landing|calendar] [<commit-sha>] | $0 --history" >&2
     exit 2
   fi
 fi

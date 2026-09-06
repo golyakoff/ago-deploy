@@ -41,9 +41,10 @@ spec:
     matchExpressions:
       - key: app
         operator: In
-        # `20-20`: ago-calendar-console added - the same shape, the same public exposure, and the same
+        # `22-09`: ago-calendar-console removed 2026-09-06 with its hostname. `20-20` had added it here
+        # with the same shape, the same public exposure, and the same
         # reason to have no business reaching Postgres, RabbitMQ or MinIO directly.
-        values: [ago-console, ago-demo-shop1, ago-demo-shop2, ago-landing, ago-calendar-console]
+        values: [ago-console, ago-demo-shop1, ago-demo-shop2, ago-landing]
   policyTypes: [Egress]
   egress:
     - to:

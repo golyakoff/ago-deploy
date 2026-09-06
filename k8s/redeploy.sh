@@ -297,11 +297,20 @@ step "7. Move the frontends onto their own commits"
 # received. Retiring the workload, its route, its certificate SAN and its DNS record is `22-09`, in
 # that strict order - deleting DNS while the name is still in the SAN fails the next HTTP-01 renewal
 # and one failed authorization takes the whole certificate down with every other hostname on it.
-for entry in "ago-console:$CONSOLE_SHA" "ago-demo-shop1:$WIDGET_SHA" "ago-demo-shop2:$WIDGET_SHA" "ago-landing:$LANDING_SHA"; do
+#
+# `23-44`: `ago-widget-assets` joins this loop, and it had been missing from it since `15-07`. Steps 3
+# and 4 above already built and imported it - so the image existed, under the right tag, and nothing
+# ever pointed the Deployment at it. Found 2026-09-06: the two demo pages were serving `003af21` while
+# a real tenant's embed, which is this image, was still serving `ac79181` - a bundle 7KB smaller and
+# several merged items behind, including `23-07`'s own beacon. The kustomization comment above these
+# three already asserted the invariant ("the two demo pages and a real tenant's embed then run
+# byte-identical bundles, which is checkable instead of assumed"), and nothing enforced it; smoke.sh
+# now does, by comparing the two commits rather than trusting this list.
+for entry in "ago-console:$CONSOLE_SHA" "ago-demo-shop1:$WIDGET_SHA" "ago-demo-shop2:$WIDGET_SHA" "ago-widget-assets:$WIDGET_SHA" "ago-landing:$LANDING_SHA"; do
   d="${entry%%:*}"
   kc set image "deployment/$d" "${d}=${REGISTRY}/${entry}" -n "$NS"
 done
-for d in ago-console ago-demo-shop1 ago-demo-shop2 ago-landing; do
+for d in ago-console ago-demo-shop1 ago-demo-shop2 ago-widget-assets ago-landing; do
   kc rollout status "deployment/$d" -n "$NS" --timeout=180s
 done
 

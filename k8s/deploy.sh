@@ -66,7 +66,18 @@ CALENDAR_HOSTS=("ago-calendar-api:api" "ago-calendar-worker:worker")
 # certificate SAN, the Keycloak client and the workload itself, in that order, so there is nothing
 # left for an entry here to operate.
 #
-FRONTENDS=("console:ago-console" "demo-shop1:ago-demo-shop1" "demo-shop2:ago-demo-shop2" "landing:ago-landing")
+# `23-44`: `widget-assets` joins this array, which it should have done in `15-07`. Its absence had two
+# effects and the second is why nobody saw the first: it could not be deployed by name at all, and
+# `--current` - the command whose entire job is answering "what is running" - never printed a row for
+# it. So a Deployment serving the widget every real tenant embeds was invisible to the tool built to
+# make deploys identifiable, and drifted five commits behind the demo pages without a single check
+# disagreeing.
+#
+# The three widget entries still come from one `ago-widget` commit and must move together. That is
+# not enforced here, deliberately - a per-name deploy is the escape hatch for exactly the moments
+# procedure does not fit - it is enforced where a mismatch actually shows: smoke.sh compares the
+# commit a tenant's bundle carries against the demo page's own.
+FRONTENDS=("console:ago-console" "demo-shop1:ago-demo-shop1" "demo-shop2:ago-demo-shop2" "widget-assets:ago-widget-assets" "landing:ago-landing")
 
 # The commit a running pod reports about itself, asked over the API server's own pod proxy. Two
 # shapes, one idea:

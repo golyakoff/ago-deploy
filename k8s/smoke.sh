@@ -516,6 +516,25 @@ esac
 wnf=$(code "https://${CHAT_API}/widget/this-file-does-not-exist.js")
 [ "$wnf" = "404" ] && ok "a nonsense path under /widget/ genuinely 404s (not an SPA catch-all in disguise)" \
                     || bad "a nonsense path under /widget/ returned $wnf, not 404 - the content-type check above could be passing vacuously"
+# `23-44`: **the tenant's bundle and the demo pages' bundle are one build, or they are not.** The
+# kustomization pinning these three images has asserted that in a comment since `15-07` - "the two
+# demo pages and a real tenant's embed then run byte-identical bundles, which is checkable (three
+# `version.json` files naming one commit) instead of assumed" - and for that whole time nothing
+# checked it. On 2026-09-06 they were apart: demo-shop1 on the tip, this one on a bundle 7KB smaller,
+# missing `23-07`'s own beacon and everything else merged in between. `redeploy.sh` built and imported
+# the image on every run and never pointed the Deployment at it, and `deploy.sh --current` printed no
+# row for it, so nothing ever disagreed out loud.
+#
+# Checked here rather than in the deploy scripts on purpose. A script can only promise what it does;
+# this asks what is actually being served, so it also catches a hand-rolled `set image`, a rollback of
+# one image and not the others, and the next mechanism nobody has thought of yet.
+acommit=$(curl -s --max-time 20 "https://${CHAT_API}/widget/version.json" \
+          | sed -n 's/.*"commit":"\([^"]*\)".*/\1/p' | head -1)
+if [ -n "$wcommit" ] && [ "$wcommit" != "unknown" ] && [ -n "$acommit" ]; then
+  [ "$acommit" = "$wcommit" ] \
+    && ok "a tenant's widget and the demo pages' widget are the same build (${acommit:0:12})" \
+    || bad "a tenant embedding the widget gets ${acommit:0:12} while the demo pages serve ${wcommit:0:12} - one ago-widget commit is supposed to serve all three, so a real tenant runs a bundle nothing here tests"
+fi
 # The booking module has to be a sibling: ui/moduleLoader.ts resolves it relative to the widget's own
 # <script src> (adr/0058), so an origin serving widget.js without it breaks booking at runtime and
 # only for the tenants who enabled it - the quietest possible failure.

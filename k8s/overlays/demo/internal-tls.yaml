@@ -1,0 +1,66 @@
+# `22-24`/`adr/0137`: TLS for the one in-cluster hop that item scopes to - chat's calls to
+# `ago-calendar-api`'s module endpoints (`api/v1/module-tasks`, `api/v1/module-registrations`,
+# `22-18`). cert-manager already runs here for the public certificate (`tls.yaml`); this file gives it
+# a second, independent job. Postgres, Redis, RabbitMQ, MinIO and Keycloak stay on plain in-cluster
+# HTTP/TCP - a deliberate, named boundary, not an oversight; see `adr/0137`'s own Consequences for why.
+#
+# **Why a namespaced `Issuer`, not a `ClusterIssuer` like `letsencrypt-prod`.** `letsencrypt-prod` is a
+# ClusterIssuer because ACME account state is genuinely cluster-wide - one account, and cert-manager
+# expects a ClusterIssuer's own secrets in one fixed namespace (`--cluster-resource-namespace`,
+# defaulting to `cert-manager`'s own namespace, not this one). This CA has no such reason to be
+# cluster-scoped: both its own Secret and the one Certificate it signs live in `ago-chat`, which is
+# exactly where a namespaced `Issuer` looks by default. `ClusterIssuer` here would only add a
+# cross-namespace question for no benefit.
+#
+# **Bring-your-own-CA, not cert-manager's own self-signed-Certificate pattern.** cert-manager can also
+# generate a random root entirely inside the cluster (a `SelfSigned` Issuer bootstrapping one `isCA:
+# true` Certificate) - considered and rejected, because the caller that has to trust this root is
+# `Ago.Chat.Api`/`Ago.Chat.Worker`'s own compiled image, and CI builds that image *before* any cluster
+# or Certificate exists. A root generated at cluster-apply time cannot be baked into an image that
+# predates it. This CA is generated offline instead, once - `internal-ca.crt` next to this file is the
+# public half (harmless to commit; a CA certificate is not a secret, same reasoning `secrets.md`
+# already applies to a site's own public key), `ago-chat`'s own Dockerfile embeds the identical file
+# into the image's trust store the same way it already embeds the Russian Trusted Root CA. The private
+# key is never committed anywhere - `internal-ca.key`, gitignored, supplied before this overlay is
+# ever applied for real; see that file's own `.example` for the bootstrap sequence.
+#
+# **This is a real, working `kubernetes.io/tls` Secret, not a `Certificate` resource cert-manager
+# manages.** Deliberately: pointing a managed `Certificate` at a `secretName` this overlay's own
+# `secretGenerator` already populates would make cert-manager treat that Secret as foreign and try to
+# reissue over it - replacing the offline-generated root with a random one cert-manager mints itself,
+# silently breaking the trust this file exists to set up. The `ca`-type `Issuer` below reads the
+# Secret as-is and never rewrites it.
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: ago-internal-ca-issuer
+spec:
+  ca:
+    secretName: ago-internal-ca
+---
+# The one leaf `22-24` scopes to. `ago-calendar-api`'s own Service DNS names - the short form
+# (reachable from any pod in this namespace) and the fully-qualified form, so either resolves.
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: ago-calendar-api-internal-tls
+spec:
+  secretName: ago-calendar-api-internal-tls
+  dnsNames:
+    - ago-calendar-api
+    - ago-calendar-api.ago-chat
+    - ago-calendar-api.ago-chat.svc.cluster.local
+  # 90 days, cert-manager's own default leaf lifetime - deliberately short, and safe to be short
+  # *because* it costs nothing a caller has to react to: cert-manager renews unattended and re-signs
+  # with the same root key each time, so renewal changes nothing anyone has to trust. Only the root's
+  # own rotation would do that (see internal-ca.key.example) - sized (10 years) specifically to make
+  # that something this project's own lifetime is unlikely to see, rather than something every
+  # caller's trust bundle has to survive on a schedule.
+  duration: 2160h
+  renewBefore: 360h
+  privateKey:
+    algorithm: ECDSA
+    size: 256
+  issuerRef:
+    name: ago-internal-ca-issuer
+    kind: Issuer

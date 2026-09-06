@@ -9,3 +9,9 @@ k8s/overlays/local/.env
 # not named ".env" so the top wildcard doesn't quietly cover it; named explicitly here instead. See
 # k8s/overlays/demo/.env.telegram-relay.example for what it holds and why it is a separate Secret.
 k8s/overlays/demo/.env.telegram-relay
+
+# `22-24`/`adr/0137`: the internal CA's private key. `internal-ca.crt` next to it IS committed - a
+# certificate is not a secret - only the key is gitignored, the same asymmetry `secrets.md` already
+# draws for a site's own key pair. See k8s/overlays/demo/internal-ca.key.example for the bootstrap
+# sequence this file is part of.
+k8s/overlays/demo/internal-ca.key

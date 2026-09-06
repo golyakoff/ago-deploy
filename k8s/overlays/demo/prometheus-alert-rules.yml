@@ -195,5 +195,13 @@ groups:
         annotations:
           summary: "TLS certificate {{ $labels.namespace }}/{{ $labels.name }} expires in {{ $value | humanizeDuration }}"
           meaning: "cert-manager renews 30 days before expiry; under 21 days left means renewal has been failing for over a week. Nothing is broken yet - everything public breaks on the expiry date."
-          first_check: "kubectl describe certificate -n ago-chat ago-public-tls, then the challenge/order objects, then cert-manager's logs"
+          # `22-24`/`adr/0137`: templated on the labels rather than hardcoded to `ago-public-tls`.
+          # Found while adding this rule's second certificate (`ago-calendar-api-internal-tls`,
+          # `internal-tls.yaml`): the rule's own `expr` had always been generic - no `name=`/
+          # `issuer_kind=` matcher, deliberately, so `some-healthy-cert` in the test file could prove
+          # it - but this annotation was not, and would have told a reader whose internal cert was
+          # about to lapse to go inspect the public one instead. `certmanager_certificate_expiration_
+          # timestamp_seconds` always carries `namespace`/`name`, the same pair `summary` above already
+          # reads, so this was available the whole time.
+          first_check: "kubectl describe certificate -n {{ $labels.namespace }} {{ $labels.name }}, then the challenge/order objects, then cert-manager's logs"
           runbook: "ago-root docs/runbooks/alerting.md#tlscertificaterenewaloverdue"

@@ -237,10 +237,14 @@ else
   skip "in-cluster module-channel refusal (needs cluster access - run this on the node)"
 fi
 
-# The console is a separate host and gets its own check rather than standing in for the API.
+# `22-09`, 2026-09-06: this used to assert the calendar console *answers* at `calendar.`. The
+# console merged into `office.` at `22-06` and `22-09` retired the name, so the check is inverted
+# rather than deleted - the same shape `grafana.` already uses below. A deleted check proves
+# nothing; this one proves the retirement stuck, and turns red if the listener, the route or the
+# DNS record ever comes back.
 c=$(code "https://calendar.${DOMAIN}/")
-[ "$c" = "200" ] && ok "calendar console answers" \
-                 || bad "calendar console did not answer (got $c)"
+[ "$c" = "000" ] && ok "calendar. is not served (retired by 22-09; its screens are at office.)" \
+                 || bad "calendar. answered $c - the retired console hostname is being served again"
 
 c=$(code "https://calendar-api.${DOMAIN}/healthz/ready")
 [ "$c" = "200" ] && ok "calendar API healthz/ready 200 (Postgres, Redis both answered)" || bad "calendar API healthz/ready returned $c"
@@ -531,7 +535,7 @@ echo "Edge"
 # `22-10`: `office.` joins while `chat.` is still here. Both answer for the length of the move,
 # and `chat.` leaves this list in the same change that removes it from the route, the listener
 # and the SAN - in that order, with the A-record last of all.
-for h in "office" "chat-api" "auth" "demo-shop1" "demo-shop2" "calendar" "calendar-api"; do
+for h in "office" "chat-api" "auth" "demo-shop1" "demo-shop2" "calendar-api"; do
   c=$(code "https://${h}.${DOMAIN}/")
   # auth's root redirects; anything that is not a connection failure means the listener is alive.
   [ "$c" != "000" ] && ok "${h}.${DOMAIN} answers ($c)" || bad "${h}.${DOMAIN} did not answer"

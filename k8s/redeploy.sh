@@ -90,14 +90,17 @@ read_sha() {
   exit 1
 }
 
-# git does not preserve the executable bit on clone or through some pulls, and both build scripts
-# lose it. This bit them during the first bring-up and again on 2026-08-25; restoring it every run
-# costs nothing and removes a failure that looks like a permissions mystery.
-chmod +x "$AGO_ROOT/ago-deploy/k8s/build-images.sh" "$AGO_ROOT/ago-deploy/k8s/build-static-images.sh" \
-         "$AGO_ROOT/ago-deploy/k8s/build-calendar-images.sh" \
-         "$AGO_ROOT/ago-deploy/k8s/smoke.sh" "$AGO_ROOT/ago-deploy/k8s/deploy.sh" \
-         "$AGO_ROOT/ago-deploy/k8s/rollback.sh" \
-         "$AGO_ROOT/ago-deploy/k8s/check-theme-tokens.sh" 2>/dev/null || true
+# The runtime `chmod +x` that used to sit here is gone (2026-09-06), and its own comment argued
+# for keeping it: the bit had been lost twice and restoring it every run "costs nothing and
+# removes a failure that looks like a permissions mystery".
+#
+# It did cost something, and the cost was invisible from here. Every script it named stayed
+# mode 100644 in git; this script fixed them at runtime and therefore worked, so nothing ever
+# reported the real state - while `deploy.sh`, which calls `smoke.sh` directly and has no such
+# line, failed on its last step with `Permission denied` on every single run. A workaround in
+# whichever script happens to run first hides the state from every script that does not.
+#
+# The modes are now 100755 in git, which is where a mode belongs.
 
 # `11-07`: the Keycloak login theme carries a copy of ago-console's design tokens, because a
 # ConfigMap has to stand on its own inside the cluster. This is the moment that copy can be checked

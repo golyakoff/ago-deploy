@@ -135,21 +135,14 @@ spec:
         mode: Terminate
         certificateRefs:
           - name: ago-public-tls
-    # `20-20`: AGO Calendar's own two listeners. `calendar.` and `calendar-console.` are this item's
-    # own working-default hostname proposal, not a settled name - flagged in this item's report, since
-    # changing either later costs a DNS record and a certificate SAN, not a rebuild.
+    # `20-20`: AGO Calendar's own listener. There were two; `22-09` retired the console one
+    # (`calendar.reserve-me.ru`) on 2026-09-06, because the calendar's screens are part of the one
+    # console at `office.` since `22-06`. **The API's own name stays** - the console merged, the API
+    # did not, and conflating the two is the mistake this comment exists to prevent.
     - name: https-calendar
       port: 443
       protocol: HTTPS
       hostname: calendar-api.reserve-me.ru
-      tls:
-        mode: Terminate
-        certificateRefs:
-          - name: ago-public-tls
-    - name: https-calendar-console
-      port: 443
-      protocol: HTTPS
-      hostname: calendar.reserve-me.ru
       tls:
         mode: Terminate
         certificateRefs:
@@ -446,27 +439,6 @@ spec:
             value: /api/v1/me
       backendRefs:
         - name: ago-calendar-api
-          port: 80
----
-apiVersion: gateway.networking.k8s.io/v1
-kind: HTTPRoute
-metadata:
-  name: ago-calendar-console
-spec:
-  parentRefs:
-    - name: ago-chat-gateway
-      sectionName: https-calendar-console
-  hostnames:
-    - calendar.reserve-me.ru
-  rules:
-    # ago-calendar-console Service: calendar-console-static.yaml - the whole app, not a path prefix,
-    # same shape as ago-console's own route above.
-    - matches:
-        - path:
-            type: PathPrefix
-            value: /
-      backendRefs:
-        - name: ago-calendar-console
           port: 80
 ---
 apiVersion: gateway.nginx.org/v1alpha1

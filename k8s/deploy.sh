@@ -113,12 +113,13 @@ show_current() {
     d="${entry%%:*}"
     show_row "$d" "$(pod_commit "$d" 8080 healthz/version)"
   done
-  # `20-25`: same call as the chat hosts above, and today it prints "unreadable" for both, for two
-  # different reasons worth telling apart rather than treating as one blank column:
-  #   - `ago-calendar-api` answers on 8080 but maps no `/healthz/version` (confirmed against
-  #     `Ago.Calendar.Api/Program.cs`; smoke.sh's own "Calendar API" section names the same gap and
-  #     SKIPs the checks that would need it, `20-24`). The proxy call succeeds; there is nothing to
-  #     parse a commit out of.
+  # `20-25`: same call as the chat hosts above. It used to print "unreadable" for both, for two
+  # different reasons worth telling apart rather than treating as one blank column. **One of the two
+  # is now fixed**, and this paragraph said otherwise until 2026-09-06, when a `--current` run printed
+  # a real commit for a row the comment claimed could not have one:
+  #   - `ago-calendar-api` **does** map `/healthz/version` now - `20-24` landed - so its row reports
+  #     the running commit exactly like the chat hosts. The sentence below about there being nothing
+  #     to parse was true when written and is kept only as the record of what changed.
   #   - `ago-calendar-worker` binds no port at all - `Program.cs` uses the bare generic host, not
   #     `WebApplication` (confirmed against `base/calendar-worker.yaml`'s own header, which is explicit
   #     that this is unlike `ago-chat-worker`, which DOES sit in HOSTS above and DOES answer

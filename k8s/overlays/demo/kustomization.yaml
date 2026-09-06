@@ -258,6 +258,24 @@ patches:
                     value: "true"
                   - name: DemoTenant__VisitorOrigin
                     value: "https://demo-shop1.reserve-me.ru"
+                  # `23-45`: the two seeded shops whose operator password is printed on the demo
+                  # pages, and the only accounts the console's standing public-demo warning is shown
+                  # to. Everybody else - a real tenant, a minted demo tenant, the platform owner - is
+                  # told nothing, because for them the warning's own sentences are false.
+                  #
+                  # **The API refuses to start without this while DemoTenant__Enabled is true.**
+                  # That is deliberate: the band now appears only for the sites named here, so an
+                  # empty list would silently un-warn the one account whose password anybody can read
+                  # off a web page - a missing sentence on a console that otherwise works perfectly.
+                  # A crash at boot is the loud version of that mistake.
+                  #
+                  # Two entries, indexed - the .NET configuration binder's array shape. They are
+                  # public keys, not secrets: `demo_site` is printed on the demo page beside the
+                  # password, and smoke.sh has used it as its own default PUBLIC_KEY for months.
+                  - name: DemoTenant__PublishedCredentialSitePublicKeys__0
+                    value: "demo_site"
+                  - name: DemoTenant__PublishedCredentialSitePublicKeys__1
+                    value: "demo_site2"
   # The Worker needs the credential to expire tenants, and the flag to require it - but it mints
   # nothing, so it needs no visitor origin.
   - target:

@@ -4,7 +4,6 @@
 #   ./deploy.sh <commit-sha>            the three Ago.Chat.* hosts, together
 #   ./deploy.sh calendar <commit-sha>   the two Ago.Calendar.* hosts, together
 #   ./deploy.sh <frontend> <commit-sha> one frontend: console | demo-shop1 | demo-shop2 | landing |
-#                                       calendar-console
 #   ./deploy.sh --current               print what is running and stop
 #
 # One commit argument for the hosts because all three are built from one repository, and one
@@ -61,16 +60,13 @@ CALENDAR_HOSTS=("ago-calendar-api:api" "ago-calendar-worker:worker")
 
 # `15-07`: name-as-typed:deployment. The container name equals the Deployment name for all five
 # (overlays/demo/*-static.yaml), so one field is enough here where the hosts needed two.
-# `22-06`: `calendar-console` stays in this table on purpose, even though its screens moved into
-# ago-console and `redeploy.sh` no longer builds or rolls it. The Deployment is still running and
-# still serving, until `22-09` retires the workload, its route, its certificate SAN and its DNS
-# record in that strict order. This script operates on images that already exist, by SHA, so it is
-# the one way left to move that workload while it exists - removing the entry now would take away
-# the ability to operate something that is still deployed.
+# `22-09`, 2026-09-06: `calendar-console` is out of this table. `22-06` had kept it deliberately -
+# its screens had moved into ago-console but the Deployment was still running and still serving, and
+# this script was the one way left to operate it. `22-09` retired the route, the listener, the
+# certificate SAN, the Keycloak client and the workload itself, in that order, so there is nothing
+# left for an entry here to operate.
 #
-# `20-25`: `calendar-console` added - the identical shape as the other four, one static nginx bundle
-# behind a name, so it needed a new array entry and nothing else.
-FRONTENDS=("console:ago-console" "demo-shop1:ago-demo-shop1" "demo-shop2:ago-demo-shop2" "landing:ago-landing" "calendar-console:ago-calendar-console")
+FRONTENDS=("console:ago-console" "demo-shop1:ago-demo-shop1" "demo-shop2:ago-demo-shop2" "landing:ago-landing")
 
 # The commit a running pod reports about itself, asked over the API server's own pod proxy. Two
 # shapes, one idea:
@@ -142,7 +138,7 @@ fi
 
 usage() {
   echo "usage: $0 <commit-sha> | $0 calendar <commit-sha> |" >&2
-  echo "       $0 <console|demo-shop1|demo-shop2|landing|calendar-console> <commit-sha> | $0 --current" >&2
+  echo "       $0 <console|demo-shop1|demo-shop2|landing> <commit-sha> | $0 --current" >&2
   exit 2
 }
 

@@ -446,17 +446,16 @@ echo "Frontends"
 # CSS carry an --ago- token", "does the JS mention configureLogging" - and they could only ever
 # catch drift older than one specific named change, never drift in general.
 #
-# url:deployment. The landing page is at the apex, not a subdomain. `20-20`: the calendar console added -
-# it is served at `calendar.` (the bare product name is the human-facing console), and its own
-# Dockerfile writes /version.json the identical way (adr/0051's pattern,
-# copied rather than reinvented), so this loop needs no special case for it.
+# url:deployment. The landing page is at the apex, not a subdomain.
+# `22-09`, 2026-09-06: the calendar console is out of this loop. `20-20` had added it at `calendar.`;
+# its screens have been part of the one console at `office.` since `22-06`, and `22-09` retired the
+# name. A check against a host that is no longer served can only ever fail.
 # `22-10`: `office.` is checked beside `chat.` deliberately - the same Deployment answers at both
 # names for the length of the move, so seeing one commit twice is the point rather than
 # redundancy. It is what proves the new listener and route reach the console, rather than
 # reaching a 200 from somewhere.
 for entry in "office.${DOMAIN}:ago-console" "demo-shop1.${DOMAIN}:ago-demo-shop1" \
-             "demo-shop2.${DOMAIN}:ago-demo-shop2" "${DOMAIN}:ago-landing" \
-             "calendar.${DOMAIN}:ago-calendar-console"; do
+             "demo-shop2.${DOMAIN}:ago-demo-shop2" "${DOMAIN}:ago-landing"; do
   host="${entry%%:*}"; deploy="${entry##*:}"
   commit=$(curl -s --max-time 20 "https://${host}/version.json" \
            | sed -n 's/.*"commit":"\([^"]*\)".*/\1/p' | head -1)

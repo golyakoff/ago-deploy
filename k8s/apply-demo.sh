@@ -118,7 +118,12 @@ FORCE_ROLLBACK=0
 for arg in "$@"; do [ "$arg" = "--force-rollback" ] && FORCE_ROLLBACK=1; done
 
 step "Comparing the manifest's image tags against what is running"
-manifest_imgs="$(kc kustomize "$HERE/overlays/demo" 2>/dev/null   | grep -oE "image: ghcr\.io/golyakoff/[a-z-]+:[0-9a-f]{40}" | sed 's/image: //'   | grep -v -- "-migrator:" | sort -u)"
+# `15-22`: `[a-z0-9-]+`, not `[a-z-]+` - two repository names in this overlay carry a digit
+# (ago-demo-shop1, ago-demo-shop2), and a class that excludes digits fails to match either
+# silently, so both sat unprotected by this guard since it was written. `check-manifest-drift.sh`
+# carries the identical pattern and the identical reasoning for it - if a third repository name
+# ever needs a character outside `[a-z0-9-]`, widen both, together.
+manifest_imgs="$(kc kustomize "$HERE/overlays/demo" 2>/dev/null   | grep -oE "image: ghcr\.io/golyakoff/[a-z0-9-]+:[0-9a-f]{40}" | sed 's/image: //'   | grep -v -- "-migrator:" | sort -u)"
 running_imgs="$(kc get deploy -n "$NS"   -o jsonpath='{range .items[*]}{.spec.template.spec.containers[0].image}{"\n"}{end}'   | grep -E "^ghcr\.io/golyakoff/" | sort -u)"
 would_introduce="$(comm -23 <(printf '%s\n' "$manifest_imgs") <(printf '%s\n' "$running_imgs"))"
 

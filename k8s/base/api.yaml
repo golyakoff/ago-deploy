@@ -151,6 +151,28 @@ spec:
             # read off the manifest.
             - name: ModuleProvisioning__Secret
               value: "$(MODULE_PROVISIONING_SECRET)"
+            # `23-92`/`adr/0154`: the identical reasoning above, applied to a module's own address -
+            # the platform owner used to have to type this into the grant form, even though this
+            # deployment already knows it (probed live: `https://calendar-api.reserve-me.ru` answers
+            # `404`/`405` from the gateway's own allowlist, `https://ago-calendar-api:443` would fail
+            # TLS since this host carries no internal-CA trust material, and `http://ago-calendar-api` -
+            # the calendar Service's own in-cluster DNS name, `calendar-api.yaml` - answers `401`,
+            # reachable and routed, refusing only for the still-missing provisioning secret above).
+            # `IModuleEntryPointProvider.TryGet()` reads this generically by whatever module key a
+            # caller names, so a second module needs only a second line here, never a code change in
+            # `Ago.Chat.*` - see that port's own remarks for why it is not a fixed-property options
+            # class. A literal module key is fine in this file (this repository is not `Ago.Chat.*`,
+            # and the architecture guard never scans it) - it is exactly what "the deployment declares
+            # the mapping" means.
+            #
+            # Not sourced from `.env`/`infra-credentials` like the secret above: this value is not a
+            # secret, and every other plain address on this host (`Keycloak__Authority` a few lines up,
+            # `Storage__S3__ServiceUrl`) is already a literal `value:` for the identical reason - an
+            # in-cluster Service DNS name is not deployment-specific the way a password is, and it is
+            # identical between the local and demo overlays (both inherit this file, and both run
+            # `calendar-api.yaml`'s own Service under this exact name).
+            - name: ModuleEntryPoints__calendar
+              value: "http://ago-calendar-api"
             # `13-02`: BillingOptions/YooKassaOptions are bound and validated for every host
             # (ChatModule.ConfigureServices) - this manifest never carried either, so a fresh image
             # crash-loops the moment ValidateOnStart runs (the same class of gap `7-03`'s own remarks

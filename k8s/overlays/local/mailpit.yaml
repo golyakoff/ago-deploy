@@ -30,7 +30,7 @@ spec:
     spec:
       containers:
         - name: mailpit
-          image: axllent/mailpit:v1.31.0
+          image: axllent/mailpit:v1.31.1
           # No imagePullPolicy: Never here, unlike this overlay's ago-chat-* patches - this is an
           # upstream image that has to be pulled, the same reasoning the demo overlay's own Keycloak
           # patch already spells out after that exact mistake produced a live ErrImageNeverPull.

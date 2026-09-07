@@ -51,16 +51,30 @@
 #     incident to justify it is exactly the "generic check nobody can explain" `smoke.sh`'s own header
 #     argues against repeating.
 #
-# WHAT A NONZERO EXIT MEANS, AND WHAT IT DOES NOT. This script's own exit code is never allowed to
-# fail `redeploy.sh` - the deploy that already happened (images moved, migrations applied, smoke
-# green) does not become undone by a check running after it, and a check that can *only* warn must
-# never be wired to look like the thing it is warning about. `redeploy.sh` calls this last, after its
-# own closing note, with the exit code discarded on purpose. Read the printed banner instead:
+# WHAT A NONZERO EXIT MEANS, AND WHAT IT DOES NOT (`15-24`). The banner is the primary signal either
+# way - read it. But the exit code now tells the same story, for a standalone caller or a human who
+# checks `$?` instead of the text: `0` for PASS, `1` for DRIFT (a real difference is printed - the
+# `check-theme-tokens.sh`/`deploy.sh` convention already used in this directory for "found a problem"),
+# `2` for UNKNOWN (no cluster reached, a filtering step failed, or `kubectl diff` itself errored for a
+# reason this script did not anticipate - the same directory's convention for "could not tell", distinct
+# from both PASS and DRIFT so a failed `awk` or `sed` can never read back as either).
 #   PASS   - the manifest and the cluster agree on everything this script compares.
 #   DRIFT  - they do not; the diff is printed, and so is what to do about it.
-#   UNKNOWN - the comparison could not be made (no cluster reached, or `kubectl diff` itself errored
-#             for a reason this script did not anticipate). Reported as unknown, not folded into PASS -
-#             a check that cannot tell "drifted" from "cannot tell" is worse than no check at all.
+#   UNKNOWN - the comparison could not be made. Reported as unknown, not folded into PASS - a check
+#             that cannot tell "drifted" from "cannot tell" is worse than no check at all.
+# `redeploy.sh` and `deploy.sh` still call this last and still discard the exit code with `|| true` -
+# that does not change here, and is not this item's to revisit (`adr/0144`): the deploy that already
+# happened (images moved, migrations applied, smoke green) must never become undone by a check that
+# runs after it. What changes is what `|| true` is doing: before `15-24` every path through this script
+# ended in `exit 0`, so the `|| true` at both call sites discarded a status that could never have been
+# anything else - decorative, not defensive. Giving DRIFT and UNKNOWN real nonzero codes makes that
+# `|| true` documentation of a deliberate choice (advisory, never fatal, per `adr/0144`) instead of dead
+# syntax, and it means a future caller that does not want that choice - a CI gate, an operator's own
+# script - has something to check. The alternative, leaving every path at `exit 0` and saying so plainly
+# here instead, was rejected: it is simpler, but it leaves `|| true` permanently unable to mean anything
+# and gives a future standalone invocation ("run standalone from the node" - see below) no way to act on
+# DRIFT/UNKNOWN without re-parsing the banner text. Nonzero costs nothing here, because the two callers
+# already choose to swallow it.
 #
 # THE ORDER THAT AVOIDS THE DEADLOCK. `apply-demo.sh` refuses to apply while the overlay's image pins
 # are behind the cluster (`22-24`) - which is exactly the state a redeploy leaves behind until the
@@ -70,7 +84,7 @@
 # are still behind at that point.
 #
 # Run standalone from the node, or from anywhere for a dry render (the diff step itself needs cluster
-# access and reports UNKNOWN without it):
+# access and reports UNKNOWN, exit 2, without it):
 #   cd ~/ago/ago-deploy/k8s && ./check-manifest-drift.sh [overlay-name]
 #
 # Environment:
@@ -92,7 +106,7 @@ step "Manifest drift (${OVERLAY})"
 
 if ! kc get ns "$NS" >/dev/null 2>&1; then
   echo "   UNKNOWN - no cluster reached (NS=${NS}). Run this on the node to get a real answer."
-  exit 0
+  exit 2
 fi
 
 rendered="$(mktemp)"
@@ -104,7 +118,7 @@ trap 'rm -f "$rendered" "$filtered" "$normalized" "$sed_script"' EXIT
 if ! kc kustomize "$OVERLAY_DIR" > "$rendered" 2>/dev/null; then
   echo "   UNKNOWN - 'kubectl kustomize ${OVERLAY_DIR}' failed to render. Run it directly to see why" \
        "(a missing gitignored input - .env, .env.telegram-relay, internal-ca.key - is the usual cause)."
-  exit 0
+  exit 2
 fi
 
 # Keep only Deployment and NetworkPolicy documents - an allowlist, not a blocklist for Job alone,
@@ -117,7 +131,14 @@ fi
 #
 # Kustomize separates documents with a bare '---' line; each document here is buffered and only
 # printed once its own 'kind:' line is known to be one of the two kept kinds.
-awk '
+#
+# `15-24`: this step has no `-e` to catch it and no pipe for `pipefail` to watch, so a failure here
+# leaves $filtered empty exactly the way "the overlay genuinely has no Deployment or NetworkPolicy"
+# would - and an empty $filtered makes every later diff against it come back clean. Checked the same
+# way the `kubectl kustomize` step above checks itself: the command's own exit status, not the
+# emptiness of what it wrote, because emptiness is also the correct output for an overlay this script
+# doesn't understand rather than one whose filter broke.
+if ! awk '
   BEGIN { doc = ""; keep = 0 }
   /^---[[:space:]]*$/ {
     if (doc != "" && keep) printf "%s---\n", doc
@@ -129,7 +150,11 @@ awk '
     doc = doc $0 "\n"
   }
   END { if (doc != "" && keep) printf "%s", doc }
-' "$rendered" > "$filtered"
+' "$rendered" > "$filtered"; then
+  echo "   UNKNOWN - the Deployment/NetworkPolicy filter itself failed reading the rendered overlay;" \
+       "run 'kubectl kustomize ${OVERLAY_DIR}' and pipe it through the awk step by hand to see why."
+  exit 2
+fi
 
 # Build one sed rewrite per image repository this namespace is actually running, from the live
 # Deployments - not from the manifest, so a Deployment the manifest does not mention yet cannot
@@ -156,13 +181,27 @@ kc get deploy -n "$NS" \
 if [ ! -s "$sed_script" ]; then
   echo "   UNKNOWN - could not read any running image from Deployments in ${NS}; the image-tag" \
        "normalization this check depends on has nothing to work from."
-  exit 0
+  exit 2
 fi
-sed -f "$sed_script" "$filtered" > "$normalized"
+
+# `15-24`: same gap as the awk step above - no failure check of its own, so a broken $sed_script (or a
+# sed that cannot read $filtered) would leave $normalized empty and read back as a clean diff rather
+# than as a tool failure. Checked on exit status, matching the awk and kustomize checks either side of
+# it, not on emptiness - $normalized is legitimately empty whenever $filtered was (an overlay with no
+# Deployments or NetworkPolicies), and that is not a failure this step should be reporting.
+if ! sed -f "$sed_script" "$filtered" > "$normalized"; then
+  echo "   UNKNOWN - the image-tag normalization ('sed -f' against the filtered overlay) itself failed;" \
+       "the \$sed_script is a temp file this run's trap already deleted, so rerun this script to" \
+       "regenerate it and reproduce the failure - the rules that build it are in the comment above."
+  exit 2
+fi
 
 diff_out="$(kc diff -f "$normalized" 2>&1)"
 rc=$?
 
+# `kubectl diff`'s own exit convention already lines up with `15-24`'s (0 clean, 1 a real diff, other
+# "the comparison itself failed"), so `rc` doubles as this script's own exit code below rather than
+# being remapped through a second variable.
 case "$rc" in
   0)
     echo "   PASS - the manifest and the cluster agree (Deployments and NetworkPolicies, image tags aside)."
@@ -184,6 +223,7 @@ case "$rc" in
     echo
     echo "   Treat this as 'cannot tell', not as 'clean' - a check that reports PASS here would be"
     echo "   worse than no check at all."
+    rc=2
     ;;
 esac
-exit 0
+exit "$rc"

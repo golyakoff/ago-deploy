@@ -104,6 +104,17 @@ spec:
               value: "$(RABBITMQ_USER)"
             - name: Messaging__RabbitMq__Password
               value: "$(RABBITMQ_PASSWORD)"
+            # `23-87`: the other half of the handshake `api.yaml` sets - `ModuleProvisioningOptions`,
+            # bound in `CalendarModule`, checked by `SharedSecretModuleProvisioningAuthenticator`, which
+            # refuses every inbound provisioning call while its copy is empty (it never treats an empty
+            # configured secret as matching, so an unset value fails closed rather than open - the right
+            # default, and the reason this was invisible rather than exploited).
+            #
+            # Same variable as `Ago.Chat.Api`, from the same Secret, because it is one shared string
+            # compared across two hosts and not two independent settings. Rotating it is therefore a
+            # two-host operation: see ago-root docs/runbooks/secret-rotation.md.
+            - name: ModuleProvisioning__Secret
+              value: "$(MODULE_PROVISIONING_SECRET)"
             # `AuthenticationSetup.AddCalendarOperatorAuthentication`'s one required setting - the host
             # refuses to start without it (see that file's own remarks: "There is no fallback and no
             # dev stub"). Same realm as `Ago.Chat.Api` - `adr/0027`: one Keycloak realm, two entirely

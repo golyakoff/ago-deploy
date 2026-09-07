@@ -136,6 +136,21 @@ spec:
             # finding on the line above is not something to repeat on a second key.
             - name: Channels__CredentialEncryptionKey
               value: "$(CHANNELS_CREDENTIAL_ENCRYPTION_KEY)"
+            # `23-87`: the deployment-wide secret `Ago.Chat.Api` presents on the outbound call that
+            # registers a module for a site (`adr/0095`), read from configuration rather than a request
+            # body since `adr/0150`. **Unset in every deployment this system has ever had until now** -
+            # `IModuleProvisioningSecretProvider.TryGet()` returns null on a blank value rather than
+            # throwing, deliberately (a deployment with no modules is a legitimate deployment), so the
+            # gap surfaced only when `23-65` gave the platform owner a screen that calls it and got
+            # `503 Module.ProvisioningNotConfigured`. `calendar-api.yaml` sets the identical value from
+            # the identical variable: the two must match or every grant fails closed.
+            #
+            # Deliberately an explicit `env` on the two hosts that use it rather than left to the
+            # blanket `envFrom` above: `Ago.Chat.Worker` and `Ago.Chat.Webhooks` have no provisioning
+            # path, and a secret that only appears where it is used is one whose blast radius can be
+            # read off the manifest.
+            - name: ModuleProvisioning__Secret
+              value: "$(MODULE_PROVISIONING_SECRET)"
             # `13-02`: BillingOptions/YooKassaOptions are bound and validated for every host
             # (ChatModule.ConfigureServices) - this manifest never carried either, so a fresh image
             # crash-loops the moment ValidateOnStart runs (the same class of gap `7-03`'s own remarks

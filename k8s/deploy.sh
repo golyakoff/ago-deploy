@@ -268,6 +268,51 @@ EOF
 step "Smoke"
 CHAT_REPO="${CHAT_REPO:-$AGO_ROOT/ago-chat}" "$HERE/smoke.sh" "$DOMAIN"
 
+# `15-23`: this script has the identical shape `15-21`/`adr/0144` found in redeploy.sh - it moves
+# workloads with 'kubectl set image' alone and never applies a manifest - and since `15-06` it is the
+# *more* commonly used of the two, so the incident that check exists for (a Deployment env, probe,
+# resources, replica count, or NetworkPolicy spec correct in the repository and silently absent from
+# the cluster) was fully reachable through this script even after `15-21` closed it in the other one.
+#
+# Same script, same message, called the same way: last step, after smoke, exit code discarded. A
+# deploy that already moved images and passed smoke does not become undone by a warning printed after
+# it, and a check that can only warn must never be wired to look like the thing it warns about - see
+# check-manifest-drift.sh's own header for what it compares, what it deliberately ignores, and why.
+#
+# Deliberately NOT scoped to the one component this invocation moved (a bare SHA for the three chat
+# hosts, or 'calendar', or one frontend). check-manifest-drift.sh already reports on the whole demo
+# overlay's Deployments and NetworkPolicies against the whole live cluster, regardless of which script
+# called it or what that script just touched - that is already true when redeploy.sh calls it, since
+# redeploy.sh does not touch NetworkPolicies either and a stray drift there is exactly what `23-45`
+# was. Narrowing the comparison to "only what deploy.sh's own TARGETS array named" would need a second
+# per-component filter this check has no way to express for a NetworkPolicy (nothing here names one
+# component's NetworkPolicy as belonging to it), and would have to be proven correct against a real
+# cluster the same way the rest of this check has not yet been - not worth adding without a second
+# incident to justify it, the same standard `adr/0144`'s own Consequences section holds the check's
+# other boundaries to. Whole-overlay reporting is also the more useful shape here specifically,
+# not merely the simpler one: deploy.sh runs far more often than redeploy.sh, so attaching the same
+# standing question to every invocation - "does the committed manifest still match the cluster?" -
+# surfaces drift left by an unrelated earlier change much sooner than waiting for the next redeploy.sh.
+#
+# No first-install false alarm to guard against here, checked rather than assumed: 'kubectl set image'
+# two steps up already requires the target Deployment(s) to exist, so a cluster that has never had
+# this overlay applied at all fails there, under `set -euo pipefail`, before this line is ever reached
+# - there is no path through this script that reaches the drift check with nothing underneath it to
+# compare against. What check-manifest-drift.sh's own UNKNOWN path is for is a narrower case than "no
+# cluster": a Deployment that exists but was never created via 'kubectl apply' (no
+# last-applied-configuration annotation for the three-way merge to use), or a NetworkPolicy /
+# repository image the rendered overlay's own sed-normalization step finds nothing live to key against
+# - reported as UNKNOWN, never folded into PASS.
+#
+# No self-update hazard either, checked rather than assumed after the redeploy.sh one found this
+# morning: redeploy.sh's step 1 'git pull's the ago-deploy checkout it is itself running from, so the
+# bash process keeps reading the inode it started on and a change to redeploy.sh's own last step does
+# not take effect on the run that fetches it. deploy.sh pulls nothing - it has no checkouts step at
+# all - so there is no mid-run pull of its own source to race against. The ordinary rule applies
+# instead: whoever runs deploy.sh next gets this step the moment their own 'ago-deploy' checkout is
+# updated to include it, same as any other change to this file.
+NS="$NS" "$HERE/check-manifest-drift.sh" demo || true
+
 # Migrations and rollback - the asymmetry, stated plainly because it is the part every rollback
 # story gets silently wrong:
 #

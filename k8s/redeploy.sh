@@ -342,3 +342,16 @@ applies to their tags exactly as much as to the hosts they run ahead of):
     ago-landing                               $LANDING_SHA
     ago-calendar-{api,worker,migrator}        $CALENDAR_SHA
 EOF
+
+# `15-21`: this step exists because everything above it moves images only. A change to a
+# Deployment's env, probe, resources or replica count, or to a NetworkPolicy, that landed in this
+# repository since the last `apply -k` does not reach the cluster through any step above - and until
+# now nothing said so. See check-manifest-drift.sh's own header for what this compares and what it
+# deliberately does not.
+#
+# Run last, after the closing note above, and its exit code is thrown away on purpose: this deploy
+# already succeeded - images moved, migrations applied, smoke green - and a check that can only warn
+# must never look like the thing it warns about, nor swallow the "commit these tags" note above the
+# way a smoke failure already can (`set -e` mid-script is a separate, pre-existing gap - see
+# ago-root's `15-21` item for why this step does not also try to fix that one).
+NS="$NS" "$AGO_ROOT/ago-deploy/k8s/check-manifest-drift.sh" demo || true

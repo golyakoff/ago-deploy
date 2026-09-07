@@ -117,19 +117,19 @@ configMapGenerator:
 images:
   - name: ago-chat-api
     newName: ghcr.io/golyakoff/ago-chat-api
-    newTag: cd35c5e68581422b307740d4b46e511b6ca15018
+    newTag: d8dc018a7e4e39d7eac843d8e379956108a5166b
   - name: ago-chat-worker
     newName: ghcr.io/golyakoff/ago-chat-worker
-    newTag: cd35c5e68581422b307740d4b46e511b6ca15018
+    newTag: d8dc018a7e4e39d7eac843d8e379956108a5166b
   - name: ago-chat-webhooks
     newName: ghcr.io/golyakoff/ago-chat-webhooks
-    newTag: cd35c5e68581422b307740d4b46e511b6ca15018
+    newTag: d8dc018a7e4e39d7eac843d8e379956108a5166b
   # `8-08`: the migrator moves with the three hosts and never independently - it applies the
   # migrations *that commit* carries, so a migrator on a different SHA from the hosts is the exact
   # mismatch this item exists to prevent. deploy.sh sets all four from one argument for that reason.
   - name: ago-chat-migrator
     newName: ghcr.io/golyakoff/ago-chat-migrator
-    newTag: cd35c5e68581422b307740d4b46e511b6ca15018
+    newTag: d8dc018a7e4e39d7eac843d8e379956108a5166b
   # `15-07`/`adr/0051`: the four static bundles, which `15-06` could not reach - and the one it did
   # not reach is the one the 2026-08-25 incident happened to. Their four `imagePullPolicy: Never`
   # patches are gone from *-static.yaml for the same reason the three above went.
@@ -173,7 +173,7 @@ images:
   # one list, two renderers - so the two cannot disagree about what a tenant may see.
   - name: ago-console
     newName: ghcr.io/golyakoff/ago-console
-    newTag: 715d99d8bb722693e620bdbcde0b52fcff04a1eb
+    newTag: 800c9820071c76453750b56cf45d15bbd48c07aa
   # All three come from one `ago-widget` commit, and that is the point rather than tidiness: the two
   # demo pages and a real tenant's embed then run byte-identical bundles, which is checkable (three
   # `version.json` files naming one commit) instead of assumed.
@@ -192,13 +192,13 @@ images:
   # leave two public pages running a bundle whose sibling behaves differently.
   - name: ago-demo-shop1
     newName: ghcr.io/golyakoff/ago-demo-shop1
-    newTag: 003af215d191729426f36859aad8a3ffe2b223ef
+    newTag: d6b4c48df930e13d41a507d3d0d60fce6c2c5b14
   - name: ago-demo-shop2
     newName: ghcr.io/golyakoff/ago-demo-shop2
-    newTag: 003af215d191729426f36859aad8a3ffe2b223ef
+    newTag: d6b4c48df930e13d41a507d3d0d60fce6c2c5b14
   - name: ago-widget-assets
     newName: ghcr.io/golyakoff/ago-widget-assets
-    newTag: 003af215d191729426f36859aad8a3ffe2b223ef
+    newTag: d6b4c48df930e13d41a507d3d0d60fce6c2c5b14
   # `adr/0092`: the copy-me snippet on the public landing page had been handing out
   # `chat.reserve-me.ru/widget.js` - a 404, under a filename that never existed anywhere. Until this
   # is deployed, the page a prospective customer reads still gives them a script tag that does not

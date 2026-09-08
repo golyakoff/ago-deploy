@@ -201,9 +201,30 @@ for job in ago-chat-migrator ago-calendar-migrator; do
   fi
   active="$(kc get job "$job" -n "$NS" -o jsonpath='{.status.active}')"
   if [ -n "$active" ] && [ "$active" != "0" ]; then
-    echo "   ${job}: has ${active} active pod(s) - a migration is running. Refusing to delete it." >&2
-    echo "   Re-run this script once it finishes (kubectl get job ${job} -n ${NS})." >&2
-    exit 1
+    # `23-109`: "active" is the Job's own count of pods that have not terminated. A pod that cannot
+    # start - its image does not resolve - is active by that measure and stays active forever, so the
+    # refusal below became permanent and the next apply was blocked by a migration that was not
+    # running. That is what an evicted or never-published image produced on 2026-09-08.
+    #
+    # **The distinction that matters is "working" versus "cannot start", not "slow" versus "quick".**
+    # A migration against a large table is legitimately active for a long time and killing it is worse
+    # than waiting, which is the whole reason this guard exists. A timeout would get exactly that case
+    # wrong. The container's own waiting reason answers it without guessing: `ImagePullBackOff` and
+    # `ErrImagePull` mean the kubelet has given up resolving the image, and no amount of waiting
+    # changes that.
+    blocked="$(kc get pods -n "$NS" --selector "job-name=${job}" \
+      -o jsonpath='{range .items[*]}{range .status.containerStatuses[*]}{.state.waiting.reason}{"\n"}{end}{end}' 2>/dev/null \
+      | grep -cE '^(ImagePullBackOff|ErrImagePull|InvalidImageName)$' || true)"
+
+    if [ "${blocked:-0}" -gt 0 ]; then
+      echo "   ${job}: ${active} active pod(s), but ${blocked} cannot start - the image does not resolve."
+      echo "   That is not a running migration, so it is deleted rather than treated as one."
+      echo "   The apply below recreates it at the tag the manifest pins."
+    else
+      echo "   ${job}: has ${active} active pod(s) - a migration is running. Refusing to delete it." >&2
+      echo "   Re-run this script once it finishes (kubectl get job ${job} -n ${NS})." >&2
+      exit 1
+    fi
   fi
   echo "   ${job}: finished, deleting so apply -k can recreate it"
   kc delete job "$job" -n "$NS"

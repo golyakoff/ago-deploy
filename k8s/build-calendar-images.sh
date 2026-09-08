@@ -37,6 +37,9 @@ IMAGE_TAG="${IMAGE_TAG:-local}"
 # from IMAGE_TAG, so an image tagged `local` still produces a binary that can name its own commit.
 # `Ago.Calendar.Api` answers this at GET /healthz/version since `20-24`; `Ago.Calendar.Worker` has no
 # HTTP surface to ask (deploy.sh's own pod_commit prints "unreadable" for it, correctly).
+# shellcheck source=lib-registry.sh
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib-registry.sh"
+
 GIT_COMMIT="$(git -C "$CALENDAR_REPO" rev-parse HEAD 2>/dev/null || echo unknown)"
 
 # A dirty tree produces an image labelled with a commit whose source does not match it. Loud, not
@@ -47,12 +50,21 @@ fi
 
 for project in Ago.Calendar.Api Ago.Calendar.Worker Ago.Calendar.Migrator; do
   name="$(echo "$project" | sed 's/Ago\.Calendar\.//' | tr '[:upper:]' '[:lower:]')"
-  image="${IMAGE_REPO:+${IMAGE_REPO}/}ago-calendar-${name}:${IMAGE_TAG}"
-  echo "Building ${image} from ${project} (commit ${GIT_COMMIT:0:7})..."
-  docker build \
-    --build-context "nugetfeed=${NUGET_FEED}" \
-    --build-arg "PROJECT_NAME=${project}" \
-    --build-arg "GIT_COMMIT=${GIT_COMMIT}" \
-    -t "$image" \
-    "$CALENDAR_REPO"
+  basename="ago-calendar-${name}"
+  image="${IMAGE_REPO:+${IMAGE_REPO}/}${basename}:${IMAGE_TAG}"
+  # `23-109`: identical to build-images.sh's reasoning - pull what the registry already has, so that
+  # anything built here is built because nothing else holds it, and says so.
+  if [ -n "$IMAGE_REPO" ] && registry_has "${IMAGE_REPO#ghcr.io/}/${basename}" "$IMAGE_TAG"; then
+    echo "Pulling ${image} - the registry already has this commit, so there is nothing to build."
+    docker pull -q "$image"
+  else
+    echo "Building ${image} from ${project} (commit ${GIT_COMMIT:0:7})..."
+    docker build \
+      --build-context "nugetfeed=${NUGET_FEED}" \
+      --build-arg "PROJECT_NAME=${project}" \
+      --build-arg "GIT_COMMIT=${GIT_COMMIT}" \
+      -t "$image" \
+      "$CALENDAR_REPO"
+    echo "  NOTE: ${basename}:${IMAGE_TAG:0:7} exists only on this node - the registry does not have it."
+  fi
 done

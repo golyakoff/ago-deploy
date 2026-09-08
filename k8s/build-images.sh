@@ -33,6 +33,9 @@ CHAT_REPO="${CHAT_REPO:-../../ago-chat}"
 NUGET_FEED="${NUGET_FEED:-../../.nuget-feed}"
 IMAGE_REPO="${IMAGE_REPO:-}"
 BUILT_IMAGES_FILE="${BUILT_IMAGES_FILE:-}"
+
+# shellcheck source=lib-registry.sh
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib-registry.sh"
 # `local` stays the default so the Docker Desktop loop and overlays/local are untouched by 15-06 -
 # there, a mutable tag costs nothing, because the cluster and the source tree are the same machine.
 # It is the *demo node* where a mutable tag cost a day of a stale bundle, and there IMAGE_TAG is the
@@ -60,13 +63,25 @@ for project in Ago.Chat.Api Ago.Chat.Worker Ago.Chat.Webhooks Ago.Chat.Migrator 
   name="$(echo "$project" | sed 's/Ago\.Chat\.//' | tr '[:upper:]' '[:lower:]')"
   basename="ago-chat-${name}"
   image="${IMAGE_REPO:+${IMAGE_REPO}/}${basename}:${IMAGE_TAG}"
-  echo "Building ${image} from ${project} (commit ${GIT_COMMIT:0:7})..."
-  docker build \
-    --build-context "nugetfeed=${NUGET_FEED}" \
-    --build-arg "PROJECT_NAME=${project}" \
-    --build-arg "GIT_COMMIT=${GIT_COMMIT}" \
-    -t "$image" \
-    "$CHAT_REPO"
+  # `23-109`: ask the registry before building. An image CI already published is pulled instead, which
+  # is faster and - the actual point - means anything that *is* built here is built because nothing
+  # else has it, and can say so. `registry_has` returns 2 for "could not ask", and that is treated as
+  # "build it": a network failure must never be read as "the registry has it".
+  if [ -n "$IMAGE_REPO" ] && registry_has "${IMAGE_REPO#ghcr.io/}/${basename}" "$IMAGE_TAG"; then
+    echo "Pulling ${image} - the registry already has this commit, so there is nothing to build."
+    docker pull -q "$image"
+  else
+    echo "Building ${image} from ${project} (commit ${GIT_COMMIT:0:7})..."
+    docker build \
+      --build-context "nugetfeed=${NUGET_FEED}" \
+      --build-arg "PROJECT_NAME=${project}" \
+      --build-arg "GIT_COMMIT=${GIT_COMMIT}" \
+      -t "$image" \
+      "$CHAT_REPO"
+    echo "  NOTE: ${basename}:${IMAGE_TAG:0:7} exists only on this node - the registry does not have it."
+    echo "  If containerd evicts it there is nothing to pull it back from; push the commit and let CI"
+    echo "  publish, or expect to rebuild."
+  fi
   if [ -n "$BUILT_IMAGES_FILE" ]; then
     echo "$basename" >>"$BUILT_IMAGES_FILE"
   fi

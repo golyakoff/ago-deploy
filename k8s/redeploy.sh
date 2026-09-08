@@ -150,8 +150,18 @@ echo "   ago-chat at $CHAT_SHA"
 echo "   ago-console at ${CONSOLE_SHA:0:7}, ago-widget at ${WIDGET_SHA:0:7}, ago-landing at ${LANDING_SHA:0:7}"
 echo "   ago-calendar at $CALENDAR_SHA"
 cd "$AGO_ROOT/ago-chat"
+# `23-98`: the images this step imports (step 4, below) come from this file rather than a second,
+# hand-written list. build-images.sh appends one bare image name per line as it builds each one, so
+# the set imported is the set built by construction - the shape that let ago-chat-roleassignmentbackfill
+# get built on every deploy and imported on none, discovered only when run-backfill.sh picked the tag
+# that had never reached containerd. Truncated with `: >` before the build runs, since the file is
+# scoped to this one redeploy.sh run and build-images.sh's own contract is to append, not to own its
+# own truncation.
+CHAT_IMAGES_FILE="$(mktemp)"
+: >"$CHAT_IMAGES_FILE"
 CHAT_REPO=. NUGET_FEED=../ago-deploy/.nuget-feed DOCKER_BUILDKIT=1 \
-  IMAGE_REPO="$REGISTRY" IMAGE_TAG="$CHAT_SHA" ../ago-deploy/k8s/build-images.sh
+  IMAGE_REPO="$REGISTRY" IMAGE_TAG="$CHAT_SHA" BUILT_IMAGES_FILE="$CHAT_IMAGES_FILE" \
+  ../ago-deploy/k8s/build-images.sh
 # `20-26`: same NuGet feed step 2 just packed - Ago.Platform.* is versioned, not per-product, so the
 # one feed serves both Dockerfiles' `nugetfeed` build-context mount (confirmed identical between
 # ago-chat/nuget.docker.config and ago-calendar/nuget.docker.config - the latter is a stated unchanged
@@ -171,10 +181,19 @@ step "4. Import into containerd"
 # the Never patches) find these locally and never reach out: the kubelet matches on the full
 # reference, so `ghcr.io/.../ago-chat-api:<sha>` present in containerd is used as-is. Building here
 # is now the exception - a hotfix, or a rebuilt cluster ahead of CI - not the normal path.
-for img in ago-chat-api ago-chat-worker ago-chat-webhooks ago-chat-migrator; do
+# `23-98`: this list used to be hand-written here - ago-chat-api, -worker, -webhooks, -migrator - and
+# stopped naming a fifth image, ago-chat-roleassignmentbackfill, the day build-images.sh started
+# building one. Nothing failed: the build succeeded, the import loop simply never mentioned it, and
+# the only stale copy in containerd was four days old by the time run-backfill.sh needed the current
+# one. Reading CHAT_IMAGES_FILE instead - the file step 3 just had build-images.sh write, one name per
+# build - means this loop imports exactly what was built, and a sixth image added to that project loop
+# needs no matching edit here to be reachable.
+while IFS= read -r img; do
+  [ -n "$img" ] || continue
   printf "   %-18s " "$img"
   docker save "${REGISTRY}/${img}:${CHAT_SHA}" | sudo k3s ctr -n k8s.io images import - >/dev/null && echo "imported"
-done
+done <"$CHAT_IMAGES_FILE"
+rm -f "$CHAT_IMAGES_FILE"
 # `20-26`: ago-calendar's three images, at CALENDAR_SHA rather than CHAT_SHA - a separate loop rather
 # than one more entry in the loop above because the tag differs, not because the mechanism does.
 for img in ago-calendar-api ago-calendar-worker ago-calendar-migrator; do

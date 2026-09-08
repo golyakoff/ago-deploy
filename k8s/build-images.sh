@@ -17,15 +17,22 @@
 #     bytes took.
 #
 # Environment:
-#   CHAT_REPO   path to the ago-chat checkout            (default: ../../ago-chat)
-#   NUGET_FEED  folder holding the Ago.Platform.* .nupkg (default: ../../.nuget-feed)
-#   IMAGE_REPO  registry/owner prefix, no trailing slash (default: empty - bare local names)
-#   IMAGE_TAG   tag to apply                             (default: local)
+#   CHAT_REPO         path to the ago-chat checkout            (default: ../../ago-chat)
+#   NUGET_FEED        folder holding the Ago.Platform.* .nupkg (default: ../../.nuget-feed)
+#   IMAGE_REPO        registry/owner prefix, no trailing slash (default: empty - bare local names)
+#   IMAGE_TAG         tag to apply                             (default: local)
+#   BUILT_IMAGES_FILE if set, this script appends the bare image name (registry and tag stripped,
+#                      e.g. `ago-chat-api`) of each image it builds, one per line. `23-98`: this is
+#                      how a caller that needs to *import* what got built - redeploy.sh's step 4 -
+#                      derives that set from the one this loop actually built, instead of a second,
+#                      hand-maintained list that can name four names while this one builds five. The
+#                      file is appended to, not truncated, so a caller owns clearing it first.
 set -euo pipefail
 
 CHAT_REPO="${CHAT_REPO:-../../ago-chat}"
 NUGET_FEED="${NUGET_FEED:-../../.nuget-feed}"
 IMAGE_REPO="${IMAGE_REPO:-}"
+BUILT_IMAGES_FILE="${BUILT_IMAGES_FILE:-}"
 # `local` stays the default so the Docker Desktop loop and overlays/local are untouched by 15-06 -
 # there, a mutable tag costs nothing, because the cluster and the source tree are the same machine.
 # It is the *demo node* where a mutable tag cost a day of a stale bundle, and there IMAGE_TAG is the
@@ -51,7 +58,8 @@ fi
 # reason nobody noticed is that nothing built it.
 for project in Ago.Chat.Api Ago.Chat.Worker Ago.Chat.Webhooks Ago.Chat.Migrator Ago.Chat.RoleAssignmentBackfill; do
   name="$(echo "$project" | sed 's/Ago\.Chat\.//' | tr '[:upper:]' '[:lower:]')"
-  image="${IMAGE_REPO:+${IMAGE_REPO}/}ago-chat-${name}:${IMAGE_TAG}"
+  basename="ago-chat-${name}"
+  image="${IMAGE_REPO:+${IMAGE_REPO}/}${basename}:${IMAGE_TAG}"
   echo "Building ${image} from ${project} (commit ${GIT_COMMIT:0:7})..."
   docker build \
     --build-context "nugetfeed=${NUGET_FEED}" \
@@ -59,4 +67,7 @@ for project in Ago.Chat.Api Ago.Chat.Worker Ago.Chat.Webhooks Ago.Chat.Migrator 
     --build-arg "GIT_COMMIT=${GIT_COMMIT}" \
     -t "$image" \
     "$CHAT_REPO"
+  if [ -n "$BUILT_IMAGES_FILE" ]; then
+    echo "$basename" >>"$BUILT_IMAGES_FILE"
+  fi
 done

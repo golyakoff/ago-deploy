@@ -205,11 +205,12 @@ done
 # import still needs. `|| true` because a failed prune is not a reason to fail a deploy that has
 # already produced and imported every image correctly.
 echo
-printf '[1m== 4b. Reclaim build cache older than a week[0m
-'
+echo "== 4b. Reclaim build cache older than a week"
 docker builder prune --force --filter until=168h 2>&1 | tail -1 || true
-df -h / | awk 'NR==2 {printf "   disk: %s used, %s free
-", $5, $4}'
+# `df -h` prints "Filesystem Size Used Avail Use% Mounted"; cut is enough and, unlike an awk
+# program, carries no quoting that a later edit can break. The first version of this line did
+# exactly that and aborted a deploy under `set -euo pipefail`.
+echo "   disk: $(df -h / | tail -1 | tr -s ' ' | cut -d' ' -f5) used, $(df -h / | tail -1 | tr -s ' ' | cut -d' ' -f4) free"
 
 # `8-08` / ago-root `adr/0056`: this step used to be `dotnet ef database update`, run from the checkout
 # on this node against a port-forwarded Postgres, needing the dotnet SDK and a NuGet restore on a

@@ -186,6 +186,31 @@ for entry in "ago-console:$CONSOLE_SHA" "ago-demo-shop1:$WIDGET_SHA" "ago-demo-s
   docker save "${REGISTRY}/${entry}" | sudo k3s ctr -n k8s.io images import - >/dev/null && echo "imported"
 done
 
+# `23-98`: reclaim the build cache the step above just finished with. Every image is now in
+# containerd, which is the only copy the kubelet reads, so the layers BuildKit kept to make the *next*
+# build incremental are the only thing at stake here - and a week is long enough that anything older
+# belongs to a commit nobody will build again.
+#
+# This is not tidiness. On 2026-09-08 this node reached 86% of a 79GB volume, almost entirely from
+# BuildKit's own cache (53.8GB) and superseded image tags, and the kubelet's image garbage collector
+# starts evicting at 85%. It evicted exactly the images no running workload references - both
+# products' migrators - while every host image survived because a Deployment holds it. Those images
+# exist nowhere else: they are built here and imported locally, `ghcr` has never had them, and
+# `imagePullPolicy: IfNotPresent` falls back to a pull that cannot succeed. So an eviction is
+# unrecoverable without another build, and the first symptom was a migrator Job in ImagePullBackOff
+# that also blocks the *next* apply, because `apply-demo.sh` declines while a Job is active.
+#
+# Placed after the import rather than before the build, deliberately: pruning first would make every
+# deploy a cold build for no benefit, and pruning before the import would risk reclaiming a layer the
+# import still needs. `|| true` because a failed prune is not a reason to fail a deploy that has
+# already produced and imported every image correctly.
+echo
+printf '[1m== 4b. Reclaim build cache older than a week[0m
+'
+docker builder prune --force --filter until=168h 2>&1 | tail -1 || true
+df -h / | awk 'NR==2 {printf "   disk: %s used, %s free
+", $5, $4}'
+
 # `8-08` / ago-root `adr/0056`: this step used to be `dotnet ef database update`, run from the checkout
 # on this node against a port-forwarded Postgres, needing the dotnet SDK and a NuGet restore on a
 # machine whose only other job is running containers. It is now the Ago.Chat.Migrator image, built from

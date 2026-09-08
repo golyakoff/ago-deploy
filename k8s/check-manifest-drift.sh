@@ -213,8 +213,10 @@ case "$rc" in
     echo
     echo "   If the tags redeploy.sh just printed still need committing, commit those first - then:"
     echo "     cd $HERE && ./apply-demo.sh"
-    echo "   (apply-demo.sh refuses while the committed pins are behind the cluster, 22-24 - committing"
-    echo "   the tags first is what clears that refusal before this drift can be applied.)"
+    echo "   (apply-demo.sh refuses a *rollback* - pins naming a tag this cluster has already run,"
+    echo "   22-24 as narrowed by 23-110. Committing the tags redeploy just used is what clears that,"
+    echo "   because it stops the manifest pointing backwards. A manifest deliberately ahead of the"
+    echo "   cluster - freshly published CI images - is a roll-forward and needs no flag.)"
     ;;
   *)
     echo "   UNKNOWN - 'kubectl diff' itself failed (exit ${rc}), rather than reporting a diff:"

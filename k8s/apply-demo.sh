@@ -114,8 +114,44 @@ step() { printf "\n\033[1m== %s\033[0m\n" "$1"; }
 # serve traffic, and the migrator is recreated from the manifest on every run by design.
 #
 # `--force-rollback` keeps a deliberate rollback possible while an accidental one is not.
+#
+# `23-110`: **it used to be the only way to move forward, too, and that was the defect.** The set
+# comparison below cannot tell "the manifest is behind the cluster because a redeploy just ran" from
+# "the manifest is deliberately ahead because CI published new images" - both are simply "a tag
+# nothing is running". So every ordinary forward deploy from a committed manifest had to be spelled
+# `--force-rollback`, which puts a false statement into the shell history somebody reconstructs an
+# incident from. The guard was right; its only exit was misnamed.
+#
+# **The fix is to ask the cluster which direction this is.** A tag the cluster has run before is
+# recorded in a ReplicaSet; a tag it has never seen is not. That is exactly the distinction, it needs
+# no git checkout on the node - which has been 85 commits stale before now - and it answers the same
+# way for every path that reaches this script.
+#
+# The hole, stated: ReplicaSet history is bounded by `revisionHistoryLimit`, so a rollback to
+# something older than that reads as forward and passes without the flag. **That is the right place
+# for the hole to be.** The accident this guard exists for is a redeploy leaving the manifest a step
+# or two behind, whose tags are by construction recent and therefore in history. A rollback past ten
+# revisions is deliberate archaeology, not a slip.
 FORCE_ROLLBACK=0
-for arg in "$@"; do [ "$arg" = "--force-rollback" ] && FORCE_ROLLBACK=1; done
+CHECK_ONLY=0
+for arg in "$@"; do
+  [ "$arg" = "--force-rollback" ] && FORCE_ROLLBACK=1
+  [ "$arg" = "--check-only" ] && CHECK_ONLY=1
+done
+
+# `--check-only` runs the direction check and stops, touching nothing. It exists so the guard itself
+# can be *proved* rather than asserted: both its answers are now demonstrable against the live cluster
+# without applying a manifest, which was impossible while the only way to exercise it was to deploy.
+# `HERE` may be overridden so a copy of this script can be pointed at a scratch overlay for that.
+HERE="${APPLY_DEMO_HERE:-$HERE}"
+
+# Every image this cluster has run for a Deployment, from ReplicaSet history rather than from the
+# live pods - the live set answers "what is running", and the question here is "what has run".
+cluster_has_run() {
+  kc get rs -n "$NS" \
+    -o jsonpath='{range .items[*]}{range .spec.template.spec.containers[*]}{.image}{"\n"}{end}{end}' 2>/dev/null \
+    | grep -E "^ghcr\.io/golyakoff/" | sort -u
+}
 
 step "Comparing the manifest's image tags against what is running"
 # `15-22`: `[a-z0-9-]+`, not `[a-z-]+` - two repository names in this overlay carry a digit
@@ -128,16 +164,30 @@ running_imgs="$(kc get deploy -n "$NS"   -o jsonpath='{range .items[*]}{.spec.te
 would_introduce="$(comm -23 <(printf '%s\n' "$manifest_imgs") <(printf '%s\n' "$running_imgs"))"
 
 if [ -n "$would_introduce" ]; then
-  echo "   this apply would move these to a tag nothing is running:" >&2
-  printf '%s\n' "$would_introduce" | sed 's|ghcr.io/golyakoff/|     |' >&2
-  if [ "$FORCE_ROLLBACK" = "1" ]; then
-    echo "   --force-rollback given, continuing." >&2
-  else
-    echo >&2
-    echo "   Refusing to apply. If a redeploy just ran, the manifest is behind the cluster:" >&2
-    echo "   commit the tags it used (its own \"Keep the manifest honest\" note) and run this again." >&2
-    echo "   If you really do mean the tags in the file: $0 --force-rollback" >&2
-    exit 1
+  # Split what this apply would introduce by direction. Anything the cluster has run before is a
+  # rollback and needs saying so out loud; anything it has never seen is a roll-forward and is the
+  # ordinary case this script exists to perform.
+  history="$(cluster_has_run)"
+  rollbacks="$(comm -12 <(printf '%s\n' "$would_introduce") <(printf '%s\n' "$history"))"
+  forwards="$(comm -23 <(printf '%s\n' "$would_introduce") <(printf '%s\n' "$history"))"
+
+  if [ -n "$forwards" ]; then
+    echo "   moving forward to tags this cluster has never run:"
+    printf '%s\n' "$forwards" | sed 's|ghcr.io/golyakoff/|     |'
+  fi
+
+  if [ -n "$rollbacks" ]; then
+    echo "   ROLLBACK - these tags have run here before:" >&2
+    printf '%s\n' "$rollbacks" | sed 's|ghcr.io/golyakoff/|     |' >&2
+    if [ "$FORCE_ROLLBACK" = "1" ]; then
+      echo "   --force-rollback given, continuing." >&2
+    else
+      echo >&2
+      echo "   Refusing to apply. If a redeploy just ran, the manifest is behind the cluster:" >&2
+      echo "   commit the tags it used (its own \"Keep the manifest honest\" note) and run this again." >&2
+      echo "   If you really do mean to go back: $0 --force-rollback" >&2
+      exit 1
+    fi
   fi
 else
   echo "   every image the manifest pins is already running"
@@ -158,6 +208,12 @@ for job in ago-chat-migrator ago-calendar-migrator; do
   echo "   ${job}: finished, deleting so apply -k can recreate it"
   kc delete job "$job" -n "$NS"
 done
+
+if [ "$CHECK_ONLY" = "1" ]; then
+  echo
+  echo "== --check-only: the direction check passed and nothing was applied."
+  exit 0
+fi
 
 step "kubectl apply -k overlays/demo"
 kc apply -k "$HERE/overlays/demo"

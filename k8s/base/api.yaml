@@ -173,6 +173,32 @@ spec:
             # `calendar-api.yaml`'s own Service under this exact name).
             - name: ModuleEntryPoints__calendar
               value: "http://ago-calendar-api"
+            # `23-102`: the permissions a module needs, declared the same way its address is and read
+            # the same way - `IModulePermissionsProvider` resolves whatever key a caller names against
+            # this section, so no literal module name enters `Ago.Chat.*` and the architecture guard
+            # still holds. These are exactly `RegisterSiteHandler`'s own calendar entries: the day-to-day
+            # booking actions to Operator, configuration to Admin, the split that handler already draws.
+            #
+            # **An absent section is not an error, and that is the hazard.** Unlike an entry point - where
+            # a missing declaration is refused by name - chat cannot tell "this module genuinely needs no
+            # extra permission" from "the deployer forgot", because telling them apart would mean knowing
+            # what a module is. So a grant against a deployment that declares nothing **succeeds and adds
+            # nothing**, and the tenant is told they lack permission on a capability they were just given.
+            # That is the exact bug `23-102` exists to close, and omitting these lines reopens it silently.
+            - name: ModulePermissions__calendar__Operator__0
+              value: "booking:confirm"
+            - name: ModulePermissions__calendar__Operator__1
+              value: "booking:reject"
+            - name: ModulePermissions__calendar__Operator__2
+              value: "booking:cancel"
+            - name: ModulePermissions__calendar__Operator__3
+              value: "booking:mark_no_show"
+            - name: ModulePermissions__calendar__Operator__4
+              value: "customer:read"
+            - name: ModulePermissions__calendar__Operator__5
+              value: "customer:edit"
+            - name: ModulePermissions__calendar__Admin__0
+              value: "calendar:configure"
             # `13-02`: BillingOptions/YooKassaOptions are bound and validated for every host
             # (ChatModule.ConfigureServices) - this manifest never carried either, so a fresh image
             # crash-loops the moment ValidateOnStart runs (the same class of gap `7-03`'s own remarks

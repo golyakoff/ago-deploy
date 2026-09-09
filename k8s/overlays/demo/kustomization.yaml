@@ -238,13 +238,13 @@ images:
   # deployment down.
   - name: ago-calendar-api
     newName: ghcr.io/golyakoff/ago-calendar-api
-    newTag: af636f7a55009e81b7be1a10b411db1929ba6ed9
+    newTag: 1b52c5ac60e978351f72af6a7fc347c553c86c1a
   - name: ago-calendar-worker
     newName: ghcr.io/golyakoff/ago-calendar-worker
-    newTag: af636f7a55009e81b7be1a10b411db1929ba6ed9
+    newTag: 1b52c5ac60e978351f72af6a7fc347c553c86c1a
   - name: ago-calendar-migrator
     newName: ghcr.io/golyakoff/ago-calendar-migrator
-    newTag: af636f7a55009e81b7be1a10b411db1929ba6ed9
+    newTag: 1b52c5ac60e978351f72af6a7fc347c553c86c1a
 
 patches:
   # `8-07`/ago-root `adr/0058`: this is the one deployment that wants the demo-credential endpoint, so

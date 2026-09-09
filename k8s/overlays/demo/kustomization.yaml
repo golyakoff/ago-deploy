@@ -117,19 +117,19 @@ configMapGenerator:
 images:
   - name: ago-chat-api
     newName: ghcr.io/golyakoff/ago-chat-api
-    newTag: 97c317dda55bf7739094b5c6ab8c057653f11b38
+    newTag: 4bebc58d959bc487f4a8eec3ce884f568aa7effe
   - name: ago-chat-worker
     newName: ghcr.io/golyakoff/ago-chat-worker
-    newTag: 97c317dda55bf7739094b5c6ab8c057653f11b38
+    newTag: 4bebc58d959bc487f4a8eec3ce884f568aa7effe
   - name: ago-chat-webhooks
     newName: ghcr.io/golyakoff/ago-chat-webhooks
-    newTag: 97c317dda55bf7739094b5c6ab8c057653f11b38
+    newTag: 4bebc58d959bc487f4a8eec3ce884f568aa7effe
   # `8-08`: the migrator moves with the three hosts and never independently - it applies the
   # migrations *that commit* carries, so a migrator on a different SHA from the hosts is the exact
   # mismatch this item exists to prevent. deploy.sh sets all four from one argument for that reason.
   - name: ago-chat-migrator
     newName: ghcr.io/golyakoff/ago-chat-migrator
-    newTag: 97c317dda55bf7739094b5c6ab8c057653f11b38
+    newTag: 4bebc58d959bc487f4a8eec3ce884f568aa7effe
   # `15-07`/`adr/0051`: the four static bundles, which `15-06` could not reach - and the one it did
   # not reach is the one the 2026-08-25 incident happened to. Their four `imagePullPolicy: Never`
   # patches are gone from *-static.yaml for the same reason the three above went.
@@ -173,7 +173,7 @@ images:
   # one list, two renderers - so the two cannot disagree about what a tenant may see.
   - name: ago-console
     newName: ghcr.io/golyakoff/ago-console
-    newTag: e3914ac5231539f07246d69db396904527bb6085
+    newTag: 2ca1d1bf9c8fe2a72ce7bf49cd9c1f6906890dd0
   # All three come from one `ago-widget` commit, and that is the point rather than tidiness: the two
   # demo pages and a real tenant's embed then run byte-identical bundles, which is checkable (three
   # `version.json` files naming one commit) instead of assumed.
@@ -238,13 +238,13 @@ images:
   # deployment down.
   - name: ago-calendar-api
     newName: ghcr.io/golyakoff/ago-calendar-api
-    newTag: 274520c50f44333e75a2130c6373270f434424ee
+    newTag: 251cc55ff584483e5384b4526cd9943be9a852a8
   - name: ago-calendar-worker
     newName: ghcr.io/golyakoff/ago-calendar-worker
-    newTag: 274520c50f44333e75a2130c6373270f434424ee
+    newTag: 251cc55ff584483e5384b4526cd9943be9a852a8
   - name: ago-calendar-migrator
     newName: ghcr.io/golyakoff/ago-calendar-migrator
-    newTag: 274520c50f44333e75a2130c6373270f434424ee
+    newTag: 251cc55ff584483e5384b4526cd9943be9a852a8
 
 patches:
   # `8-07`/ago-root `adr/0058`: this is the one deployment that wants the demo-credential endpoint, so

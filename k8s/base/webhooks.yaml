@@ -83,8 +83,12 @@ spec:
               value: "$(CHANNELS_CREDENTIAL_ENCRYPTION_KEY)"
             # `13-02`: same requirement as ago-chat-api - see that manifest's own comment (STUB, no
             # real ЮKassa merchant account yet).
-            - name: Billing__PricePerSeatRub
-              value: "590"
+            # `25-29`: split into ago-business decision 0012's base-plus-marginal formula - see
+            # api.yaml's own comment for the reasoning. Both keys ship together everywhere.
+            - name: Billing__BaseSeatPriceRub
+              value: "490"
+            - name: Billing__PricePerExtraSeatRub
+              value: "200"
             - name: Billing__CheckoutReturnUrl
               value: "https://office.reserve-me.ru/settings/billing"
             - name: Billing__YooKassa__ShopId

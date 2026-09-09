@@ -209,8 +209,14 @@ spec:
             # will refuse any call made with them (401), so a checkout can fail loudly but never
             # silently charge anything. Replace with the real triple the moment the merchant account
             # exists; nothing else in this manifest needs to change to do that.
-            - name: Billing__PricePerSeatRub
-              value: "590"
+            # `25-29`: split from the flat Billing__PricePerSeatRub (590) into ago-business decision
+            # 0012's real base-plus-marginal formula - 490 for the first 3 seats, +200 per seat past
+            # that. Both keys must ship together; ChatModule.ValidateOnStart() refuses to boot on
+            # either one missing.
+            - name: Billing__BaseSeatPriceRub
+              value: "490"
+            - name: Billing__PricePerExtraSeatRub
+              value: "200"
             - name: Billing__CheckoutReturnUrl
               value: "https://office.reserve-me.ru/settings/billing"
             - name: Billing__YooKassa__ShopId

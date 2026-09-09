@@ -192,13 +192,13 @@ images:
   # leave two public pages running a bundle whose sibling behaves differently.
   - name: ago-demo-shop1
     newName: ghcr.io/golyakoff/ago-demo-shop1
-    newTag: 6e0d5d89d41d624fb5ad0ca84b44401003a5dd03
+    newTag: 16f1ee6b73ef1b43242ea8f433cfcd0918f261d9
   - name: ago-demo-shop2
     newName: ghcr.io/golyakoff/ago-demo-shop2
-    newTag: 6e0d5d89d41d624fb5ad0ca84b44401003a5dd03
+    newTag: 16f1ee6b73ef1b43242ea8f433cfcd0918f261d9
   - name: ago-widget-assets
     newName: ghcr.io/golyakoff/ago-widget-assets
-    newTag: 6e0d5d89d41d624fb5ad0ca84b44401003a5dd03
+    newTag: 16f1ee6b73ef1b43242ea8f433cfcd0918f261d9
   # `adr/0092`: the copy-me snippet on the public landing page had been handing out
   # `chat.reserve-me.ru/widget.js` - a 404, under a filename that never existed anywhere. Until this
   # is deployed, the page a prospective customer reads still gives them a script tag that does not

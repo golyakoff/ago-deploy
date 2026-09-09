@@ -572,3 +572,35 @@ patches:
           - name: https
             port: 443
             targetPort: 8443
+  # `23-93`/`adr/0164`: the module entry point's own scheme, switched from `base/api.yaml`'s plain
+  # `http://ago-calendar-api` to the encrypted listener the three patches just above this one exist to
+  # serve - mount-then-switch, in that order (this item's own text, and adr/0164's own Decision): the
+  # CA has been trusted inside Ago.Chat.Api's own image since `22-24`, and the leg is proven end to end
+  # in ago-chat's own ModuleRegistrationGatewayInternalTlsTests, so this switch is the last step, not
+  # the first one taken as a shortcut.
+  #
+  # **Demo-only, deliberately not a change to `base/api.yaml` itself.** The local overlay
+  # (`k8s/overlays/local/`) has no cert-manager, no `internal-tls.yaml`, and no 8443 listener on
+  # `ago-calendar-api` at all - only this overlay does. Editing the value in `base/` would point the
+  # local loop at a TLS port nothing there ever binds, turning every local module-registration call
+  # into a connection failure with no listener on the other end, not the certificate-trust question
+  # this item is actually about. `23-92`'s own comment on `base/api.yaml`'s line said the address
+  # "lives in one place after 23-92" - true of the *variable*, not of every deployment needing the
+  # identical *scheme*, and the two overlays do not: this is the same "environment-specific difference
+  # over a shared base" split `DemoTenant__Enabled` above already uses for the identical reason.
+  - target:
+      kind: Deployment
+      name: ago-chat-api
+    patch: |
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: ago-chat-api
+      spec:
+        template:
+          spec:
+            containers:
+              - name: api
+                env:
+                  - name: ModuleEntryPoints__calendar
+                    value: "https://ago-calendar-api:443"

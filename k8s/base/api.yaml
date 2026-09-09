@@ -154,9 +154,8 @@ spec:
             # `23-92`/`adr/0154`: the identical reasoning above, applied to a module's own address -
             # the platform owner used to have to type this into the grant form, even though this
             # deployment already knows it (probed live: `https://calendar-api.reserve-me.ru` answers
-            # `404`/`405` from the gateway's own allowlist, `https://ago-calendar-api:443` would fail
-            # TLS since this host carries no internal-CA trust material, and `http://ago-calendar-api` -
-            # the calendar Service's own in-cluster DNS name, `calendar-api.yaml` - answers `401`,
+            # `404`/`405` from the gateway's own allowlist, and `http://ago-calendar-api` - the
+            # calendar Service's own in-cluster DNS name, `calendar-api.yaml` - answers `401`,
             # reachable and routed, refusing only for the still-missing provisioning secret above).
             # `IModuleEntryPointProvider.TryGet()` reads this generically by whatever module key a
             # caller names, so a second module needs only a second line here, never a code change in
@@ -165,12 +164,23 @@ spec:
             # and the architecture guard never scans it) - it is exactly what "the deployment declares
             # the mapping" means.
             #
+            # `23-93`/`adr/0164`: this base value stays `http`, on purpose, even though the demo
+            # overlay now trusts and proves the encrypted leg (see `internal-tls.yaml` and
+            # `overlays/demo/kustomization.yaml`'s own patch on this exact variable). This line's own
+            # previous comment claimed `https://ago-calendar-api:443` "would fail TLS since this host
+            # carries no internal-CA trust material" - true when `23-92` probed it live, no longer
+            # true once `22-24` baked the CA into `Ago.Chat.Api`'s own image, and left uncorrected here
+            # until `23-93` found it. **This value is no longer identical between the local and demo
+            # overlays, and that is deliberate, not a regression of "one place after 23-92".** The
+            # local overlay (`k8s/overlays/local/`) has no cert-manager, no internal CA, and no 8443
+            # listener on `ago-calendar-api` at all, so `http` stays correct here, for local - the demo
+            # overlay's own patch is what switches the scheme where the encrypted listener actually
+            # exists, mount-then-switch, never the other way round.
+            #
             # Not sourced from `.env`/`infra-credentials` like the secret above: this value is not a
             # secret, and every other plain address on this host (`Keycloak__Authority` a few lines up,
             # `Storage__S3__ServiceUrl`) is already a literal `value:` for the identical reason - an
-            # in-cluster Service DNS name is not deployment-specific the way a password is, and it is
-            # identical between the local and demo overlays (both inherit this file, and both run
-            # `calendar-api.yaml`'s own Service under this exact name).
+            # in-cluster Service DNS name is not deployment-specific the way a password is.
             - name: ModuleEntryPoints__calendar
               value: "http://ago-calendar-api"
             # `23-102`: the permissions a module needs, declared the same way its address is and read

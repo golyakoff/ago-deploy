@@ -5,8 +5,12 @@ Everything needed to run AGO Platform, and nothing that decides how it behaves.
 `docker/` (compose for the fast inner loop - four infrastructure dependencies, no app containers;
 the apps run from the IDE against it), `k8s/base/` and `k8s/overlays/local/` (Kustomize for the
 Docker Desktop cluster - the same four dependencies plus the three `Ago.Chat.*` host placeholders),
-and `seed/` (the MinIO bucket, and the demo site + operator - `create-demo-tenant.sh`, idempotent,
-Stage 1).
+and `seed/` (the MinIO bucket, the demo site + operator - `create-demo-tenant.sh`, idempotent, Stage
+1 - and, since `25-14`, MinIO's own CORS restriction - `apply-minio-cors.sh`, a snapshot of
+`sites.allowed_origins` applied to MinIO's server-wide `cors_allow_origin` setting, re-run whenever a
+site's own origins change; `../ago-root/docs/architecture/file-storage.md` has the full reasoning,
+including the boundary tension this one script's own read of a tenant business column is worth
+reading before extending).
 
 `k8s/backup/` is the odd one out and is deliberately so: **systemd units on the node, not Kubernetes
 objects.** Neither `redeploy.sh` nor `kubectl apply -k` reaches it - `install-node.sh` is what installs

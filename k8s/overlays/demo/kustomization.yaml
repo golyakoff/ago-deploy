@@ -115,21 +115,26 @@ configMapGenerator:
 # imported one, behaves as it always did - and absent, it is pulled from GHCR. `Never` cannot do the
 # second half, and the second half is what makes a rebuilt cluster (15-02) able to start at all.
 images:
+  # `25-64`, 2026-09-12: bumped from `bfeabb8` (2026-09-09) to the commit that lands the chat-side
+  # phone-gate fix - a reply to a `VerifiedPhoneForm` step now honors the site's own
+  # `AcceptUnverifiedPhone` setting instead of refusing it unconditionally. Deployed and smoke-tested
+  # live before this pin (42/42, `cfda63a` reported by both the API and the binary it runs). No
+  # migration in this range - `SchemaVersionGuard` reported current against the schema already applied.
   - name: ago-chat-api
     newName: ghcr.io/golyakoff/ago-chat-api
-    newTag: bfeabb87b30d70d24283245fc52a7eb59ec8a390
+    newTag: cfda63a4023955bd8ddbee5fae622b7ccb334003
   - name: ago-chat-worker
     newName: ghcr.io/golyakoff/ago-chat-worker
-    newTag: bfeabb87b30d70d24283245fc52a7eb59ec8a390
+    newTag: cfda63a4023955bd8ddbee5fae622b7ccb334003
   - name: ago-chat-webhooks
     newName: ghcr.io/golyakoff/ago-chat-webhooks
-    newTag: bfeabb87b30d70d24283245fc52a7eb59ec8a390
+    newTag: cfda63a4023955bd8ddbee5fae622b7ccb334003
   # `8-08`: the migrator moves with the three hosts and never independently - it applies the
   # migrations *that commit* carries, so a migrator on a different SHA from the hosts is the exact
   # mismatch this item exists to prevent. deploy.sh sets all four from one argument for that reason.
   - name: ago-chat-migrator
     newName: ghcr.io/golyakoff/ago-chat-migrator
-    newTag: bfeabb87b30d70d24283245fc52a7eb59ec8a390
+    newTag: cfda63a4023955bd8ddbee5fae622b7ccb334003
   # `15-07`/`adr/0051`: the four static bundles, which `15-06` could not reach - and the one it did
   # not reach is the one the 2026-08-25 incident happened to. Their four `imagePullPolicy: Never`
   # patches are gone from *-static.yaml for the same reason the three above went.

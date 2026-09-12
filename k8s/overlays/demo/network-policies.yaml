@@ -184,11 +184,17 @@ spec:
                 operator: In
                 # `22-13`/`22-05`: `ago-calendar-worker` added - it consumes `ago-chat`'s own
                 # `RoleAssignmentsChanged` off this broker, the first time anything outside
-                # `Ago.Chat.*` has needed it. `ago-calendar-api` is deliberately **not** here: it
-                # loads the same module and therefore carries the same three settings, but it
-                # resolves no publisher or consumer and `RabbitMqConnection` is lazy, so it never
-                # dials. An ingress allowance added for symmetry is one nobody removes later.
-                values: [ago-chat-api, ago-chat-worker, ago-chat-webhooks, ago-calendar-worker]
+                # `Ago.Chat.*` has needed it. `ago-calendar-api` stayed out at the time -
+                # `RabbitMqConnection` is lazy and it resolved no publisher or consumer, so it
+                # never dialled - but `25-63` gave it a real one (the cross-replica SignalR
+                # dispatch behind `CalendarOperatorHub` consumes `BookingPendingStateChanged` off
+                # this same broker), so the API host now needs the identical allowance its own
+                # worker already had. Found live 2026-09-12: the API's own connect attempt was
+                # refused by this policy after a routine deploy, discovered from a real
+                # CrashLoopBackOff rather than caught beforehand - the reasoning above was correct
+                # when written and stale the moment 25-63 landed, which is exactly the trap a
+                # comment like the old one sets for whoever reads it next without re-checking it.
+                values: [ago-chat-api, ago-chat-worker, ago-chat-webhooks, ago-calendar-worker, ago-calendar-api]
         - ipBlock:
             cidr: 10.42.0.1/32
         - ipBlock:

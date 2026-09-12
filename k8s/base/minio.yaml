@@ -59,7 +59,7 @@ spec:
       # free is not.
       initContainers:
         - name: chown-data
-          image: minio/minio:RELEASE.2025-09-07T16-13-09Z # already pulled for the container below
+          image: quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z # already pulled for the container below
           command: ["sh", "-c", "chown -R 1000:1000 /data && chmod u+rwx /data"]
           securityContext:
             runAsNonRoot: false
@@ -81,7 +81,7 @@ spec:
               cpu: 200m
       containers:
         - name: minio
-          image: minio/minio:RELEASE.2025-09-07T16-13-09Z
+          image: quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z
           securityContext:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true

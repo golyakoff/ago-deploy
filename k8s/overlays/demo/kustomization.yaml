@@ -190,15 +190,19 @@ images:
   # copy of the bundle from their own origin, so `demo-boot` now sets `data-api` explicitly and they
   # win the resolution before inference is reached. Deploying `ago-widget-assets` without them would
   # leave two public pages running a bundle whose sibling behaves differently.
+  # `25-64`, 2026-09-12: bumped to the `ago-widget` commit that ships the widget-driven contact-capture
+  # control automatically at the first module (booking) message when the visitor never clicked its own
+  # "Представиться..." link - the live gap a real tenant's operator reported, reproduced and confirmed
+  # fixed against this exact commit before pinning it here.
   - name: ago-demo-shop1
     newName: ghcr.io/golyakoff/ago-demo-shop1
-    newTag: 554d9a4f04de809964c62f977228498243477ea1
+    newTag: 771efb453396039191736a25934c1e41d3ea977e
   - name: ago-demo-shop2
     newName: ghcr.io/golyakoff/ago-demo-shop2
-    newTag: 554d9a4f04de809964c62f977228498243477ea1
+    newTag: 771efb453396039191736a25934c1e41d3ea977e
   - name: ago-widget-assets
     newName: ghcr.io/golyakoff/ago-widget-assets
-    newTag: 554d9a4f04de809964c62f977228498243477ea1
+    newTag: 771efb453396039191736a25934c1e41d3ea977e
   # `adr/0092`: the copy-me snippet on the public landing page had been handing out
   # `chat.reserve-me.ru/widget.js` - a 404, under a filename that never existed anywhere. Until this
   # is deployed, the page a prospective customer reads still gives them a script tag that does not

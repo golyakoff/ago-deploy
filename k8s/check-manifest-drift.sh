@@ -102,6 +102,11 @@ OVERLAY_DIR="$HERE/overlays/$OVERLAY"
 kc() { if kubectl version >/dev/null 2>&1; then kubectl "$@"; else sudo k3s kubectl "$@"; fi; }
 step() { printf "\n\033[1m== %s\033[0m\n" "$1"; }
 
+# `23-90`: record_check - sourced after kc()/step() are defined, matching lib-deploy-record.sh's own
+# stated contract (it calls both, defines neither).
+# shellcheck source=lib-deploy-record.sh
+. "$HERE/lib-deploy-record.sh"
+
 step "Manifest drift (${OVERLAY})"
 
 if ! kc get ns "$NS" >/dev/null 2>&1; then
@@ -228,4 +233,33 @@ case "$rc" in
     rc=2
     ;;
 esac
+
+# `23-90`: a second, independent comparison - reading B ("the next run") for the gap the tag
+# normalisation above deliberately cannot see (this file's own header, "WHAT IT DELIBERATELY
+# IGNORES"). Run every time this script runs, not only from deploy.sh/redeploy.sh's own tail call, so
+# a standalone `./check-manifest-drift.sh` - not tied to any deploy - catches an unrecorded gap too,
+# exactly as `23-90`'s own "Answered" section asks for.
+#
+# No `|| true` here, unlike deploy.sh's/redeploy.sh's own calls into this file: this script has no
+# `set -e` (only `set -uo pipefail`, this file's own header), so record_check returning non-zero
+# cannot abort it - and `|| true` would have thrown away that exit code before the next line could
+# read it. Found live, not reasoned about: an earlier version of this line had the `|| true` anyway
+# (copied from the two callers' own convention without checking whether it applied here too) and
+# `record_rc` read back 0 on every run regardless of what record_check actually returned, because
+# `cmd || true`'s own exit status is `true`'s, not `cmd`'s.
+record_check "$NS" "$OVERLAY_DIR"
+record_rc=$?
+
+# Combine into one exit code rather than inventing a fourth PASS/DRIFT/UNKNOWN state (`15-24`'s
+# convention, which this item's own Done-when explicitly says to keep). DRIFT outranks UNKNOWN in the
+# combination, deliberately: DRIFT from either sub-check is a confirmed, actionable gap, while UNKNOWN
+# only means one sub-check could not be evaluated - a real, specific problem should never be hidden by
+# an unrelated "cannot tell" from the other comparison.
+if [ "$rc" -eq 1 ] || [ "$record_rc" -eq 1 ]; then
+  rc=1
+elif [ "$rc" -eq 2 ] || [ "$record_rc" -eq 2 ]; then
+  rc=2
+else
+  rc=0
+fi
 exit "$rc"

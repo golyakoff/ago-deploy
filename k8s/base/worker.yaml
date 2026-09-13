@@ -104,6 +104,32 @@ spec:
               value: "stub-no-real-secret-key-configured"
             - name: Billing__YooKassa__WebhookKey
               value: "stub-no-real-webhook-key-configured"
+            # `23-86`/`adr/0159`: the option-to-entitlement mapping - `IBillingOptionEntitlementProvider.TryGet()`
+            # reads this generically by whatever billing option key a caller names, so a second priced
+            # option needs only a second line here, never a code change in `Ago.Chat.*` - see that
+            # port's own remarks for why it is not a fixed-property options class. A literal option key
+            # is fine in this file for the identical reason `ModuleEntryPoints__calendar` below is fine
+            # in `api.yaml`: this repository is not `Ago.Chat.*`, the architecture guard never scans it,
+            # and a literal key here is exactly what "the deployment declares the mapping" means.
+            # Carries no price, on purpose - `IBillingOptionEntitlementProvider`'s own remarks: "the
+            # deployment declares what an option turns on, never what it costs"; the price list itself
+            # lives in the private `ago-business` repository and never enters this one.
+            #
+            # `channel-telegram` -> `channel`, not `calendar`/`faq`: this item's own Scope (and
+            # `docs/architecture/entitlements-and-subscriptions.md`'s own "a billing grant is not yet
+            # sufficient to turn on a module that requires registration") rules those two out - a
+            # billing-driven grant writes a `ModuleQuantityGrant` with no entry point, no credential and
+            # no synchronous module-side registration call, so pointing this mapping at either would
+            # leave chat believing the module is granted while nothing routes to it. `channel` needs
+            # none of that: it is a quantity grant only, the identical shape this option already writes.
+            #
+            # Only `Ago.Chat.Worker` needs this variable, not `ago-chat-api`: `SubscriptionRenewalApplier`
+            # (`Ago.Chat.Infrastructure.Postgres`, resolved inside `SubscriptionRenewalJob`) is this
+            # deployment's only caller of `IBillingOptionEntitlementProvider.TryGet()` today - unlike
+            # `ModuleEntryPoints__calendar`, which `Ago.Chat.Api`'s own `EnableModuleForSiteAsOwnerHandler`
+            # also reads, this mapping is consulted from nowhere else.
+            - name: BillingOptionEntitlements__channel-telegram
+              value: "channel"
             # `7-03`: same requirement as ago-chat-api - see the comment there.
             # `8-07`/ago-root `adr/0058`: the demo-tenant minting path. **Off here, on purpose.** An
             # endpoint that creates tenants from the public internet is not something a host should

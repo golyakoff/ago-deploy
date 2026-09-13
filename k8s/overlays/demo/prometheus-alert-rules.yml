@@ -8,10 +8,13 @@
 # Each rule is asserted both ways - silent one step below its threshold, firing one step above - so
 # the thresholds are covered offline and not only by the live fire drill.
 #
-# FIVE RULES, AND THE SHORTNESS IS THE DESIGN. `15-03` lists candidates; promoting every dashboard
-# panel to an alert is exactly what it says not to do. Each rule below names the failure it exists
-# for, and every failure is one that has already cost this project something or is the single-node
-# failure mode that takes everything down at once.
+# SIX RULES, AND THE SHORTNESS IS STILL THE DESIGN. `15-03` lists candidates; promoting every
+# dashboard panel to an alert is exactly what it says not to do. Each rule below names the failure it
+# exists for, and every failure is one that has already cost this project something, is the
+# single-node failure mode that takes everything down at once, or - `23-76`'s
+# `MinioAttachmentBucketFilling`, the newest one - is a hard wall a specific, deliberately-built
+# feature can hit on its own, with its own lever to pull, distinct from the generic node-disk case
+# `NodeDiskFilling` already covers.
 #
 # ANNOTATIONS ARE SHORT ON PURPOSE. They are the body of an email read on a phone. The reasoning for
 # every threshold lives in the comments here, where a reviewer reads it once, not in the notification,
@@ -172,6 +175,44 @@ groups:
           meaning: "Under 15% free on the one filesystem holding every PVC and the image store. nfr.md sets no disk target; 12 GB of 79 GB is about 21 days of runway at the ~0.56 GB/day rate 15-05 measured (fragile - one pre-traffic tenant, will change), not a derived limit."
           first_check: "on the node: df -h /, then du -xh --max-depth=2 / | sort -rh | head, then k3s crictl images"
           runbook: "ago-root docs/runbooks/alerting.md#nodediskfilling"
+
+      # --------------------------------------------------------------------------------------------
+      # `23-76`: "a ceiling below which the disk cannot be filled by this feature, and an alert before
+      # it" - the feature-specific twin of NodeDiskFilling above. That rule already catches this node
+      # running low on space for any reason; this one exists because "the node is low on space" and
+      # "the attachments bucket, specifically, is the reason and here is the lever to pull" are two
+      # different diagnoses, and only one of them tells an operator whether to raise
+      # AttachmentStorageQuotaOptions's own tenant ceilings, wait, or raise the bucket's own hard quota
+      # (`seed/create-minio-bucket.sh`). Scoped to MinIO's own bucket-usage gauge
+      # (`minio_bucket_usage_total_bytes`/`minio_bucket_quota_total_bytes`,
+      # `prometheus-scrape-config.yml`'s new `minio` job), not the node filesystem - it fires from
+      # MinIO's own accounting of what it has actually written, independent of whatever else shares
+      # this node's disk.
+      - alert: MinioAttachmentBucketFilling
+        # 80%, not 95% or 99% - "comfortably before the hard quota is reached" (this item's own words),
+        # a starting point, not measured (CLAUDE.md: "do not invent numbers... measure or stay
+        # silent") the same honest posture NodeDiskFilling's own 15% already states for itself. At the
+        # 5 GiB hard quota `seed/create-minio-bucket.sh` sets, 80% is 1 GiB of headroom - comfortably
+        # more than one conversation's own 100 MiB attachment budget (`AttachmentOptions.
+        # MaxConversationBytes`, `ago-chat`) has room to land more than once before the hard quota
+        # itself starts refusing writes, which is the "you still have room to fix this" reading
+        # NodeDiskFilling's own 15% already established for the node-wide case.
+        expr: >-
+          minio_bucket_usage_total_bytes{bucket="attachments"}
+            / minio_bucket_quota_total_bytes{bucket="attachments"} > 0.8
+        # 15m, shorter than NodeDiskFilling's 30m - this bucket's own quota is a hard wall MinIO itself
+        # enforces (a write past it is refused outright, not a graceful degradation), so the cost of
+        # waiting longer to confirm a real trend is higher than the node-wide rule's own risk of
+        # alerting on a transient build/image-import blip - there is no equivalent transient cause here
+        # (attachment uploads are the only writer into this bucket).
+        for: 15m
+        labels:
+          severity: page
+        annotations:
+          summary: "The attachments bucket is {{ $value | humanizePercentage }} of its own hard quota"
+          meaning: "MinIO's own per-bucket quota (seed/create-minio-bucket.sh) is over 80% full. Writes past 100% are refused outright by MinIO itself, not degraded - this is the backstop that catches every tenant's own quota being wrong together, not one tenant alone."
+          first_check: "mc quota info local/attachments; mc du local/attachments; check whether one site (site_id in the object key prefix) or the tenant count generally explains the growth"
+          runbook: "ago-root docs/runbooks/alerting.md#minioattachmentbucketfilling"
 
       # --------------------------------------------------------------------------------------------
       # `15-03`: "cert-manager renews automatically; an alert is how you find out when it silently did

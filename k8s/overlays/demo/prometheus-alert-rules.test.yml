@@ -144,6 +144,45 @@ tests:
               runbook: "ago-root docs/runbooks/alerting.md#nodediskfilling"
 
   # ------------------------------------------------------------------------------------------------
+  - name: MinioAttachmentBucketFilling fires above 80% of the bucket's own quota, and the bucket label is load-bearing
+    interval: 30s
+    input_series:
+      # 5 GiB, the same hard quota seed/create-minio-bucket.sh sets - fixed for the whole test window,
+      # the same "the ceiling itself does not move" shape the quota's own real lifetime has.
+      - series: 'minio_bucket_quota_total_bytes{job="minio", instance="minio.ago-chat.svc.cluster.local:9000", loop="k8s", bucket="attachments", server="minio:9000"}'
+        values: "5368709120x70"
+      # A constant 84% of that quota - above the 80% threshold for the whole window, so this test
+      # (like NodeDiskFilling's own) checks the `for: 15m` boundary, not a value transition.
+      - series: 'minio_bucket_usage_total_bytes{job="minio", instance="minio.ago-chat.svc.cluster.local:9000", loop="k8s", bucket="attachments", server="minio:9000"}'
+        values: "4509715661x70"
+      # The near-miss that matters: a different bucket, well over 80% of its own (much smaller) quota
+      # the whole time. If the rule's own `{bucket="attachments"}` matcher were ever dropped, this
+      # series would page too.
+      - series: 'minio_bucket_quota_total_bytes{job="minio", instance="minio.ago-chat.svc.cluster.local:9000", loop="k8s", bucket="some-other-bucket", server="minio:9000"}'
+        values: "1000x70"
+      - series: 'minio_bucket_usage_total_bytes{job="minio", instance="minio.ago-chat.svc.cluster.local:9000", loop="k8s", bucket="some-other-bucket", server="minio:9000"}'
+        values: "999x70"
+    alert_rule_test:
+      - eval_time: 14m
+        alertname: MinioAttachmentBucketFilling
+        exp_alerts: []
+      - eval_time: 16m
+        alertname: MinioAttachmentBucketFilling
+        exp_alerts:
+          - exp_labels:
+              severity: page
+              job: minio
+              instance: minio.ago-chat.svc.cluster.local:9000
+              loop: k8s
+              bucket: attachments
+              server: minio:9000
+            exp_annotations:
+              summary: "The attachments bucket is 84% of its own hard quota"
+              meaning: "MinIO's own per-bucket quota (seed/create-minio-bucket.sh) is over 80% full. Writes past 100% are refused outright by MinIO itself, not degraded - this is the backstop that catches every tenant's own quota being wrong together, not one tenant alone."
+              first_check: "mc quota info local/attachments; mc du local/attachments; check whether one site (site_id in the object key prefix) or the tenant count generally explains the growth"
+              runbook: "ago-root docs/runbooks/alerting.md#minioattachmentbucketfilling"
+
+  # ------------------------------------------------------------------------------------------------
   - name: TlsCertificateRenewalOverdue fires at 20 days remaining and not at 25
     interval: 30s
     input_series:

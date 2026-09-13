@@ -71,6 +71,11 @@ services:
     environment:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:?}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?}
+      # `23-76`: matches `k8s/base/minio.yaml`'s own env - see that file's comment for why. Compose has
+      # no Prometheus scraping this today, but keeping the two definitions in agreement is what
+      # `prometheus-scrape-config.yml`'s own "one file, both loops" convention already relies on
+      # elsewhere in this repo.
+      MINIO_PROMETHEUS_AUTH_TYPE: public
     ports:
       - "9000:9000" # S3 API
       - "9001:9001" # console - http://localhost:9001

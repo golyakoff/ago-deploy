@@ -111,6 +111,21 @@ scrape_configs:
         labels:
           loop: k8s
 
+  # `23-76`: MinIO's own bucket-usage/quota gauges, for the attachment-storage-ceiling alert -
+  # `/minio/v2/metrics/bucket` (not `/minio/v2/metrics/cluster`, which carries no per-bucket usage at
+  # all - checked live against this pinned image before picking the endpoint). Needs
+  # `MINIO_PROMETHEUS_AUTH_TYPE=public` on the server (`minio.yaml`'s own env) or this answers a plain
+  # `AccessDenied`, the same live check.
+  - job_name: minio
+    metrics_path: /minio/v2/metrics/bucket
+    static_configs:
+      - targets: ["host.docker.internal:9000"]
+        labels:
+          loop: compose
+      - targets: ["minio.ago-chat.svc.cluster.local:9000"]
+        labels:
+          loop: k8s
+
   # `15-03`: cert-manager's own exporter, for the certificate-expiry rule. Cross-namespace on
   # purpose - cert-manager is installed from its own upstream manifests (runbooks/public-deploy.md
   # step 11), not from this repository, so there is nothing here to add a port to; the Service it

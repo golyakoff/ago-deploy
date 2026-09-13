@@ -94,6 +94,18 @@ spec:
           envFrom:
             - secretRef:
                 name: infra-credentials
+          # `23-76`: exposes bucket-level usage/quota gauges (`minio_bucket_usage_total_bytes`,
+          # `minio_bucket_quota_total_bytes`) on `/minio/v2/metrics/bucket` with no bearer token -
+          # confirmed live against this exact pinned image: the endpoint answers a plain `AccessDenied`
+          # without this setting, `jwt` (MinIO's own default) needs a signed admin token Prometheus's
+          # plain `static_configs` scrape has no way to carry, and every other job in
+          # `prometheus-scrape-config.yml` is already an unauthenticated scrape - this keeps MinIO
+          # consistent with that rather than being the one job that needs its own credential wiring.
+          # No secret exposed by this: the metrics families available at this auth level are usage
+          # counters and configuration gauges, never object contents or presigned URLs.
+          env:
+            - name: MINIO_PROMETHEUS_AUTH_TYPE
+              value: public
           volumeMounts:
             - name: data
               mountPath: /data

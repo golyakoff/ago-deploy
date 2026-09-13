@@ -37,6 +37,11 @@ REGISTRY="${REGISTRY:-ghcr.io/golyakoff}"
 kc() { if kubectl version >/dev/null 2>&1; then kubectl "$@"; else sudo k3s kubectl "$@"; fi; }
 step() { printf "\n\033[1m== %s\033[0m\n" "$1"; }
 
+# `23-90`: record_check/record_write - sourced after kc()/step() are defined, matching
+# lib-deploy-record.sh's own stated contract (it calls both, defines neither).
+# shellcheck source=lib-deploy-record.sh
+. "$AGO_ROOT/ago-deploy/k8s/lib-deploy-record.sh"
+
 step "1. Checkouts"
 # `15-13`: PULLED_DIRS is the single list of checkouts this step brings to their tip, and it is also
 # the list every `*_SHA=` read below (step 3) is checked against by read_sha() - the same array, not
@@ -109,6 +114,23 @@ read_sha() {
 # copy of a colour is the failure this project has already had elsewhere. Run
 # `k8s/check-theme-tokens.sh --write` to regenerate, look at the diff, and commit it.
 bash "$AGO_ROOT/ago-deploy/k8s/check-theme-tokens.sh"
+
+# `23-90`: before anything is built or moved - reading B ("the next run") from that item. This script
+# has "the identical shape" `deploy.sh`'s own `23-90` comment names (moves every image with
+# `kubectl set image`, edits no manifest) and is the more likely of the two to reproduce 2026-09-07's
+# own incident outright: one run here touches all twelve `newTag` values `overlays/demo/
+# kustomization.yaml` pins, not a scoped subset the way a bare `deploy.sh` invocation does. Warn-only,
+# for the same reason `deploy.sh`'s own comment gives: an uncommitted-but-forward tag is not the
+# dangerous direction, and the very next section of this script's own closing note already asks the
+# operator to commit the tags this run is about to use.
+#
+# Not literally what the item's own "design" section names (it says `deploy.sh`) - added here too as
+# this worker's own considered extension, not a re-reading of reading B: the 2026-09-07 incident this
+# item exists for was itself almost certainly two runs of *this* script, not `deploy.sh` (twelve of
+# twelve `newTag` values moved that day - exactly this script's own footprint, never a bare `deploy.sh`
+# invocation's). Wiring the check only into `deploy.sh` would leave the actual failure mode unwatched
+# at its own most likely source. See this item's own commit-prep report for the fuller reasoning.
+record_check "$NS" "$AGO_ROOT/ago-deploy/k8s/overlays/demo" || true
 
 step "2. Pack the platform into the local feed"
 # ago-chat restores Ago.Platform.* from this file feed by version. A platform release bumps the
@@ -400,3 +422,21 @@ EOF
 # way a smoke failure already can (`set -e` mid-script is a separate, pre-existing gap - see
 # ago-root's `15-21` item for why this step does not also try to fix that one).
 NS="$NS" "$AGO_ROOT/ago-deploy/k8s/check-manifest-drift.sh" demo || true
+
+# `23-90`: write the record *after* the call above, not before - the same ordering `deploy.sh`'s own
+# `23-90` comment explains: the drift check's own record_check, one line up, must still see the
+# *previous* run's record, or it would compare this run's just-moved tags against a manifest this run
+# never touched and DRIFT on every single redeploy, which is the exact noise reading B exists to avoid.
+#
+# Never gates anything and runs only after every rollout and the smoke test above already succeeded -
+# `set -euo pipefail` (and smoke.sh's own unguarded call, unlike the `|| true` two lines up) would have
+# stopped this script well before reaching here otherwise. All twelve components this script moves,
+# keyed the same way `overlays/demo/kustomization.yaml`'s own `images:` block names them.
+record_write "$NS" \
+  "ago-chat-api=${CHAT_SHA}" "ago-chat-worker=${CHAT_SHA}" "ago-chat-webhooks=${CHAT_SHA}" \
+  "ago-chat-migrator=${CHAT_SHA}" \
+  "ago-console=${CONSOLE_SHA}" \
+  "ago-demo-shop1=${WIDGET_SHA}" "ago-demo-shop2=${WIDGET_SHA}" "ago-widget-assets=${WIDGET_SHA}" \
+  "ago-landing=${LANDING_SHA}" \
+  "ago-calendar-api=${CALENDAR_SHA}" "ago-calendar-worker=${CALENDAR_SHA}" \
+  "ago-calendar-migrator=${CALENDAR_SHA}"

@@ -46,6 +46,11 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 kc() { if kubectl version >/dev/null 2>&1; then kubectl "$@"; else sudo k3s kubectl "$@"; fi; }
 step() { printf "\n\033[1m== %s\033[0m\n" "$1"; }
 
+# `23-90`: record_check/record_write - sourced after kc()/step() are defined, which is the contract
+# lib-deploy-record.sh's own header states explicitly (it calls both but defines neither).
+# shellcheck source=lib-deploy-record.sh
+. "$HERE/lib-deploy-record.sh"
+
 # deployment:container - `kubectl set image` addresses the container by name, not by position.
 HOSTS=("ago-chat-api:api" "ago-chat-worker:worker" "ago-chat-webhooks:webhooks")
 
@@ -224,6 +229,17 @@ show_current
 echo
 echo "  -> ${DESCRIPTION}"
 
+# `23-90`: before anything moves - reading B ("the next run") from that item. If the *previous*
+# successful deploy's own tags were never committed to this overlay, say so here, loudly, rather than
+# let this run compound on top of an undocumented gap the way two redeploys with no commit between
+# them did on 2026-09-07. Warn-only, deliberately, not a refusal: unlike apply-demo.sh's rollback
+# guard (`22-24`) - which stops an apply that would actively move a live Deployment backwards - an
+# uncommitted-but-forward tag is not dangerous to roll another forward deploy on top of, and the
+# operator can close the gap in the same breath this deploy's own closing note already asks them to
+# (commit the tags just used). Always "demo" here, matching this script's own tail call to
+# check-manifest-drift.sh a few steps down, which is equally not parameterised by overlay.
+record_check "$NS" "$HERE/overlays/demo" || true
+
 step "Setting images"
 for i in "${!TARGETS[@]}"; do
   kc set image "deployment/${TARGETS[$i]}" "${IMAGES[$i]}" -n "$NS"
@@ -312,6 +328,21 @@ CHAT_REPO="${CHAT_REPO:-$AGO_ROOT/ago-chat}" "$HERE/smoke.sh" "$DOMAIN"
 # instead: whoever runs deploy.sh next gets this step the moment their own 'ago-deploy' checkout is
 # updated to include it, same as any other change to this file.
 NS="$NS" "$HERE/check-manifest-drift.sh" demo || true
+
+# `23-90`: write the record *after* the call above, not before. check-manifest-drift.sh's own
+# record_check, on the line just above, must still see the *previous* run's record when it runs here -
+# if this deploy's own tags were written first, that call would compare this run's own just-moved tags
+# against a manifest this run never touched, and DRIFT on that comparison on every single deploy, which
+# is exactly the noise reading B (`23-90`'s own "Answered" section) exists to avoid. Only once every
+# advisory step this run makes has already read whatever was true before it started does this deploy
+# get to become "what was true before" for the next one.
+#
+# Never gates anything - this is record_write, not a guard - and runs after rollout+smoke already
+# succeeded: a failed rollout exits under `set -euo pipefail` well above this line, and a failed smoke
+# does the same, since (unlike the drift check above) it is not wrapped in `|| true`.
+kvs=()
+for t in "${TARGETS[@]}"; do kvs+=("${t}=${TAG}"); done
+record_write "$NS" "${kvs[@]}"
 
 # Migrations and rollback - the asymmetry, stated plainly because it is the part every rollback
 # story gets silently wrong:

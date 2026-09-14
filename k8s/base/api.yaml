@@ -285,6 +285,14 @@ spec:
               value: "https://office.reserve-me.ru"
             - name: Console__AllowedOrigins__1
               value: "http://localhost:5173"
+            # `25-73`: added `[Required]` in `ago-chat` and this environment never carried a value for
+            # it - found live, 2026-09-14, the first redeploy since `25-73` merged, when
+            # `ValidateOnStart` refused to let any of the three chat hosts start
+            # (`OptionsValidationException: OperatorInvite:ConsoleBaseUrl is required`). Same origin
+            # `Console__AllowedOrigins__0`/`Billing__CheckoutReturnUrl` already use - this is where an
+            # invite email's link actually sends the invitee.
+            - name: OperatorInvite__ConsoleBaseUrl
+              value: "https://office.reserve-me.ru"
             - name: Otel__Exporter__Endpoint
               value: "http://jaeger:4317"
           volumeMounts:

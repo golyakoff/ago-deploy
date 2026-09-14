@@ -91,6 +91,10 @@ spec:
               value: "200"
             - name: Billing__CheckoutReturnUrl
               value: "https://office.reserve-me.ru/settings/billing"
+            # `25-73`/api.yaml's own remarks: `[Required]` on `ago-chat`'s side, never set on this
+            # host either - found the same way, the same night.
+            - name: OperatorInvite__ConsoleBaseUrl
+              value: "https://office.reserve-me.ru"
             - name: Billing__YooKassa__ShopId
               value: "STUB-NOT-A-REAL-YOOKASSA-ACCOUNT"
             - name: Billing__YooKassa__SecretKey

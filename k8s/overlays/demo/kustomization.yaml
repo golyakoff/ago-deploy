@@ -219,7 +219,7 @@ images:
   # and after (537px -> 375px page width), not eyeballed.
   - name: ago-landing
     newName: ghcr.io/golyakoff/ago-landing
-    newTag: 00207a4008135c98b841b840a7c036e485d80c7b
+    newTag: 7c68bd483692e5ba0d8a4d657600ade289b63914
   # `20-20`: AGO Calendar's own four images. The three backend ones move together and never
   # independently, same rule as the ago-chat-* four above and the same reason: `calendar-migrator.yaml`
   # applies the migrations *this* commit's Domain carries, so a migrator on a different SHA from the

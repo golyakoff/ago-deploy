@@ -123,19 +123,19 @@ images:
   # this pin (45/45, `a93604e` reported by both the API and the binary it runs).
   - name: ago-chat-api
     newName: ghcr.io/golyakoff/ago-chat-api
-    newTag: ec83de6ee3d6d67eeb7d5d3ccb7ce8b4a8a5e22b
+    newTag: 3ee04b3efaee8c0f8a5d5401a7366ca0486d323f
   - name: ago-chat-worker
     newName: ghcr.io/golyakoff/ago-chat-worker
-    newTag: ec83de6ee3d6d67eeb7d5d3ccb7ce8b4a8a5e22b
+    newTag: 3ee04b3efaee8c0f8a5d5401a7366ca0486d323f
   - name: ago-chat-webhooks
     newName: ghcr.io/golyakoff/ago-chat-webhooks
-    newTag: ec83de6ee3d6d67eeb7d5d3ccb7ce8b4a8a5e22b
+    newTag: 3ee04b3efaee8c0f8a5d5401a7366ca0486d323f
   # `8-08`: the migrator moves with the three hosts and never independently - it applies the
   # migrations *that commit* carries, so a migrator on a different SHA from the hosts is the exact
   # mismatch this item exists to prevent. deploy.sh sets all four from one argument for that reason.
   - name: ago-chat-migrator
     newName: ghcr.io/golyakoff/ago-chat-migrator
-    newTag: ec83de6ee3d6d67eeb7d5d3ccb7ce8b4a8a5e22b
+    newTag: 3ee04b3efaee8c0f8a5d5401a7366ca0486d323f
   # `15-07`/`adr/0051`: the four static bundles, which `15-06` could not reach - and the one it did
   # not reach is the one the 2026-08-25 incident happened to. Their four `imagePullPolicy: Never`
   # patches are gone from *-static.yaml for the same reason the three above went.
@@ -179,7 +179,7 @@ images:
   # one list, two renderers - so the two cannot disagree about what a tenant may see.
   - name: ago-console
     newName: ghcr.io/golyakoff/ago-console
-    newTag: c853655b60163747dbc8c4d2e73baeda7aa811e1
+    newTag: fb862b4313120923419ad88ddf3815b740c8c564
   # All three come from one `ago-widget` commit, and that is the point rather than tidiness: the two
   # demo pages and a real tenant's embed then run byte-identical bundles, which is checkable (three
   # `version.json` files naming one commit) instead of assumed.
@@ -219,7 +219,7 @@ images:
   # and after (537px -> 375px page width), not eyeballed.
   - name: ago-landing
     newName: ghcr.io/golyakoff/ago-landing
-    newTag: 1653b5a06b1d634a378309804b507b25ed36247f
+    newTag: 9c8a5f60dabc63c697efccf1e69200e11a39347e
   # `20-20`: AGO Calendar's own four images. The three backend ones move together and never
   # independently, same rule as the ago-chat-* four above and the same reason: `calendar-migrator.yaml`
   # applies the migrations *this* commit's Domain carries, so a migrator on a different SHA from the

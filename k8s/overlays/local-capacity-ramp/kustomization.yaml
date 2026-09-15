@@ -99,6 +99,19 @@ patches:
       - op: replace
         path: /spec/template/spec/containers/0/resources/requests/cpu
         value: 1000m
+      # A second, sharper finding than either resource limit above: dotnet-trace on a bare local
+      # ago-chat-api instance (DOTNET_PROCESSOR_COUNT=1, emulating the pod's own CPU quota) showed
+      # 97.75% of sampled thread-time as UNMANAGED_CODE_TIME (parked ThreadPool workers) and only
+      # 2.25% as actual CPU_TIME - no single application method dominates self-time, because the
+      # process is not CPU-bound at all. The concrete, live-reproduced cause: `PostgresException:
+      # 53300: sorry, too many clients already` - postgres:18-alpine's own stock `max_connections`
+      # (100, never touched by this deployment) against three api and three worker replicas each
+      # pooling their own Npgsql connections. `args`, not `command` - the official image's own
+      # ENTRYPOINT (docker-entrypoint.sh) still runs and still does its init-or-verify dance; only
+      # the CMD it execs at the end changes, from the image's own default `postgres` to this.
+      - op: add
+        path: /spec/template/spec/containers/0/args
+        value: ["postgres", "-c", "max_connections=300"]
       - op: replace
         path: /spec/template/spec/containers/0/resources/limits/cpu
         value: 2000m

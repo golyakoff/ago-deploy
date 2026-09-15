@@ -614,3 +614,77 @@ patches:
                 env:
                   - name: ModuleEntryPoints__calendar
                     value: "https://ago-calendar-api:443"
+
+  # `25-103`: `Storage__S3__ServiceUrl` (`base/api.yaml`, `worker.yaml`, `webhooks.yaml`) is the one
+  # setting `Ago.Platform.Storage.S3` uses both for the server's own calls to MinIO and as the host a
+  # presigned URL is signed against (AWS SigV4 signs the host into the request) - `http://minio:9000`
+  # is the in-cluster Service DNS name, exactly what a browser outside the cluster cannot resolve.
+  # `gateway.yaml`'s new `https-files` listener/`ago-minio-files` route (this same item) makes
+  # `files.reserve-me.ru` a real public hostname for MinIO's `:9000` S3 API; these three patches point
+  # the setting at it.
+  #
+  # A strategic-merge patch, not a change to `base/api.yaml`/`worker.yaml`/`webhooks.yaml` themselves
+  # - `k8s/overlays/local/` has no Gateway route to MinIO at all (no cert-manager, no public
+  # hostname), so editing the base value would break the local dev loop's own attachment upload the
+  # moment it did. Same environment-specific-difference-over-a-shared-base split this file already
+  # uses for `DemoTenant__Enabled` above and `ModuleEntryPoints__calendar` just above this comment -
+  # and kustomize merges `env` by the `name` key the identical way, so each patch below changes
+  # exactly this one variable and leaves the other ~20 on each Deployment (including `ago-chat-api`'s
+  # own two other patches on this same target) alone. See the `DemoTenant__Enabled` patch's own
+  # comment, above, for the JSON-patch-by-index bug a positional patch caused here the first time.
+  #
+  # Three hosts, three identical patches - `5-02`'s own remarks call `S3StorageOptions` shared config,
+  # not per-host, and `grep -rn "Storage__S3__ServiceUrl" k8s/base/*.yaml` confirms exactly
+  # `ago-chat-api`, `ago-chat-worker` and `ago-chat-webhooks` set it (three files, three Deployments).
+  # `ago-chat-migrator` (`base/migrator.yaml`) deliberately does NOT get this patch - checked, not
+  # assumed: its own header comment states it "reads no broker, no cache and no object store... does
+  # not use ChatModule at all," and reading the manifest confirms no `Storage__S3__*` variable is set
+  # there in the first place, so there is nothing for this patch to change.
+  - target:
+      kind: Deployment
+      name: ago-chat-api
+    patch: |
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: ago-chat-api
+      spec:
+        template:
+          spec:
+            containers:
+              - name: api
+                env:
+                  - name: Storage__S3__ServiceUrl
+                    value: "https://files.reserve-me.ru"
+  - target:
+      kind: Deployment
+      name: ago-chat-worker
+    patch: |
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: ago-chat-worker
+      spec:
+        template:
+          spec:
+            containers:
+              - name: worker
+                env:
+                  - name: Storage__S3__ServiceUrl
+                    value: "https://files.reserve-me.ru"
+  - target:
+      kind: Deployment
+      name: ago-chat-webhooks
+    patch: |
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: ago-chat-webhooks
+      spec:
+        template:
+          spec:
+            containers:
+              - name: webhooks
+                env:
+                  - name: Storage__S3__ServiceUrl
+                    value: "https://files.reserve-me.ru"

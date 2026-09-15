@@ -86,3 +86,16 @@ spec:
     # the name itself, and **one failed authorization fails the whole certificate** - every other
     # hostname would lose TLS with it.
     - office.reserve-me.ru
+    # `25-103`: MinIO's S3 API gets its own public hostname - `Storage__S3__ServiceUrl` is both the
+    # address the server uses to talk to MinIO and the host a presigned URL is signed against
+    # (`gateway.yaml`'s own new `https-files` listener has the full reasoning), and a browser outside
+    # the cluster could resolve neither `minio` nor any public name before this. A function-scoped
+    # name, not a product one - MinIO is infrastructure, the same reason `auth.` and `calendar-api.`
+    # are named for what they are rather than a product.
+    #
+    # THE A-RECORD MUST EXIST AND RESOLVE BEFORE THIS FILE IS APPLIED - the same gate every addition
+    # above this line states: issuance is HTTP-01, Let's Encrypt fetches over the name itself, and one
+    # failed authorization fails the whole certificate, taking the other nine working names down with
+    # it. Applying this repository's config to the real cluster, and creating/confirming that DNS
+    # record first, is the managing session's own next step - not done by this change.
+    - files.reserve-me.ru

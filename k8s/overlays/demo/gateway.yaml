@@ -147,6 +147,28 @@ spec:
         mode: Terminate
         certificateRefs:
           - name: ago-public-tls
+    # `25-103`: `Storage__S3__ServiceUrl` (`base/api.yaml`, `worker.yaml`, `webhooks.yaml`) is the one
+    # setting `Ago.Platform.Storage.S3` uses both for the server's own calls to MinIO and as the host
+    # a presigned URL is signed against (AWS SigV4 signs the host into the request) - it was
+    # `http://minio:9000`, the in-cluster Service DNS name, and nothing in this file routed any public
+    # hostname to MinIO at all, so every presigned upload/download URL this deployment issued named a
+    # host a browser outside the cluster could not resolve. This listener, and the HTTPRoute below it,
+    # are what fixes that.
+    #
+    # `:9000` (the S3 API) only - **never `:9001`** (MinIO's own admin console, `minio.yaml`'s own
+    # `--console-address :9001`). Same "no permanently internet-facing admin surface" instinct this
+    # file's own header already states for why `grafana.reserve-me.ru` was removed 2026-08-25: an
+    # admin UI with no second factor and no lockout, permanently reachable from the internet, is a
+    # standing risk this deployment does not need to carry. No listener, route, or backendRef in this
+    # file names `9001`, and none should.
+    - name: https-files
+      port: 443
+      protocol: HTTPS
+      hostname: files.reserve-me.ru
+      tls:
+        mode: Terminate
+        certificateRefs:
+          - name: ago-public-tls
 ---
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
@@ -441,6 +463,32 @@ spec:
         - name: ago-calendar-api
           port: 80
 ---
+# `25-103`: same shape as `ago-demo-shop1`/`ago-demo-shop2` above - one listener, one route, the
+# whole app behind `PathPrefix /`, no path split needed for a single-purpose backend.
+#
+# `minio.yaml`'s own Service exposes two named ports on one Service, `api` (9000) and `console`
+# (9001) - this backendRef names `port: 9000` explicitly, by number, so the admin console stays
+# unreachable through this Gateway regardless of what the Service itself exposes. Nothing in this
+# repository names port 9001 in a route, and this rule is why.
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: ago-minio-files
+spec:
+  parentRefs:
+    - name: ago-chat-gateway
+      sectionName: https-files
+  hostnames:
+    - files.reserve-me.ru
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+      backendRefs:
+        - name: minio
+          port: 9000
+---
 apiVersion: gateway.nginx.org/v1alpha1
 kind: UpstreamSettingsPolicy
 metadata:
@@ -472,12 +520,35 @@ spec:
     kind: Gateway
     name: ago-chat-gateway
   body:
-    # Every real JSON body this API accepts is small (a message, a visitor-session request, a
-    # presign request) - attachment *bytes* never flow through here at all (adr/0008, presigned
+    # `25-103`: THIS WAS "1m", CHANGED HERE, NOT JUST FLAGGED. This paragraph used to read: "Every
+    # real JSON body this API accepts is small (a message, a visitor-session request, a presign
+    # request) - attachment *bytes* never flow through here at all (adr/0008, presigned
     # direct-to-storage uploads). 1Mi is generous headroom for the former and irrelevant to the
-    # latter; anything larger than that hitting this Gateway is not a request this API was ever
-    # going to accept anyway.
-    maxSize: "1m"
+    # latter; anything larger than that hitting this Gateway is not a request this API was ever going
+    # to accept anyway." That stopped being true the moment this same item put MinIO's S3 API behind
+    # the identical `ago-chat-gateway` object this policy's own `targetRef` names (the whole Gateway,
+    # not a listener) - a presigned attachment PUT now crosses this Gateway too, and `docs/
+    # architecture/file-storage.md`'s "The gateway's own body-size ceiling does not contradict this"
+    # paragraph, which rested on the same "never through this gateway at all" claim, needed the
+    # identical correction (fixed there in this same change).
+    #
+    # `AttachmentOptions.MaxSizeBytes` is 5 MiB (`23-81`, confirmed directly in
+    # `ago-chat/src/Ago.Chat.Application/UseCases/CreateAttachment/AttachmentOptions.cs` rather than
+    # trusted from an older comment - `public long MaxSizeBytes { get; set; } = 5 * 1024 * 1024;`).
+    # `10m` is double that: simple, defensible headroom over the real application ceiling (SigV4
+    # signs the exact declared Content-Length into a presigned PUT, so nothing legitimate ever
+    # actually sends more than 5 MiB through this path regardless of what the edge allows) rather than
+    # a value trimmed tight to today's number and needing a second edit the next time
+    # `MaxSizeBytes` moves.
+    #
+    # Global, not scoped to the new `https-files` listener alone: NGINX Gateway Fabric's
+    # `ClientSettingsPolicy` CRD has no established per-listener (`sectionName`) precedent anywhere in
+    # this repository's own manifests, and guessing at an unverified capability on live public
+    # infrastructure is worse than a straightforward whole-Gateway raise. Every *other* body this
+    # Gateway accepts (a message, a visitor-session request, a presign request) is still small - a
+    # 10Mi ceiling does not weaken their protection, it only also covers what MinIO now legitimately
+    # needs through this same edge.
+    maxSize: "10m"
 ---
 apiVersion: gateway.nginx.org/v1alpha1
 kind: RateLimitPolicy

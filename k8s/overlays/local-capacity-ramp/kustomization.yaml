@@ -1,0 +1,49 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# A layer on top of `overlays/local`, not an edit to it. The question this overlay exists to answer -
+# "what does scaling ago-chat-api/ago-chat-worker out actually buy, and where does that stop helping"
+# - is a one-off capacity investigation, not this project's every-day local dev loop. `overlays/local`
+# stays exactly as `3-06` and `8-08` left it (3 api replicas for `least_conn` correctness, worker at
+# base's 1) so nobody's regular local-dev bring-up changes shape or resource footprint because of a
+# load test. Composing `../local` as this overlay's only resource is the same "layer, don't mutate"
+# pattern `overlays/demo` already uses against `base` - kustomize resolves `../local`'s own patches
+# first, then applies the two below on top of that result.
+resources:
+  - ../local
+
+patches:
+  # ago-chat-worker is stateless (a RabbitMQ consumer, no local state of its own - same reasoning
+  # `3-06`'s own comment gives for why ago-chat-api can run >1 replica safely) and this investigation's
+  # first question is literally "does replicating it help," so it needs to be >1 to have an answer.
+  # Matches ago-chat-api's own 3, set by `overlays/local` already, so ingest and delivery are scaled
+  # symmetrically instead of moving only one side of the pipeline.
+  - target:
+      kind: Deployment
+      name: ago-chat-worker
+    patch: |
+      - op: replace
+        path: /spec/replicas
+        value: 3
+  - target:
+      kind: Deployment
+      name: ago-chat-api
+    patch: |
+      # VisitorSessionRateLimitOptions's own doc comment (ago-chat/src/Ago.Chat.Api/Auth/
+      # VisitorSessionRateLimitOptions.cs) already says its default (20 handshakes/site, ~20/min
+      # refill) is "not measured or load-tested - a starting point." A capacity ramp aimed at finding
+      # this deployment's own ceiling must not have that starting-point default answer the question
+      # first - 20 concurrent new visitor sessions is far below any step this ramp intends to reach.
+      # Raised only in this overlay, never in base or demo: the low default is the right production
+      # posture (per-site handshake abuse protection), and this override exists to get it out of the
+      # way for one investigation, not to change what a real site is allowed to do.
+      - op: add
+        path: /spec/template/spec/containers/0/env/-
+        value:
+          name: VisitorSessionRateLimit__PerSiteCapacity
+          value: "5000"
+      - op: add
+        path: /spec/template/spec/containers/0/env/-
+        value:
+          name: VisitorSessionRateLimit__PerSiteRefillPerSecond
+          value: "500"

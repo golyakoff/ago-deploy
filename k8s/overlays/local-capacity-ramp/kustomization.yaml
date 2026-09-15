@@ -47,3 +47,34 @@ patches:
         value:
           name: VisitorSessionRateLimit__PerSiteRefillPerSecond
           value: "500"
+      # Found live running this overlay's own first real ramp: raising VisitorSessionRateLimit alone
+      # was not enough - StartConversationHandler sits behind a second, separate limiter,
+      # ConversationCreateRateLimitOptions, whose own default (100 new conversations/site, ~100/hour
+      # refill) is far below a single step of this ramp and was never touched by the change above.
+      # Same reasoning as VisitorSessionRateLimit's own comment: this is a per-site abuse guard with
+      # an admittedly unmeasured default, raised only in this one-off overlay so the investigation
+      # is not answering "where is the rate limiter", never a change to what a real site allows.
+      - op: add
+        path: /spec/template/spec/containers/0/env/-
+        value:
+          name: ConversationCreateRateLimit__PerSiteCapacity
+          value: "5000"
+      - op: add
+        path: /spec/template/spec/containers/0/env/-
+        value:
+          name: ConversationCreateRateLimit__PerSiteRefillPerSecond
+          value: "500"
+      # A third limiter, found the same way as the second: MessageSendRateLimitOptions's own default
+      # (100 messages/site, ~1.67/s refill) is what a light, realistic trickle of per-conversation
+      # messages from hundreds of held-open conversations runs into next, once the two connection-
+      # side limiters above stop being the first thing hit. Same one-off-overlay-only reasoning.
+      - op: add
+        path: /spec/template/spec/containers/0/env/-
+        value:
+          name: MessageSendRateLimit__PerSiteCapacity
+          value: "5000"
+      - op: add
+        path: /spec/template/spec/containers/0/env/-
+        value:
+          name: MessageSendRateLimit__PerSiteRefillPerSecond
+          value: "500"

@@ -78,3 +78,27 @@ patches:
         value:
           name: MessageSendRateLimit__PerSiteRefillPerSecond
           value: "500"
+  # `2026-09-15-local-capacity-ramp.md`'s own finding: at 500 concurrently open conversations,
+  # Postgres - not either stateless host - hit its container memory limit (base/postgres.yaml's own
+  # 512Mi, the same number production runs under) and one backend died hard enough to trigger a full
+  # crash-recovery cycle. 4x memory and 4x CPU, request scaled with each so the request/limit ratio
+  # base already uses stays the same (50% memory, also now 50% CPU). Nothing in that report pointed
+  # at CPU as a constraint on its own (postgres sat at low double-digit percent of its 500m limit
+  # throughout) - raised anyway, at the author's own explicit request, so a second run does not have
+  # to ask "was it memory or CPU that actually helped" with only one of the two moved.
+  - target:
+      kind: Deployment
+      name: postgres
+    patch: |
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/requests/memory
+        value: 1024Mi
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/limits/memory
+        value: 2048Mi
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/requests/cpu
+        value: 1000m
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/limits/cpu
+        value: 2000m

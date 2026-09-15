@@ -109,36 +109,33 @@ patches:
       # pooling their own Npgsql connections. `args`, not `command` - the official image's own
       # ENTRYPOINT (docker-entrypoint.sh) still runs and still does its init-or-verify dance; only
       # the CMD it execs at the end changes, from the image's own default `postgres` to this.
+      # A fourth change tried and reverted: 8Gi memory with `shared_buffers=2GB`/
+      # `effective_cache_size=6GB` (matching Yandex Cloud's cheapest Managed PostgreSQL tier,
+      # s4a-c2-m8), testing whether memory Postgres can actually use - not just a bigger idle cgroup
+      # ceiling - would reduce the CPU saturation below. It did not: CPU read the same ~198-200% of
+      # its 2-CPU limit either way, while the message-error climb arrived *earlier* (step 5 / 2500
+      # connections, 10.7%) than on the plain config below (step 8 / 4000, 48.9%) - the opposite of
+      # the hypothesis, on the one number it was about
+      # (`2026-09-15-local-capacity-ramp.md`, Run 4). Reverted to this run's own numbers rather than
+      # kept on a plausible-sounding but disproven guess.
+      #
+      # `shared_buffers`/`effective_cache_size`/`work_mem`/`maintenance_work_mem` below are
+      # postgres:18-alpine's own stock defaults (128MB/4GB/4MB/64MB - confirmed live via `SHOW`, never
+      # tuned for this container's real 2Gi before Run 4's attempt above) written out explicitly
+      # rather than left implicit, so this overlay's own numbers don't silently drift if the base
+      # image's defaults ever change, and so a reader doesn't have to already know what "stock" means
+      # here to reproduce Run 3's own 4000-connection result.
       - op: add
-        path: /spec/template/spec/containers/0/args
-        value: ["postgres", "-c", "max_connections=300"]
-      - op: replace
-        path: /spec/template/spec/containers/0/resources/limits/cpu
-        value: 2000m
-      # A fourth change, testing the author's own hypothesis rather than assuming it: does more
-      # memory - actually used by Postgres, not just a bigger idle cgroup ceiling - reduce the CPU
-      # saturation the third run found, by shrinking checkpoint/WAL-flush churn under write load?
-      # Raising the container's own memory limit alone does nothing here - `2048Mi` above already
-      # gave Postgres headroom it never used, because `shared_buffers` stayed at the stock 128MB the
-      # whole time (checked live, never touched by any prior change in this file). Matches Yandex
-      # Cloud's own cheapest Managed PostgreSQL tier (s4a-c2-m8: 2 vCPU / 8 GB) - CPU deliberately
-      # left at 2000m/unchanged above, so this run isolates memory as the one new variable, the same
-      # "move one thing between runs" discipline every earlier change in this file already follows.
-      - op: replace
-        path: /spec/template/spec/containers/0/resources/requests/memory
-        value: 4096Mi
-      - op: replace
-        path: /spec/template/spec/containers/0/resources/limits/memory
-        value: 8192Mi
-      - op: replace
         path: /spec/template/spec/containers/0/args
         value:
           [
             "postgres",
             "-c", "max_connections=300",
-            # 25%/75% of 8 GiB - the standard starting-point ratios, not tuned further; this run
-            # exists to test whether raising them at all moves the CPU number, not to find the
-            # precisely optimal split.
-            "-c", "shared_buffers=2GB",
-            "-c", "effective_cache_size=6GB",
+            "-c", "shared_buffers=128MB",
+            "-c", "effective_cache_size=4GB",
+            "-c", "work_mem=4MB",
+            "-c", "maintenance_work_mem=64MB",
           ]
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/limits/cpu
+        value: 2000m

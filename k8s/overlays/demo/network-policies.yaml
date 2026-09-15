@@ -238,6 +238,28 @@ spec:
             cidr: 10.42.0.1/32
         - ipBlock:
             cidr: 172.17.0.0/16
+        # `25-103`: found live, the hard way - applying that item's own `gateway.yaml` change (a new
+        # `https-files` listener routing straight to this Service) produced a clean TLS handshake and
+        # then a 502 on every request, because this policy predates anything routing external traffic
+        # to MinIO at all and was written entirely for pod-to-pod calls within `ago-chat`.
+        #
+        # The header comment above names the Gateway Fabric pod as a `nginx-gateway`-namespace,
+        # generated-label workload, and that first fix attempt (this line, briefly) followed that
+        # comment straight into a second live failure: NGINX Gateway Fabric's actual **data-plane**
+        # pod - the one that opens the TCP connection to a backend - runs as its own Deployment,
+        # `ago-chat-gateway-nginx`, provisioned **inside `ago-chat` itself**, one per Gateway object
+        # (`kubectl get pods -n ago-chat -l app.kubernetes.io/name=ago-chat-gateway-nginx`). The
+        # `nginx-gateway` namespace's own pod is only the *control plane* - it renders config and
+        # pushes it to the data-plane pod's own sidecar agent over its own channel, never touches
+        # application traffic, and was never the thing this rule needed to allow. A same-namespace
+        # `podSelector`, not a cross-namespace one, is what the traffic actually needs -
+        # `app.kubernetes.io/name: ago-chat-gateway-nginx` is deterministic (derived from this
+        # Gateway object's own name, not random), so it is exactly the kind of label the header
+        # comment's "generated ahead of a renewal" worry does not apply to once read live, the same
+        # way every other `app: <name>` selector in this file is hardcoded.
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: ago-chat-gateway-nginx
       ports:
         - protocol: TCP
           port: 9000

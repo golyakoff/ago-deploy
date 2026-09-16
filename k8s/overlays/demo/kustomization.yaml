@@ -688,3 +688,61 @@ patches:
                 env:
                   - name: Storage__S3__ServiceUrl
                     value: "https://files.reserve-me.ru"
+  # `25-109`'s own live capacity-ramp investigation found base/postgres.yaml's own 512Mi limit is a
+  # real, reproduced OOM at ~500 concurrently open conversations - not a guess, a crash caught live
+  # (`load/reports/2026-09-15-local-capacity-ramp.md`, Run 1). This node runs the real deployment,
+  # not a load-test rig - the demo overlay never carried local-capacity-ramp's own 2Gi/2-CPU numbers
+  # (those were sized for a Docker Desktop capacity investigation, never meant to land here) - so
+  # this is a separate, deliberately smaller change, sized against this node's own real, measured
+  # budget (confirmed live via `kubectl describe node` on the demo node, 2026-09-16): 4 CPU / ~5.93Gi
+  # allocatable, already carrying ~2020m/2764Mi in requests and ~8900m/7114Mi in limits across every
+  # other pod here. Doubling postgres's own request/limit on both axes gives it the same 2x margin
+  # over its own proven crash point that fixed Run 1 locally, while moving the node's own limit-side
+  # overcommit from 222%/120% to only 235%/126% - not a qualitative change to how tight this node
+  # already runs, unlike local-capacity-ramp's own 2Gi/2-CPU config would have been.
+  #
+  # `max_connections` alone, not `shared_buffers`/`work_mem`/`effective_cache_size` - `2026-09-15-
+  # local-capacity-ramp.md`'s own Monte Carlo sweep found no measured benefit from tuning those at
+  # this scale, and this item's own discipline (CLAUDE.md rule 7) is to not tune what was not shown
+  # to help. 150, not local-capacity-ramp's 300 - that number was sized for 3 api + 3 worker replicas
+  # each pooling their own Npgsql connections; `base/api.yaml`/`base/worker.yaml` (never overridden by
+  # this overlay) both stay at `replicas: 1`, so a single pool's own realistic demand (Npgsql's default
+  # max pool size, 100) is what this number has to clear, with real headroom for a migrator job or an
+  # ad-hoc psql session on top - not thousands of connections nobody here will open.
+  #
+  # `shared_buffers`/`effective_cache_size`/`work_mem`/`maintenance_work_mem` are written out
+  # explicitly as postgres:18-alpine's own stock values (128MB/4GB/4MB/64MB) rather than left
+  # implicit, matching `local-capacity-ramp`'s own established reasoning for doing the same thing -
+  # so this overlay's own numbers don't silently drift if the base image's defaults ever change.
+  - target:
+      kind: Deployment
+      name: postgres
+    patch: |
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: postgres
+      spec:
+        template:
+          spec:
+            containers:
+              - name: postgres
+                resources:
+                  requests:
+                    memory: 512Mi
+                    cpu: 500m
+                  limits:
+                    memory: 1Gi
+                    cpu: 1000m
+                args:
+                  - postgres
+                  - -c
+                  - max_connections=150
+                  - -c
+                  - shared_buffers=128MB
+                  - -c
+                  - effective_cache_size=4GB
+                  - -c
+                  - work_mem=4MB
+                  - -c
+                  - maintenance_work_mem=64MB

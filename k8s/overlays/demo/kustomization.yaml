@@ -121,26 +121,30 @@ images:
   # (`Stage25AddOneOpenConversationPerVisitorIndex`), applied via `ago-chat-migrator` before this pin -
   # `SchemaVersionGuard` reported current against it afterward. Deployed and smoke-tested live before
   # this pin (45/45, `a93604e` reported by both the API and the binary it runs).
-  # `25-114`: bumped to the commit that adds `OwnerSiteDetailResponse.ChannelQuantity` - the owner
-  # console's channel-entitlement section now shows a site's real, persisted grant rather than only
-  # what the current browser session had itself just granted. No new migration; the pin below still
-  # moves with the three hosts (`8-08`'s coupling), unchanged by that. Deployed and smoke-tested live
-  # before this pin (46/46, `652af5f` reported by both the API and the binary it runs).
+  # `25-115`: bumped to the commit carrying `ModuleQuantityGrant.UnconditionalGrantExpiresAt` - the
+  # owner's channel-entitlement table can now grant/revoke any of five channel kinds with a reason and
+  # an optional expiry, instead of `25-114`'s single numeric quantity for Telegram alone. Carries one
+  # migration (`Stage25AddModuleQuantityGrantUnconditionalGrantExpiresAt`, additive/reversible) -
+  # `deploy.sh`'s own `kubectl set image` path does not run the migrator (that is `apply-demo.sh`'s
+  # job, gated on this very pin), so the three hosts crash-looped on `SchemaVersionGuard` for a few
+  # minutes after the image moved and before this pin let `apply-demo.sh` run the migration - the
+  # documented, safe `8-08` behaviour (old ReplicaSet kept serving throughout, zero real outage), not a
+  # new failure mode. `apply-demo.sh` applies this pin next, which is what actually runs the migrator.
   - name: ago-chat-api
     newName: ghcr.io/golyakoff/ago-chat-api
-    newTag: 652af5fffddcbbb284c1174fd7316df2e6d1b96e
+    newTag: c36d6feef9d4f2f86423f15585711ba5a54f50bb
   - name: ago-chat-worker
     newName: ghcr.io/golyakoff/ago-chat-worker
-    newTag: 652af5fffddcbbb284c1174fd7316df2e6d1b96e
+    newTag: c36d6feef9d4f2f86423f15585711ba5a54f50bb
   - name: ago-chat-webhooks
     newName: ghcr.io/golyakoff/ago-chat-webhooks
-    newTag: 652af5fffddcbbb284c1174fd7316df2e6d1b96e
+    newTag: c36d6feef9d4f2f86423f15585711ba5a54f50bb
   # `8-08`: the migrator moves with the three hosts and never independently - it applies the
   # migrations *that commit* carries, so a migrator on a different SHA from the hosts is the exact
   # mismatch this item exists to prevent. deploy.sh sets all four from one argument for that reason.
   - name: ago-chat-migrator
     newName: ghcr.io/golyakoff/ago-chat-migrator
-    newTag: 652af5fffddcbbb284c1174fd7316df2e6d1b96e
+    newTag: c36d6feef9d4f2f86423f15585711ba5a54f50bb
   # `15-07`/`adr/0051`: the four static bundles, which `15-06` could not reach - and the one it did
   # not reach is the one the 2026-08-25 incident happened to. Their four `imagePullPolicy: Never`
   # patches are gone from *-static.yaml for the same reason the three above went.
@@ -182,15 +186,14 @@ images:
   # fitted a 375px bar, and the count grows with every tenant-facing screen rather than being a fixed
   # property to work around. The drawer renders from the same permission-filtered array as the bar -
   # one list, two renderers - so the two cannot disagree about what a tenant may see.
-  # `25-111`/`25-114`: bumped to the commit carrying both - the shared Tooltip no longer clips in a
-  # narrow column (`VisitorPanel`'s own "(?)" trigger, plus a second, previously unreported clip in
-  # `ConversationList`'s "assigned" tooltip, found and fixed by the same generic change), and the
-  # owner's channel-entitlement section now reads a site's real persisted quantity instead of only a
-  # session-only confirmation. Deployed and smoke-tested live before this pin (46/46, `3eac1f3`
-  # reported by both the console and the bundle it serves).
+  # `25-115`: bumped to the commit replacing the numeric channel-quantity form with the per-kind
+  # entitlement table (grant/revoke, provenance, expiry) across all five priced channel kinds.
+  # Requires `ago-chat`'s own `c36d6fe...` pin above (the new `channelEntitlements` field) and this
+  # overlay's `BillingOptionEntitlements__channel-*` config (`k8s/base/{api,worker}.yaml`) to already
+  # be live - both applied together via `apply-demo.sh` immediately after this pin merges.
   - name: ago-console
     newName: ghcr.io/golyakoff/ago-console
-    newTag: 3eac1f3b19c8fad65eb40de741310006be367d10
+    newTag: bd8debd508f247776c8c237a4d8c65ae8e130a98
   # All three come from one `ago-widget` commit, and that is the point rather than tidiness: the two
   # demo pages and a real tenant's embed then run byte-identical bundles, which is checkable (three
   # `version.json` files naming one commit) instead of assumed.

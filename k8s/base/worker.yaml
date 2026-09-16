@@ -136,8 +136,20 @@ spec:
             # `GetChannelCredentialStatusHandler`) and nobody updated this deployment for it - a real,
             # live gap (no channel entitlement the owner ever granted could reach a tenant's own connect
             # attempt), not a hypothetical one. `api.yaml` now carries the identical line.
+            #
+            # `25-115`: bumped from the legacy shared `"channel"` value to `"channel-telegram"`, and
+            # `Max`/`Vk`/`WhatsApp`/`Avito` added alongside it - `api.yaml`'s own comment on this same
+            # change has the full reasoning; `api.yaml` and this file must keep carrying identical lines.
             - name: BillingOptionEntitlements__channel-telegram
-              value: "channel"
+              value: "channel-telegram"
+            - name: BillingOptionEntitlements__channel-max
+              value: "channel-max"
+            - name: BillingOptionEntitlements__channel-vk
+              value: "channel-vk"
+            - name: BillingOptionEntitlements__channel-whatsapp
+              value: "channel-whatsapp"
+            - name: BillingOptionEntitlements__channel-avito
+              value: "channel-avito"
             # `7-03`: same requirement as ago-chat-api - see the comment there.
             # `8-07`/ago-root `adr/0058`: the demo-tenant minting path. **Off here, on purpose.** An
             # endpoint that creates tenants from the public internet is not something a host should

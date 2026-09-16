@@ -246,8 +246,28 @@ spec:
             # nobody updated this deployment for, found live: no channel entitlement the owner grants
             # ever reaches a tenant's own connect attempt, because the process that refuses it never
             # had the mapping to answer "channel-telegram" with anything but null.
+            #
+            # `25-115`: bumped from the legacy shared `"channel"` value to `"channel-telegram"` (its own
+            # billing option key, unchanged) so each of the five channel kinds below prices under its own
+            # distinct `ModuleKey`, matching `ChannelEntitlementOptionKeys`'s own "one entitlement per
+            # channel kind" decision (`adr/0151`) - a shared key would have let one purchase silently
+            # unlock every kind. Confirmed safe: no live site had a `module_quantity_grants` row for
+            # `"channel"` at the time of this rename (queried directly against the production database,
+            # 2026-09-16). `Max`/`Vk`/`WhatsApp`/`Avito` are new - the owner's own channel-entitlement
+            # table (`25-115`, `ago-console`) can now grant any of the five; only `Max`/`Telegram`/`Vk`
+            # have a tenant-facing connect screen today (`/channels/{max,telegram,vk}`), `WhatsApp`/`Avito`
+            # have their API endpoints already live but no console screen yet - granting them is still
+            # useful, the entitlement is simply not reachable from the tenant side until their screens ship.
             - name: BillingOptionEntitlements__channel-telegram
-              value: "channel"
+              value: "channel-telegram"
+            - name: BillingOptionEntitlements__channel-max
+              value: "channel-max"
+            - name: BillingOptionEntitlements__channel-vk
+              value: "channel-vk"
+            - name: BillingOptionEntitlements__channel-whatsapp
+              value: "channel-whatsapp"
+            - name: BillingOptionEntitlements__channel-avito
+              value: "channel-avito"
             # `7-03`: PlatformObservabilityOptions.Exporter.Endpoint is [Required] - AddPlatformObservability
             # (7-01/7-02) fails ValidateOnStart without it, and appsettings.json carries no default (only
             # appsettings.Development.json does, for the fast loop). jaeger.yaml's own Service, not the

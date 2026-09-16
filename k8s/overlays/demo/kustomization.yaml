@@ -121,21 +121,26 @@ images:
   # (`Stage25AddOneOpenConversationPerVisitorIndex`), applied via `ago-chat-migrator` before this pin -
   # `SchemaVersionGuard` reported current against it afterward. Deployed and smoke-tested live before
   # this pin (45/45, `a93604e` reported by both the API and the binary it runs).
+  # `25-114`: bumped to the commit that adds `OwnerSiteDetailResponse.ChannelQuantity` - the owner
+  # console's channel-entitlement section now shows a site's real, persisted grant rather than only
+  # what the current browser session had itself just granted. No new migration; the pin below still
+  # moves with the three hosts (`8-08`'s coupling), unchanged by that. Deployed and smoke-tested live
+  # before this pin (46/46, `652af5f` reported by both the API and the binary it runs).
   - name: ago-chat-api
     newName: ghcr.io/golyakoff/ago-chat-api
-    newTag: 3ee04b3efaee8c0f8a5d5401a7366ca0486d323f
+    newTag: 652af5fffddcbbb284c1174fd7316df2e6d1b96e
   - name: ago-chat-worker
     newName: ghcr.io/golyakoff/ago-chat-worker
-    newTag: 3ee04b3efaee8c0f8a5d5401a7366ca0486d323f
+    newTag: 652af5fffddcbbb284c1174fd7316df2e6d1b96e
   - name: ago-chat-webhooks
     newName: ghcr.io/golyakoff/ago-chat-webhooks
-    newTag: 3ee04b3efaee8c0f8a5d5401a7366ca0486d323f
+    newTag: 652af5fffddcbbb284c1174fd7316df2e6d1b96e
   # `8-08`: the migrator moves with the three hosts and never independently - it applies the
   # migrations *that commit* carries, so a migrator on a different SHA from the hosts is the exact
   # mismatch this item exists to prevent. deploy.sh sets all four from one argument for that reason.
   - name: ago-chat-migrator
     newName: ghcr.io/golyakoff/ago-chat-migrator
-    newTag: 3ee04b3efaee8c0f8a5d5401a7366ca0486d323f
+    newTag: 652af5fffddcbbb284c1174fd7316df2e6d1b96e
   # `15-07`/`adr/0051`: the four static bundles, which `15-06` could not reach - and the one it did
   # not reach is the one the 2026-08-25 incident happened to. Their four `imagePullPolicy: Never`
   # patches are gone from *-static.yaml for the same reason the three above went.
@@ -177,9 +182,15 @@ images:
   # fitted a 375px bar, and the count grows with every tenant-facing screen rather than being a fixed
   # property to work around. The drawer renders from the same permission-filtered array as the bar -
   # one list, two renderers - so the two cannot disagree about what a tenant may see.
+  # `25-111`/`25-114`: bumped to the commit carrying both - the shared Tooltip no longer clips in a
+  # narrow column (`VisitorPanel`'s own "(?)" trigger, plus a second, previously unreported clip in
+  # `ConversationList`'s "assigned" tooltip, found and fixed by the same generic change), and the
+  # owner's channel-entitlement section now reads a site's real persisted quantity instead of only a
+  # session-only confirmation. Deployed and smoke-tested live before this pin (46/46, `3eac1f3`
+  # reported by both the console and the bundle it serves).
   - name: ago-console
     newName: ghcr.io/golyakoff/ago-console
-    newTag: c1679990bf9709dc9a67b629f8ec352fb24dc6e1
+    newTag: 3eac1f3b19c8fad65eb40de741310006be367d10
   # All three come from one `ago-widget` commit, and that is the point rather than tidiness: the two
   # demo pages and a real tenant's embed then run byte-identical bundles, which is checkable (three
   # `version.json` files naming one commit) instead of assumed.
@@ -200,15 +211,19 @@ images:
   # control automatically at the first module (booking) message when the visitor never clicked its own
   # "Представиться..." link - the live gap a real tenant's operator reported, reproduced and confirmed
   # fixed against this exact commit before pinning it here.
+  # `25-110`: bumped to the commit that makes the widget react live to a pushed attachment-upload
+  # grant/revoke - the "скрепка" (attach button) now appears the moment an operator toggles the
+  # per-conversation grant, instead of only after the visitor reloads. Deployed and smoke-tested live
+  # before this pin (43/43, `654e9c0` reported by all three bundles alike).
   - name: ago-demo-shop1
     newName: ghcr.io/golyakoff/ago-demo-shop1
-    newTag: 8db657fb608181ad233b5b2a710424e9815b46ea
+    newTag: 654e9c0124d64b98c79905e61de0441044fe1a7f
   - name: ago-demo-shop2
     newName: ghcr.io/golyakoff/ago-demo-shop2
-    newTag: 8db657fb608181ad233b5b2a710424e9815b46ea
+    newTag: 654e9c0124d64b98c79905e61de0441044fe1a7f
   - name: ago-widget-assets
     newName: ghcr.io/golyakoff/ago-widget-assets
-    newTag: 8db657fb608181ad233b5b2a710424e9815b46ea
+    newTag: 654e9c0124d64b98c79905e61de0441044fe1a7f
   # `adr/0092`: the copy-me snippet on the public landing page had been handing out
   # `chat.reserve-me.ru/widget.js` - a 404, under a filename that never existed anywhere. Until this
   # is deployed, the page a prospective customer reads still gives them a script tag that does not

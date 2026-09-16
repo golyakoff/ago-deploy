@@ -202,13 +202,13 @@ images:
   # fixed against this exact commit before pinning it here.
   - name: ago-demo-shop1
     newName: ghcr.io/golyakoff/ago-demo-shop1
-    newTag: 20c396358a594cc1f02ec902a060c4f752c777e9
+    newTag: 8db657fb608181ad233b5b2a710424e9815b46ea
   - name: ago-demo-shop2
     newName: ghcr.io/golyakoff/ago-demo-shop2
-    newTag: 20c396358a594cc1f02ec902a060c4f752c777e9
+    newTag: 8db657fb608181ad233b5b2a710424e9815b46ea
   - name: ago-widget-assets
     newName: ghcr.io/golyakoff/ago-widget-assets
-    newTag: 20c396358a594cc1f02ec902a060c4f752c777e9
+    newTag: 8db657fb608181ad233b5b2a710424e9815b46ea
   # `adr/0092`: the copy-me snippet on the public landing page had been handing out
   # `chat.reserve-me.ru/widget.js` - a 404, under a filename that never existed anywhere. Until this
   # is deployed, the page a prospective customer reads still gives them a script tag that does not

@@ -127,11 +127,15 @@ spec:
             # leave chat believing the module is granted while nothing routes to it. `channel` needs
             # none of that: it is a quantity grant only, the identical shape this option already writes.
             #
-            # Only `Ago.Chat.Worker` needs this variable, not `ago-chat-api`: `SubscriptionRenewalApplier`
-            # (`Ago.Chat.Infrastructure.Postgres`, resolved inside `SubscriptionRenewalJob`) is this
-            # deployment's only caller of `IBillingOptionEntitlementProvider.TryGet()` today - unlike
-            # `ModuleEntryPoints__calendar`, which `Ago.Chat.Api`'s own `EnableModuleForSiteAsOwnerHandler`
-            # also reads, this mapping is consulted from nowhere else.
+            # **Corrected, found live 2026-09-16**: this used to say only `Ago.Chat.Worker` needs this
+            # variable, because `SubscriptionRenewalApplier` (`Ago.Chat.Infrastructure.Postgres`,
+            # resolved inside `SubscriptionRenewalJob`) was this deployment's only caller of
+            # `IBillingOptionEntitlementProvider.TryGet()` when `23-86` wrote that sentence. `23-85`
+            # added a second, real caller in `Ago.Chat.Api` (`ChannelEntitlement.IsEntitledAsync`, read
+            # by `RegisterChannelCredentialHandler`/`RevokeChannelCredentialHandler`/
+            # `GetChannelCredentialStatusHandler`) and nobody updated this deployment for it - a real,
+            # live gap (no channel entitlement the owner ever granted could reach a tenant's own connect
+            # attempt), not a hypothetical one. `api.yaml` now carries the identical line.
             - name: BillingOptionEntitlements__channel-telegram
               value: "channel"
             # `7-03`: same requirement as ago-chat-api - see the comment there.

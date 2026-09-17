@@ -69,6 +69,16 @@ spec:
             # `5-10` (this host crashed at startup with "Set Redis:ConnectionString").
             - name: Redis__ConnectionString
               value: "redis:6379"
+            # `4-04`'s own `GracePeriod` doc comment names its 30-second default a starting point, not
+            # measured or load-tested. Found live 2026-09-17: the author's own browser tab went idle
+            # long enough for its SignalR connection to drop, and 30 seconds was not enough slack for a
+            # normal reconnect - every conversation assigned to that operator was released back to
+            # `Waiting` (`OperatorConversationReleaser.ReleaseAllAsync`) with nobody else online to pick
+            # them up. Bumped to 3 minutes, the author's own requested number - still not a measured
+            # figure, just a wider one, so a genuinely gone operator's conversations still free up
+            # within a bounded time rather than never.
+            - name: OperatorDisconnectGraceConsumer__GracePeriod
+              value: "00:03:00"
             # `7-03`: same finding as ago-chat-api's own comment - S3StorageOptions/
             # WebhookSecretCipherOptions are validated for every host, and this manifest never carried
             # them. Pre-existing gap since `5-02`/`6-05`, fixed here only because a healthy pod is this

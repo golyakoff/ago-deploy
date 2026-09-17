@@ -1,0 +1,100 @@
+# `25-116`: the Telegram outbound relay (`14-07`/`adr/0070`), promoted from a sidecar wired only into
+# `ago-chat-worker`'s own pod to a standalone Deployment + Service every host in this namespace can
+# reach. Found live 2026-09-16: `RegisterChannelCredentialHandler`'s own live token check
+# (`GET .../getMe`, the very first call a tenant's "Подключить" button makes) runs inside
+# `Ago.Chat.Api`, which had no relay and no proxy configured at all - it always connected to Telegram
+# directly, and a direct connection from this VPS to `api.telegram.org` failed outright (10/10,
+# 10-second timeout, zero TCP handshake - worse than `adr/0070`'s own original 47%/53% split, measured
+# again the same way: DNS resolves, `https://api.github.com` from the same node answers in 150ms,
+# `https://telegram.org` times out identically to the bot API subdomain). So the worker's own
+# long-polling was protected from day one and every tenant's very first connect attempt never was.
+#
+# **Why a shared Service instead of duplicating the sidecar onto `ago-chat-api` too.** Two Xray
+# processes would open two independent VLESS connections to the author's own personal relay endpoint
+# (`adr/0070`'s own named, accepted gap: "no SLA... not AGO-owned infrastructure") for no reason - one
+# relay, one connection, reachable from every pod that needs it, is the same one-instance-per-need
+# shape every other backing service in this file already gets (`postgres`, `redis`, `rabbitmq`,
+# `minio`). The old sidecar's own justification for binding to `127.0.0.1` - "the sidecar shares
+# `ago-chat-worker`'s network namespace" - stops applying once ago-chat-api needs the identical proxy;
+# a loopback bind can never be shared across pods, only a real Service can.
+#
+# **The old sidecar's own removed readinessProbe note, revisited.** That comment recorded a real, then-
+# permanent limitation: a `tcpSocket` probe on a loopback-bound listener can never succeed, because
+# kubelet always probes the Pod IP, never a container's own loopback. Binding to `0.0.0.0` here (the
+# `TELEGRAM_RELAY_XRAY_CONFIG` secret's own `listen` field, updated on the node alongside this file -
+# see the runbook note this item's own report carries) removes that limitation outright: the Pod IP now
+# really does reach the listener, so the probe below is not a re-attempt of something already proven
+# impossible, it is what the impossibility was blocking.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: telegram-relay
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: telegram-relay
+  template:
+    metadata:
+      labels:
+        app: telegram-relay
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1654
+        runAsGroup: 1654
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        # Same image, same pinned digest, same security posture the removed sidecar patch used -
+        # see that patch's own former comment (still in this file's git history) for why this exact
+        # image/digest/no-root/no-shell combination was chosen and verified, none of which changes by
+        # moving the container from a sidecar to a standalone Deployment.
+        - name: telegram-relay
+          image: ghcr.io/xtls/xray-core:26.7.11@sha256:a1644183accdb0b5be967093fe34be756fd5de15fe2ee0206e842ae17350967f
+          command: ["/usr/local/bin/xray"]
+          args: ["run", "-c", "/usr/local/etc/xray/config.json"]
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            capabilities:
+              drop: ["ALL"]
+          ports:
+            - name: socks5
+              containerPort: 1080
+          readinessProbe:
+            tcpSocket:
+              port: 1080
+            initialDelaySeconds: 2
+            periodSeconds: 10
+          volumeMounts:
+            - name: telegram-relay-config
+              mountPath: /usr/local/etc/xray
+              readOnly: true
+          resources:
+            requests:
+              memory: 32Mi
+              cpu: 25m
+            limits:
+              memory: 128Mi
+              cpu: 250m
+      volumes:
+        - name: telegram-relay-config
+          secret:
+            secretName: telegram-relay-credentials
+            items:
+              - key: TELEGRAM_RELAY_XRAY_CONFIG
+                path: config.json
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: telegram-relay
+spec:
+  selector:
+    app: telegram-relay
+  ports:
+    - name: socks5
+      port: 1080
+      targetPort: 1080

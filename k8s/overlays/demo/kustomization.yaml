@@ -136,21 +136,27 @@ images:
   # minutes after the image moved and before this pin let `apply-demo.sh` run the migration - the
   # documented, safe `8-08` behaviour (old ReplicaSet kept serving throughout, zero real outage), not a
   # new failure mode. `apply-demo.sh` applies this pin next, which is what actually runs the migrator.
+  #
+  # `25-118`: bumped again to the commit splitting the widget bucket's single auto-close window into a
+  # short release pass (unchanged 1h, frees operator capacity, back to `Waiting`) and a new long close
+  # pass (`WidgetCloseWindow`, defaulted in code to 7 days - no deployment override needed, the default
+  # already matches the desired figure). No migration this time; deployed via plain `deploy.sh`, smoke
+  # 46/46.
   - name: ago-chat-api
     newName: ghcr.io/golyakoff/ago-chat-api
-    newTag: c36d6feef9d4f2f86423f15585711ba5a54f50bb
+    newTag: 4ce0cdefba012881f7ec9bba0be1641d955415a4
   - name: ago-chat-worker
     newName: ghcr.io/golyakoff/ago-chat-worker
-    newTag: c36d6feef9d4f2f86423f15585711ba5a54f50bb
+    newTag: 4ce0cdefba012881f7ec9bba0be1641d955415a4
   - name: ago-chat-webhooks
     newName: ghcr.io/golyakoff/ago-chat-webhooks
-    newTag: c36d6feef9d4f2f86423f15585711ba5a54f50bb
+    newTag: 4ce0cdefba012881f7ec9bba0be1641d955415a4
   # `8-08`: the migrator moves with the three hosts and never independently - it applies the
   # migrations *that commit* carries, so a migrator on a different SHA from the hosts is the exact
   # mismatch this item exists to prevent. deploy.sh sets all four from one argument for that reason.
   - name: ago-chat-migrator
     newName: ghcr.io/golyakoff/ago-chat-migrator
-    newTag: c36d6feef9d4f2f86423f15585711ba5a54f50bb
+    newTag: 4ce0cdefba012881f7ec9bba0be1641d955415a4
   # `15-07`/`adr/0051`: the four static bundles, which `15-06` could not reach - and the one it did
   # not reach is the one the 2026-08-25 incident happened to. Their four `imagePullPolicy: Never`
   # patches are gone from *-static.yaml for the same reason the three above went.

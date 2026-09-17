@@ -141,21 +141,25 @@ images:
   # own live connection now acks an operator message, fanned out live to the console's own badge. This
   # pin's own move is what actually runs the migrator (`apply-demo.sh`, not plain `deploy.sh`); a
   # backup was taken immediately before this bump.
+  # `25-121`: bumped to the commit that relays a module task's own prompt (the booking flow's service
+  # list, date/time picker, phone form, confirmation) to a visitor's real text channel - Telegram/MAX/
+  # WhatsApp/Avito previously showed nothing at all for `/записаться` past the trigger message. No
+  # migration - plain `deploy.sh`, smoke 45/45.
   - name: ago-chat-api
     newName: ghcr.io/golyakoff/ago-chat-api
-    newTag: f9ab66c6bc65f83036058ad1f69656bc8cd8c1a0
+    newTag: 5c7b749e3c4e6368869f77973aea53e25077f2d5
   - name: ago-chat-worker
     newName: ghcr.io/golyakoff/ago-chat-worker
-    newTag: f9ab66c6bc65f83036058ad1f69656bc8cd8c1a0
+    newTag: 5c7b749e3c4e6368869f77973aea53e25077f2d5
   - name: ago-chat-webhooks
     newName: ghcr.io/golyakoff/ago-chat-webhooks
-    newTag: f9ab66c6bc65f83036058ad1f69656bc8cd8c1a0
+    newTag: 5c7b749e3c4e6368869f77973aea53e25077f2d5
   # `8-08`: the migrator moves with the three hosts and never independently - it applies the
   # migrations *that commit* carries, so a migrator on a different SHA from the hosts is the exact
   # mismatch this item exists to prevent. deploy.sh sets all four from one argument for that reason.
   - name: ago-chat-migrator
     newName: ghcr.io/golyakoff/ago-chat-migrator
-    newTag: f9ab66c6bc65f83036058ad1f69656bc8cd8c1a0
+    newTag: 5c7b749e3c4e6368869f77973aea53e25077f2d5
   # `15-07`/`adr/0051`: the four static bundles, which `15-06` could not reach - and the one it did
   # not reach is the one the 2026-08-25 incident happened to. Their four `imagePullPolicy: Never`
   # patches are gone from *-static.yaml for the same reason the three above went.
@@ -206,9 +210,14 @@ images:
   # operator messages (`Thread.tsx`), sourced from `MessageDto.deliveredAt`/the `MessageDelivered`
   # live push - requires the `ago-chat` pin above (same item) to already be live for the field/event
   # to exist at all.
+  # `25-122`/`25-123`: bumped to the commit covering two live-reported UX defects together - the
+  # link-a-channel picker no longer offers a kind the visitor already has linked and verified
+  # (`ChannelIdentitiesPanel`), and `Tooltip.tsx` gained a vertical clipping fix mirroring `25-111`'s
+  # own horizontal one (a bubble opening downward near the top of a short scrollable container - the
+  # thread's own delivery-scope tooltip - no longer clips the container's bottom edge). No migration.
   - name: ago-console
     newName: ghcr.io/golyakoff/ago-console
-    newTag: 0f06d5b7dd4a46591e3a51cbb389a616637add32
+    newTag: e883ba00640f2d59484533b6b8e1650309336e32
   # All three come from one `ago-widget` commit, and that is the point rather than tidiness: the two
   # demo pages and a real tenant's embed then run byte-identical bundles, which is checkable (three
   # `version.json` files naming one commit) instead of assumed.

@@ -263,3 +263,27 @@ spec:
       ports:
         - protocol: TCP
           port: 9000
+---
+# `25-116`: the Telegram outbound relay (`14-07`/`adr/0070`, `../telegram-relay.yaml`) - reachable only
+# from the two hosts that actually call Telegram's Bot API (`Ago.Chat.Api`'s `getMe` token check,
+# `Ago.Chat.Worker`'s long-polling and reply delivery). No `ipBlock` entries: unlike Postgres/MinIO,
+# nothing on the node itself or in the backup path has any reason to reach this relay directly.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: telegram-relay-ingress
+spec:
+  podSelector:
+    matchLabels:
+      app: telegram-relay
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector:
+            matchExpressions:
+              - key: app
+                operator: In
+                values: [ago-chat-api, ago-chat-worker]
+      ports:
+        - protocol: TCP
+          port: 1080

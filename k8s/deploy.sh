@@ -38,7 +38,16 @@ set -euo pipefail
 NS="${NS:-ago-chat}"
 DOMAIN="${DOMAIN:-reserve-me.ru}"
 REGISTRY="${REGISTRY:-ghcr.io/golyakoff}"
-AGO_ROOT="${AGO_ROOT:-$HOME/ago}"
+# `25-124`: `$HOME` is `/root` under `sudo` (its own default `env_reset`), not `ago`'s real home -
+# this script's own documented invocation is `sudo ./deploy.sh` (`docs/runbooks/redeploy.md`), so
+# trusting `$HOME` unconditionally silently pointed `AGO_ROOT` (and, through it, `CHAT_REPO` below) at
+# `/root/ago`, a path that has never existed on this node. `$SUDO_USER` is the one thing `sudo` itself
+# guarantees names the real invoking user - `getent passwd` reads that user's actual home from the
+# system's own user database rather than assuming `/home/$SUDO_USER` (which happens to be true here,
+# but is not something a shell script should hardcode). Falls back to `$HOME` unchanged for a genuine
+# non-sudo invocation, so nothing here narrows what already worked.
+AGO_HOME="${SUDO_USER:+$(getent passwd "$SUDO_USER" 2>/dev/null | cut -d: -f6)}"
+AGO_ROOT="${AGO_ROOT:-${AGO_HOME:-$HOME}/ago}"
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # Same probe redeploy.sh uses: a `kubectl` on the PATH is not proof it can reach the cluster, since

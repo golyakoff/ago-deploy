@@ -215,9 +215,13 @@ images:
   # (`ChannelIdentitiesPanel`), and `Tooltip.tsx` gained a vertical clipping fix mirroring `25-111`'s
   # own horizontal one (a bubble opening downward near the top of a short scrollable container - the
   # thread's own delivery-scope tooltip - no longer clips the container's bottom edge). No migration.
+  # `25-125`: a revoked module's own row in the owner console no longer offers "Revoke"/"Set quantity" -
+  # both would have either errored on an already-excluded row or silently written a grant nothing reads.
+  # `25-129`: the widget-settings screen gains the contact-capture confirmation field (console half of
+  # a three-repo item - requires the `ago-chat` pin below to already be live for the field to exist).
   - name: ago-console
     newName: ghcr.io/golyakoff/ago-console
-    newTag: e883ba00640f2d59484533b6b8e1650309336e32
+    newTag: 904e1d3c9926c0d2c6e34d10ad258d2b3ae798e3
   # All three come from one `ago-widget` commit, and that is the point rather than tidiness: the two
   # demo pages and a real tenant's embed then run byte-identical bundles, which is checkable (three
   # `version.json` files naming one commit) instead of assumed.
@@ -246,15 +250,20 @@ images:
   # (`23-61`'s own deferred scope). `25-119`: same commit range also carries the widget's own
   # delivered-ack (`VisitorHub.AcknowledgeDeliveredAsync`) - both landed and deployed together.
   # Smoke-tested live before this pin (42/42, `89c7587` reported by all three bundles alike).
+  # `25-126`/`25-127`/`25-128`/`25-130`: a batch of live-reported polish fixes - the booking chip
+  # renamed "Записаться", restyled as a real button, moved above the composer; the emoji-picker trigger
+  # renders a real SVG instead of a literal emoji; the header reads "Напишите нам"; the composer starts
+  # at three lines tall. `25-129` (widget half): `widgetContactCaptureConfirmationText` threaded end to
+  # end, with a new default replacing the old "мы свяжемся с вами" fallback.
   - name: ago-demo-shop1
     newName: ghcr.io/golyakoff/ago-demo-shop1
-    newTag: 89c7587109d046b5492e541394e4cf619e79f6ff
+    newTag: 2cf66ae51b65c0c2b5ecd1046463ad5bd91d6b28
   - name: ago-demo-shop2
     newName: ghcr.io/golyakoff/ago-demo-shop2
-    newTag: 89c7587109d046b5492e541394e4cf619e79f6ff
+    newTag: 2cf66ae51b65c0c2b5ecd1046463ad5bd91d6b28
   - name: ago-widget-assets
     newName: ghcr.io/golyakoff/ago-widget-assets
-    newTag: 89c7587109d046b5492e541394e4cf619e79f6ff
+    newTag: 2cf66ae51b65c0c2b5ecd1046463ad5bd91d6b28
   # `adr/0092`: the copy-me snippet on the public landing page had been handing out
   # `chat.reserve-me.ru/widget.js` - a 404, under a filename that never existed anywhere. Until this
   # is deployed, the page a prospective customer reads still gives them a script tag that does not

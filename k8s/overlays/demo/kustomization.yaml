@@ -202,9 +202,13 @@ images:
   # Requires `ago-chat`'s own `c36d6fe...` pin above (the new `channelEntitlements` field) and this
   # overlay's `BillingOptionEntitlements__channel-*` config (`k8s/base/{api,worker}.yaml`) to already
   # be live - both applied together via `apply-demo.sh` immediately after this pin merges.
+  # `25-119`: bumped to the commit adding the live "Доставлено" badge on a widget conversation's own
+  # operator messages (`Thread.tsx`), sourced from `MessageDto.deliveredAt`/the `MessageDelivered`
+  # live push - requires the `ago-chat` pin above (same item) to already be live for the field/event
+  # to exist at all.
   - name: ago-console
     newName: ghcr.io/golyakoff/ago-console
-    newTag: bd8debd508f247776c8c237a4d8c65ae8e130a98
+    newTag: 0f06d5b7dd4a46591e3a51cbb389a616637add32
   # All three come from one `ago-widget` commit, and that is the point rather than tidiness: the two
   # demo pages and a real tenant's embed then run byte-identical bundles, which is checkable (three
   # `version.json` files naming one commit) instead of assumed.
@@ -229,15 +233,19 @@ images:
   # grant/revoke - the "скрепка" (attach button) now appears the moment an operator toggles the
   # per-conversation grant, instead of only after the visitor reloads. Deployed and smoke-tested live
   # before this pin (43/43, `654e9c0` reported by all three bundles alike).
+  # `25-120`: bumped to the commit replacing the reserved emoji place with a real 40-glyph picker
+  # (`23-61`'s own deferred scope). `25-119`: same commit range also carries the widget's own
+  # delivered-ack (`VisitorHub.AcknowledgeDeliveredAsync`) - both landed and deployed together.
+  # Smoke-tested live before this pin (42/42, `89c7587` reported by all three bundles alike).
   - name: ago-demo-shop1
     newName: ghcr.io/golyakoff/ago-demo-shop1
-    newTag: 654e9c0124d64b98c79905e61de0441044fe1a7f
+    newTag: 89c7587109d046b5492e541394e4cf619e79f6ff
   - name: ago-demo-shop2
     newName: ghcr.io/golyakoff/ago-demo-shop2
-    newTag: 654e9c0124d64b98c79905e61de0441044fe1a7f
+    newTag: 89c7587109d046b5492e541394e4cf619e79f6ff
   - name: ago-widget-assets
     newName: ghcr.io/golyakoff/ago-widget-assets
-    newTag: 654e9c0124d64b98c79905e61de0441044fe1a7f
+    newTag: 89c7587109d046b5492e541394e4cf619e79f6ff
   # `adr/0092`: the copy-me snippet on the public landing page had been handing out
   # `chat.reserve-me.ru/widget.js` - a 404, under a filename that never existed anywhere. Until this
   # is deployed, the page a prospective customer reads still gives them a script tag that does not

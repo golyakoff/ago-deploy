@@ -271,13 +271,13 @@ images:
   # module step's own controls on the contact-capture form - no migration.
   - name: ago-demo-shop1
     newName: ghcr.io/golyakoff/ago-demo-shop1
-    newTag: 75bf2f47be5ef0c7d4078aeb63984ba28eda1eb8
+    newTag: c4867d5ce243d51a979327c2e806563ba1505168
   - name: ago-demo-shop2
     newName: ghcr.io/golyakoff/ago-demo-shop2
-    newTag: 75bf2f47be5ef0c7d4078aeb63984ba28eda1eb8
+    newTag: c4867d5ce243d51a979327c2e806563ba1505168
   - name: ago-widget-assets
     newName: ghcr.io/golyakoff/ago-widget-assets
-    newTag: 75bf2f47be5ef0c7d4078aeb63984ba28eda1eb8
+    newTag: c4867d5ce243d51a979327c2e806563ba1505168
   # The front page rebuilt around a price calculator, and `pricing.html` brought onto the same design
   # system with it (ago-landing#20, deployed 2026-09-18). Both pages read every figure out of
   # `prices.json` through one shared lookup, so the calculator and the price list cannot disagree,

@@ -269,13 +269,13 @@ images:
   # module step's own controls on the contact-capture form - no migration.
   - name: ago-demo-shop1
     newName: ghcr.io/golyakoff/ago-demo-shop1
-    newTag: 03863a16b02fa1fb8b46bc46b49ea8a639220f89
+    newTag: 75bf2f47be5ef0c7d4078aeb63984ba28eda1eb8
   - name: ago-demo-shop2
     newName: ghcr.io/golyakoff/ago-demo-shop2
-    newTag: 03863a16b02fa1fb8b46bc46b49ea8a639220f89
+    newTag: 75bf2f47be5ef0c7d4078aeb63984ba28eda1eb8
   - name: ago-widget-assets
     newName: ghcr.io/golyakoff/ago-widget-assets
-    newTag: 03863a16b02fa1fb8b46bc46b49ea8a639220f89
+    newTag: 75bf2f47be5ef0c7d4078aeb63984ba28eda1eb8
   # `adr/0092`: the copy-me snippet on the public landing page had been handing out
   # `chat.reserve-me.ru/widget.js` - a 404, under a filename that never existed anywhere. Until this
   # is deployed, the page a prospective customer reads still gives them a script tag that does not
@@ -316,13 +316,13 @@ images:
   # `25-132`: three Russian copy strings in ModuleStepFactory - no migration.
   - name: ago-calendar-api
     newName: ghcr.io/golyakoff/ago-calendar-api
-    newTag: 32f392e02c44a4deb5b5747152e9592f25df7dfe
+    newTag: 75221cd9315c4f6cfbcc083b85068bea2172a06d
   - name: ago-calendar-worker
     newName: ghcr.io/golyakoff/ago-calendar-worker
-    newTag: 32f392e02c44a4deb5b5747152e9592f25df7dfe
+    newTag: 75221cd9315c4f6cfbcc083b85068bea2172a06d
   - name: ago-calendar-migrator
     newName: ghcr.io/golyakoff/ago-calendar-migrator
-    newTag: 32f392e02c44a4deb5b5747152e9592f25df7dfe
+    newTag: 75221cd9315c4f6cfbcc083b85068bea2172a06d
 
 patches:
   # `8-07`/ago-root `adr/0058`: this is the one deployment that wants the demo-credential endpoint, so

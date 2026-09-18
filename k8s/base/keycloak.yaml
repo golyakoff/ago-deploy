@@ -134,6 +134,12 @@ spec:
             - name: login-theme
               mountPath: /opt/keycloak/themes/ago/login
               readOnly: true
+            # `25-155` Lane B: the email theme, mounted the identical way the login theme above already
+            # is - `emailTheme: "ago"` in keycloak-realm-import.json is what actually selects it; this
+            # mount just makes the files available under the theme directory Keycloak looks in.
+            - name: email-theme
+              mountPath: /opt/keycloak/themes/ago/email
+              readOnly: true
           resources:
             requests:
               memory: 512Mi
@@ -187,6 +193,24 @@ spec:
                 path: theme.properties
               - key: ago.css
                 path: resources/css/ago.css
+        - name: email-theme
+          configMap:
+            name: keycloak-email-theme
+            items:
+              - key: theme.properties
+                path: theme.properties
+              - key: template.ftl
+                path: html/template.ftl
+              - key: executeActions.ftl
+                path: html/executeActions.ftl
+              - key: password-reset.ftl
+                path: html/password-reset.ftl
+              - key: email-verification.ftl
+                path: html/email-verification.ftl
+              - key: messages_en.properties
+                path: messages/messages_en.properties
+              - key: messages_ru.properties
+                path: messages/messages_ru.properties
 ---
 apiVersion: v1
 kind: Service

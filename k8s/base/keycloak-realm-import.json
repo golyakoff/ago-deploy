@@ -133,5 +133,6 @@
       ]
     }
   ],
-  "loginTheme": "ago"
+  "loginTheme": "ago",
+  "emailTheme": "ago"
 }

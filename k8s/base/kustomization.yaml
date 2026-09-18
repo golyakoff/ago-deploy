@@ -87,6 +87,21 @@ configMapGenerator:
     files:
       - theme.properties=keycloak-theme/theme.properties
       - ago.css=keycloak-theme/ago.css
+  # `25-155` Lane B: the email theme, same mounting shape as the login theme above - a ConfigMap per
+  # theme, one data key per file, then base/keycloak.yaml's own `items:` list on the volume maps each
+  # key back to the path Keycloak actually expects under /opt/keycloak/themes/ago/email/. Six files
+  # here rather than two because an email theme has real FreeMarker templates to override (the shared
+  # html/template.ftl shell, plus one small per-flow html/*.ftl each) and not just a stylesheet - see
+  # keycloak-theme-email/theme.properties for why no FreeMarker template outside html/ is touched.
+  - name: keycloak-email-theme
+    files:
+      - theme.properties=keycloak-theme-email/theme.properties
+      - template.ftl=keycloak-theme-email/html/template.ftl
+      - executeActions.ftl=keycloak-theme-email/html/executeActions.ftl
+      - password-reset.ftl=keycloak-theme-email/html/password-reset.ftl
+      - email-verification.ftl=keycloak-theme-email/html/email-verification.ftl
+      - messages_en.properties=keycloak-theme-email/messages/messages_en.properties
+      - messages_ru.properties=keycloak-theme-email/messages/messages_ru.properties
   - name: prometheus-config
     files:
       - prometheus.yml=prometheus-scrape-config.yml

@@ -207,6 +207,17 @@ services:
       # looks nothing like the cluster's, which is exactly the divergence this item exists to end.
       - ../k8s/base/keycloak-theme/theme.properties:/opt/keycloak/themes/ago/login/theme.properties:ro
       - ../k8s/base/keycloak-theme/ago.css:/opt/keycloak/themes/ago/login/resources/css/ago.css:ro
+      # `25-155` Lane B: the email theme, laid out by hand for the identical reason the login theme
+      # above already is - the realm import now also carries `emailTheme: ago`, and a bind mount is
+      # this loop's only stand-in for kustomize's configMapGenerator `items:` remapping (see
+      # k8s/base/keycloak.yaml's own email-theme volume for the same six files, k8s-side).
+      - ../k8s/base/keycloak-theme-email/theme.properties:/opt/keycloak/themes/ago/email/theme.properties:ro
+      - ../k8s/base/keycloak-theme-email/html/template.ftl:/opt/keycloak/themes/ago/email/html/template.ftl:ro
+      - ../k8s/base/keycloak-theme-email/html/executeActions.ftl:/opt/keycloak/themes/ago/email/html/executeActions.ftl:ro
+      - ../k8s/base/keycloak-theme-email/html/password-reset.ftl:/opt/keycloak/themes/ago/email/html/password-reset.ftl:ro
+      - ../k8s/base/keycloak-theme-email/html/email-verification.ftl:/opt/keycloak/themes/ago/email/html/email-verification.ftl:ro
+      - ../k8s/base/keycloak-theme-email/messages/messages_en.properties:/opt/keycloak/themes/ago/email/messages/messages_en.properties:ro
+      - ../k8s/base/keycloak-theme-email/messages/messages_ru.properties:/opt/keycloak/themes/ago/email/messages/messages_ru.properties:ro
     healthcheck:
       test: ["CMD-SHELL", "exec 3<>/dev/tcp/localhost/9000 && echo -e 'GET /health/ready HTTP/1.1\r\nhost: localhost\r\nConnection: close\r\n\r\n' >&3 && cat <&3 | grep -q 'UP'"]
       interval: 5s

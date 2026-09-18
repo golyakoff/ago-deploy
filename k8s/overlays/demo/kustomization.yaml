@@ -229,9 +229,11 @@ images:
   # both would have either errored on an already-excluded row or silently written a grant nothing reads.
   # `25-129`: the widget-settings screen gains the contact-capture confirmation field (console half of
   # a three-repo item - requires the `ago-chat` pin below to already be live for the field to exist).
+  # `25-150`: the tooltip's positioning override, applied entirely imperatively - fixes the every-
+  # other-open flip-flop.
   - name: ago-console
     newName: ghcr.io/golyakoff/ago-console
-    newTag: 904e1d3c9926c0d2c6e34d10ad258d2b3ae798e3
+    newTag: ea90a8091ec7c7abec75b6636ee98075c48bb28d
   # All three come from one `ago-widget` commit, and that is the point rather than tidiness: the two
   # demo pages and a real tenant's embed then run byte-identical bundles, which is checkable (three
   # `version.json` files naming one commit) instead of assumed.

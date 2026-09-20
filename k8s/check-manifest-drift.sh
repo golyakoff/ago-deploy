@@ -286,10 +286,25 @@ manifest_names="$(awk '
   }
 ' "$rendered" | sort -u)"
 
+# The one confirmed exception, found by running this against the real cluster before landing:
+# `ago-chat-gateway-nginx` (a Deployment and a Service, never an HTTPRoute) is NGINX Gateway Fabric's
+# own auto-provisioned data plane for the `ago-chat-gateway` Gateway object - `kubectl get deployment
+# ago-chat-gateway-nginx -o jsonpath='{.metadata.ownerReferences}'` names that `Gateway` as its owner,
+# `app.kubernetes.io/managed-by: nginx-gateway-nginx` as its label. It is created and owned by the
+# Gateway controller the moment a `Gateway` resource exists, never declared anywhere in this overlay's
+# own YAML - so it can never have a match in `$manifest_names` and would report DRIFT on every single
+# run otherwise, exactly the "generic check nobody can explain" this file's own header already argues
+# against. Named explicitly, not pattern-matched, because it is the one instance found against the
+# real cluster - a second Gateway's own data plane would need its own named exception the same way,
+# not a guessed pattern.
+gateway_managed_names="Deployment/ago-chat-gateway-nginx
+Service/ago-chat-gateway-nginx"
+
 step "Live resources with no match in the rendered overlay"
 
 if ! cluster_names="$(kc get deployment,service,httproute -n "$NS" \
-    -o jsonpath='{range .items[*]}{.kind}/{.metadata.name}{"\n"}{end}' 2>/dev/null | sort -u)"; then
+    -o jsonpath='{range .items[*]}{.kind}/{.metadata.name}{"\n"}{end}' 2>/dev/null \
+    | grep -vFx -f <(printf '%s\n' "$gateway_managed_names") | sort -u)"; then
   echo "   UNKNOWN - could not list Deployments/Services/HTTPRoutes in ${NS}."
   orphan_rc=2
 elif [ -z "$cluster_names" ]; then

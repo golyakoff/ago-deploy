@@ -303,7 +303,7 @@ images:
   # moving on its own commits.
   - name: ago-brandbook
     newName: ghcr.io/golyakoff/ago-brandbook
-    newTag: 605c37d6f5067278b9347b2475945fc933dc13c5
+    newTag: 5053b3560f33558195d8e0c8f10df1807b1be56d
   # `20-20`: AGO Calendar's own four images. The three backend ones move together and never
   # independently, same rule as the ago-chat-* four above and the same reason: `calendar-migrator.yaml`
   # applies the migrations *this* commit's Domain carries, so a migrator on a different SHA from the

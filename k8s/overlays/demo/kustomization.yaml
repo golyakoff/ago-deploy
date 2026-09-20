@@ -312,7 +312,7 @@ images:
   # this Deployment is ever applied for real** - the managing session's own next step, not done here.
   - name: ago-brandbook
     newName: ghcr.io/golyakoff/ago-brandbook
-    newTag: unreleased
+    newTag: 981c9b6fcf34cce99d4ce5464c6469759b9532fe
   # `20-20`: AGO Calendar's own four images. The three backend ones move together and never
   # independently, same rule as the ago-chat-* four above and the same reason: `calendar-migrator.yaml`
   # applies the migrations *this* commit's Domain carries, so a migrator on a different SHA from the

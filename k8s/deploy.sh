@@ -3,7 +3,7 @@
 #
 #   ./deploy.sh <commit-sha>            the three Ago.Chat.* hosts, together
 #   ./deploy.sh calendar <commit-sha>   the two Ago.Calendar.* hosts, together
-#   ./deploy.sh <frontend> <commit-sha> one frontend: console | demo-shop1 | demo-shop2 | landing |
+#   ./deploy.sh <frontend> <commit-sha> one frontend: console | demo-shop1 | landing |
 #   ./deploy.sh --current               print what is running and stop
 #
 # One commit argument for the hosts because all three are built from one repository, and one
@@ -87,11 +87,12 @@ CALENDAR_HOSTS=("ago-calendar-api:api" "ago-calendar-worker:worker")
 # make deploys identifiable, and drifted five commits behind the demo pages without a single check
 # disagreeing.
 #
-# The three widget entries still come from one `ago-widget` commit and must move together. That is
+# The two widget entries still come from one `ago-widget` commit and must move together. That is
 # not enforced here, deliberately - a per-name deploy is the escape hatch for exactly the moments
 # procedure does not fit - it is enforced where a mismatch actually shows: smoke.sh compares the
 # commit a tenant's bundle carries against the demo page's own.
-FRONTENDS=("console:ago-console" "demo-shop1:ago-demo-shop1" "demo-shop2:ago-demo-shop2" "widget-assets:ago-widget-assets" "landing:ago-landing")
+# `25-182`: `demo-shop2` removed - the dead tenant it deployed has no route left in the manifests.
+FRONTENDS=("console:ago-console" "demo-shop1:ago-demo-shop1" "widget-assets:ago-widget-assets" "landing:ago-landing")
 
 # The commit a running pod reports about itself, asked over the API server's own pod proxy. Two
 # shapes, one idea:
@@ -164,7 +165,7 @@ fi
 
 usage() {
   echo "usage: $0 <commit-sha> | $0 calendar <commit-sha> |" >&2
-  echo "       $0 <console|demo-shop1|demo-shop2|landing> <commit-sha> | $0 --current" >&2
+  echo "       $0 <console|demo-shop1|landing> <commit-sha> | $0 --current" >&2
   exit 2
 }
 

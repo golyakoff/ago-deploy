@@ -38,8 +38,8 @@ updates:
       - dependency-name: "ago-chat-webhooks"
       - dependency-name: "ago-chat-migrator"
 
-  # k8s/overlays/demo: alertmanager (third-party) alongside this project's own four frontend
-  # placeholders.
+  # k8s/overlays/demo: alertmanager (third-party) alongside this project's own frontend
+  # placeholders. `25-182`: `ago-demo-shop2` removed - that image no longer exists to ignore.
   - package-ecosystem: "docker"
     directory: "/k8s/overlays/demo"
     schedule:
@@ -50,7 +50,6 @@ updates:
     ignore:
       - dependency-name: "ago-console"
       - dependency-name: "ago-demo-shop1"
-      - dependency-name: "ago-demo-shop2"
       - dependency-name: "ago-landing"
 
   # k8s/overlays/local: mailpit, the local-only mail catcher (docs/runbooks/local-dev.md).

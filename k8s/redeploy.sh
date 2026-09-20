@@ -222,7 +222,7 @@ for img in ago-calendar-api ago-calendar-worker ago-calendar-migrator; do
   printf "   %-18s " "$img"
   docker save "${REGISTRY}/${img}:${CALENDAR_SHA}" | sudo k3s ctr -n k8s.io images import - >/dev/null && echo "imported"
 done
-for entry in "ago-console:$CONSOLE_SHA" "ago-demo-shop1:$WIDGET_SHA" "ago-demo-shop2:$WIDGET_SHA" "ago-landing:$LANDING_SHA"; do
+for entry in "ago-console:$CONSOLE_SHA" "ago-demo-shop1:$WIDGET_SHA" "ago-landing:$LANDING_SHA"; do
   printf "   %-18s " "${entry%%:*}"
   docker save "${REGISTRY}/${entry}" | sudo k3s ctr -n k8s.io images import - >/dev/null && echo "imported"
 done
@@ -373,11 +373,11 @@ step "7. Move the frontends onto their own commits"
 # three already asserted the invariant ("the two demo pages and a real tenant's embed then run
 # byte-identical bundles, which is checkable instead of assumed"), and nothing enforced it; smoke.sh
 # now does, by comparing the two commits rather than trusting this list.
-for entry in "ago-console:$CONSOLE_SHA" "ago-demo-shop1:$WIDGET_SHA" "ago-demo-shop2:$WIDGET_SHA" "ago-widget-assets:$WIDGET_SHA" "ago-landing:$LANDING_SHA"; do
+for entry in "ago-console:$CONSOLE_SHA" "ago-demo-shop1:$WIDGET_SHA" "ago-widget-assets:$WIDGET_SHA" "ago-landing:$LANDING_SHA"; do
   d="${entry%%:*}"
   kc set image "deployment/$d" "${d}=${REGISTRY}/${entry}" -n "$NS"
 done
-for d in ago-console ago-demo-shop1 ago-demo-shop2 ago-widget-assets ago-landing; do
+for d in ago-console ago-demo-shop1 ago-widget-assets ago-landing; do
   kc rollout status "deployment/$d" -n "$NS" --timeout=180s
 done
 
@@ -436,7 +436,7 @@ record_write "$NS" \
   "ago-chat-api=${CHAT_SHA}" "ago-chat-worker=${CHAT_SHA}" "ago-chat-webhooks=${CHAT_SHA}" \
   "ago-chat-migrator=${CHAT_SHA}" \
   "ago-console=${CONSOLE_SHA}" \
-  "ago-demo-shop1=${WIDGET_SHA}" "ago-demo-shop2=${WIDGET_SHA}" "ago-widget-assets=${WIDGET_SHA}" \
+  "ago-demo-shop1=${WIDGET_SHA}" "ago-widget-assets=${WIDGET_SHA}" \
   "ago-landing=${LANDING_SHA}" \
   "ago-calendar-api=${CALENDAR_SHA}" "ago-calendar-worker=${CALENDAR_SHA}" \
   "ago-calendar-migrator=${CALENDAR_SHA}"

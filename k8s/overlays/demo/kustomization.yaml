@@ -14,9 +14,10 @@ resources:
   # 8-02: static-file-serving Deployments/Services for the console bundle, the widget's own public
   # demo pages, and the public marketing page at the apex - demo-overlay-only, see each file's own
   # header comment for why none of these belong in ../../base.
+  # `25-182`: `demo-shop2-static.yaml` removed here - the second demo tenant it deployed had no route
+  # left pointing at it (gateway.yaml, same change) and no link from `ago-landing` reaching it either.
   - console-static.yaml
   - demo-shop1-static.yaml
-  - demo-shop2-static.yaml
   # `adr/0092`: the widget bundle on a public URL, so a tenant has somewhere to load it from at all.
   - widget-assets-static.yaml
   - landing-static.yaml
@@ -182,8 +183,8 @@ images:
   # These four do NOT share a tag with each other or with the hosts, and that is not an oversight:
   # they are built from three repositories that move independently, so one SHA cannot name more than
   # the images out of one of them. `deploy.sh <frontend> <sha>` moves one at a time for the same
-  # reason. ago-demo-shop1 and ago-demo-shop2 do share a tag, because they really are one commit of
-  # ago-widget packaged twice - the difference between them is in the name, never in the tag.
+  # reason. `25-182`: `ago-demo-shop2` is gone from this list - it shared a tag with `ago-demo-shop1`
+  # (they were one commit of ago-widget packaged twice) because that image no longer exists to pin.
   #
   # Real GHCR-published commits as of 2026-08-27's deploy - the transition this comment used to say
   # was still pending (`15-07`'s own publish jobs) has happened. `IfNotPresent` still applies: present
@@ -280,9 +281,6 @@ images:
   # fixed) and the automatic-reply label is removed entirely - no migration.
   - name: ago-demo-shop1
     newName: ghcr.io/golyakoff/ago-demo-shop1
-    newTag: 89510c14dd4534b2c74499daa12a98c1fd4ea188
-  - name: ago-demo-shop2
-    newName: ghcr.io/golyakoff/ago-demo-shop2
     newTag: 89510c14dd4534b2c74499daa12a98c1fd4ea188
   - name: ago-widget-assets
     newName: ghcr.io/golyakoff/ago-widget-assets

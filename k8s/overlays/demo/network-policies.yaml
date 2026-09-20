@@ -46,7 +46,9 @@ spec:
         # reason to have no business reaching Postgres, RabbitMQ or MinIO directly.
         # `25-180`: ago-brandbook added - the same static-nginx shape, the same public exposure, and
         # the same reason to have no business reaching Postgres, RabbitMQ or MinIO directly.
-        values: [ago-console, ago-demo-shop1, ago-demo-shop2, ago-landing, ago-brandbook]
+        # `25-182`: ago-demo-shop2 removed - the dead tenant's own Deployment (this same selector's
+        # pod) no longer exists.
+        values: [ago-console, ago-demo-shop1, ago-landing, ago-brandbook]
   policyTypes: [Egress]
   egress:
     - to:

@@ -1,7 +1,6 @@
 # adr/0026, as amended by adr/0091: the public edge. chat.reserve-me.ru is the operator console and
 # chat-api.reserve-me.ru is the API - console.reserve-me.ru is retired. Also auth.reserve-me.ru,
-# demo-shop1.reserve-me.ru/demo-shop2.reserve-me.ru (`8-02`/`8-05` - a
-# second, independent tenant seeded specifically to demonstrate tenant isolation live), and the
+# demo-shop1.reserve-me.ru, and the
 # domain's own apex, reserve-me.ru (the public marketing page, `ago-landing` - a separate
 # repository, repositories.md's "each deployable surface gets its own repo" pattern; a Gateway API
 # wildcard hostname matches subdomains only, never the bare apex, hence its own listener pair rather
@@ -111,16 +110,6 @@ spec:
       port: 443
       protocol: HTTPS
       hostname: demo-shop1.reserve-me.ru
-      tls:
-        mode: Terminate
-        certificateRefs:
-          - name: ago-public-tls
-    # A second, independent demo tenant (demo-shop2-static.yaml) - same shape as demo-shop1's own
-    # listener above, different hostname/Service/site.
-    - name: https-demo-shop2
-      port: 443
-      protocol: HTTPS
-      hostname: demo-shop2.reserve-me.ru
       tls:
         mode: Terminate
         certificateRefs:
@@ -373,26 +362,6 @@ spec:
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
 metadata:
-  name: ago-demo-shop2
-spec:
-  parentRefs:
-    - name: ago-chat-gateway
-      sectionName: https-demo-shop2
-  hostnames:
-    - demo-shop2.reserve-me.ru
-  rules:
-    # ago-demo-shop2 Service: demo-shop2-static.yaml - same shape as ago-demo-shop1 above.
-    - matches:
-        - path:
-            type: PathPrefix
-            value: /
-      backendRefs:
-        - name: ago-demo-shop2
-          port: 80
----
-apiVersion: gateway.networking.k8s.io/v1
-kind: HTTPRoute
-metadata:
   name: landing
 spec:
   parentRefs:
@@ -503,8 +472,8 @@ spec:
         - name: ago-calendar-api
           port: 80
 ---
-# `25-103`: same shape as `ago-demo-shop1`/`ago-demo-shop2` above - one listener, one route, the
-# whole app behind `PathPrefix /`, no path split needed for a single-purpose backend.
+# `25-103`: same shape as `ago-demo-shop1` above - one listener, one route, the whole app behind
+# `PathPrefix /`, no path split needed for a single-purpose backend.
 #
 # `minio.yaml`'s own Service exposes two named ports on one Service, `api` (9000) and `console`
 # (9001) - this backendRef names `port: 9000` explicitly, by number, so the admin console stays

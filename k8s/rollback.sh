@@ -11,7 +11,7 @@
 #   ./rollback.sh <frontend> <commit-sha> go to a specific published build of that frontend
 #   ./rollback.sh --history              show what there is to go back to, and stop
 #
-# <frontend> is console | demo-shop1 | demo-shop2 | landing | calendar-console (`15-07`, `20-25`). The
+# <frontend> is console | demo-shop1 | landing | calendar-console (`15-07`, `20-25`). The
 # bare `./rollback.sh` still means the three chat hosts and nothing else, deliberately: during an
 # incident the no-argument path must stay the one thing with no decision in it.
 #
@@ -54,7 +54,7 @@ CALENDAR_DEPLOYMENTS=(ago-calendar-api ago-calendar-worker)
 # left for an entry here to operate.
 #
 # `15-07`: name-as-typed:deployment, the same table deploy.sh keeps.
-FRONTENDS=("console:ago-console" "demo-shop1:ago-demo-shop1" "demo-shop2:ago-demo-shop2" "landing:ago-landing")
+FRONTENDS=("console:ago-console" "demo-shop1:ago-demo-shop1" "landing:ago-landing")
 
 frontend_deployment() {
   local entry
@@ -98,7 +98,7 @@ if [ -n "${1:-}" ] && ! printf '%s' "$1" | grep -qE '^[0-9a-f]{40}$'; then
     shift
   else
     echo "unknown component '$1'." >&2
-    echo "usage: $0 [console|demo-shop1|demo-shop2|landing|calendar] [<commit-sha>] | $0 --history" >&2
+    echo "usage: $0 [console|demo-shop1|landing|calendar] [<commit-sha>] | $0 --history" >&2
     exit 2
   fi
 fi

@@ -458,8 +458,10 @@ echo "Frontends"
 # names for the length of the move, so seeing one commit twice is the point rather than
 # redundancy. It is what proves the new listener and route reach the console, rather than
 # reaching a 200 from somewhere.
+# `25-182`: `demo-shop2` is out of this loop, the identical `22-09` reasoning above - a check against
+# a host with no listener/route left to serve it can only ever fail.
 for entry in "office.${DOMAIN}:ago-console" "demo-shop1.${DOMAIN}:ago-demo-shop1" \
-             "demo-shop2.${DOMAIN}:ago-demo-shop2" "${DOMAIN}:ago-landing"; do
+             "${DOMAIN}:ago-landing"; do
   host="${entry%%:*}"; deploy="${entry##*:}"
   commit=$(curl -s --max-time 20 "https://${host}/version.json" \
            | sed -n 's/.*"commit":"\([^"]*\)".*/\1/p' | head -1)
@@ -554,7 +556,7 @@ echo "Edge"
 # `22-10`: `office.` joins while `chat.` is still here. Both answer for the length of the move,
 # and `chat.` leaves this list in the same change that removes it from the route, the listener
 # and the SAN - in that order, with the A-record last of all.
-for h in "office" "chat-api" "auth" "demo-shop1" "demo-shop2" "calendar-api"; do
+for h in "office" "chat-api" "auth" "demo-shop1" "calendar-api"; do
   c=$(code "https://${h}.${DOMAIN}/")
   # auth's root redirects; anything that is not a connection failure means the listener is alive.
   [ "$c" != "000" ] && ok "${h}.${DOMAIN} answers ($c)" || bad "${h}.${DOMAIN} did not answer"

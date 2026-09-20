@@ -62,8 +62,12 @@ spec:
     - chat-api.reserve-me.ru
     - auth.reserve-me.ru
     - demo-shop1.reserve-me.ru
-    - demo-shop2.reserve-me.ru
     - reserve-me.ru
+    # `25-182`: `demo-shop2.reserve-me.ru` removed here - the second demo tenant had no listener/route
+    # left to serve it (gateway.yaml, same change) and `ago-landing` had already stopped linking to it.
+    # Same "removing a name needs no validation" rule `22-09`'s own comment below states: this
+    # re-issues once for the remaining names and none of them is re-challenged. The DNS record itself
+    # is the author's own next step, downstream of this change, not performed by it.
     # `20-20`: AGO Calendar's own two hostnames - a working default this item proposes rather than a
     # settled name (see this item's report). Adding them re-issues the whole certificate once (fresh
     # HTTP-01 challenges for these two only - cert-manager does not replay the five that already

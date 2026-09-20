@@ -1,10 +1,13 @@
 #!/usr/bin/env bash
-# Builds the four static-bundle images the demo overlay's console/demo-shop1/demo-shop2/landing
-# Services need (k8s/overlays/demo/console-static.yaml, demo-shop1-static.yaml,
-# demo-shop2-static.yaml, landing-static.yaml) - ago-console's Vite SPA, two copies of ago-widget's
-# built widget bundle, each paired with a different embedded demo page (`DEMO_PAGE_DIR` build arg -
-# the bundle itself is identical between the two; only the HTML differs), and ago-landing's own
-# single static HTML file (no build step at all).
+# Builds the three static-bundle images the demo overlay's console/demo-shop1/landing Services need
+# (k8s/overlays/demo/console-static.yaml, demo-shop1-static.yaml, landing-static.yaml) - ago-console's
+# Vite SPA, ago-widget's own built widget bundle paired with its embedded demo page (`DEMO_PAGE_DIR`
+# build arg), and ago-landing's own single static HTML file (no build step at all).
+#
+# `25-182`: `ago-demo-shop2` (a second copy of the widget bundle, a different `DEMO_PAGE_DIR`) removed
+# here - the demo tenant it served has no route left in k8s/overlays/demo/ any more. `DEMO_PAGE_DIR`
+# itself stays a build arg on the one remaining `ago-demo-shop1` call: it still names which page that
+# image embeds, the same reasoning `ago-widget`'s own CI comment gives for the identical call there.
 #
 # Deliberately a separate script from build-images.sh, not folded into it (8-02's own backlog
 # item: "a different mechanism from 8-01's backend redeploy, documented separately" -
@@ -95,5 +98,4 @@ for repo in "$CONSOLE_REPO" "$WIDGET_REPO" "$LANDING_REPO"; do warn_if_dirty "$r
 
 build_image ago-console          "$CONSOLE_REPO"
 build_image ago-demo-shop1       "$WIDGET_REPO"
-build_image ago-demo-shop2       "$WIDGET_REPO" --build-arg DEMO_PAGE_DIR=public-demo-2
 build_image ago-landing          "$LANDING_REPO"

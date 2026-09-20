@@ -163,19 +163,19 @@ images:
   # capture form - no migration, plain `deploy.sh`, smoke 46/46.
   - name: ago-chat-api
     newName: ghcr.io/golyakoff/ago-chat-api
-    newTag: 177be3f7ec7d20757f5beb79f1f2ce162c6bb29f
+    newTag: f4867a6613e55b4ff0d87ffe5fcad3eaff1e13c3
   - name: ago-chat-worker
     newName: ghcr.io/golyakoff/ago-chat-worker
-    newTag: 177be3f7ec7d20757f5beb79f1f2ce162c6bb29f
+    newTag: f4867a6613e55b4ff0d87ffe5fcad3eaff1e13c3
   - name: ago-chat-webhooks
     newName: ghcr.io/golyakoff/ago-chat-webhooks
-    newTag: 177be3f7ec7d20757f5beb79f1f2ce162c6bb29f
+    newTag: f4867a6613e55b4ff0d87ffe5fcad3eaff1e13c3
   # `8-08`: the migrator moves with the three hosts and never independently - it applies the
   # migrations *that commit* carries, so a migrator on a different SHA from the hosts is the exact
   # mismatch this item exists to prevent. deploy.sh sets all four from one argument for that reason.
   - name: ago-chat-migrator
     newName: ghcr.io/golyakoff/ago-chat-migrator
-    newTag: 177be3f7ec7d20757f5beb79f1f2ce162c6bb29f
+    newTag: f4867a6613e55b4ff0d87ffe5fcad3eaff1e13c3
   # `15-07`/`adr/0051`: the four static bundles, which `15-06` could not reach - and the one it did
   # not reach is the one the 2026-08-25 incident happened to. Their four `imagePullPolicy: Never`
   # patches are gone from *-static.yaml for the same reason the three above went.
@@ -239,7 +239,7 @@ images:
   # other-open flip-flop.
   - name: ago-console
     newName: ghcr.io/golyakoff/ago-console
-    newTag: 2063b7cbdb5e24860fed07f29ebeed1a718e310a
+    newTag: 076f3ae5cbc3f2b7154c91ba5459f8f87605acfc
   # All three come from one `ago-widget` commit, and that is the point rather than tidiness: the two
   # demo pages and a real tenant's embed then run byte-identical bundles, which is checkable (three
   # `version.json` files naming one commit) instead of assumed.
@@ -281,10 +281,10 @@ images:
   # fixed) and the automatic-reply label is removed entirely - no migration.
   - name: ago-demo-shop1
     newName: ghcr.io/golyakoff/ago-demo-shop1
-    newTag: 89510c14dd4534b2c74499daa12a98c1fd4ea188
+    newTag: 25bc399795aa728e23a18abc9245f7bc226627db
   - name: ago-widget-assets
     newName: ghcr.io/golyakoff/ago-widget-assets
-    newTag: 89510c14dd4534b2c74499daa12a98c1fd4ea188
+    newTag: 25bc399795aa728e23a18abc9245f7bc226627db
   # The front page rebuilt around a price calculator, and `pricing.html` brought onto the same design
   # system with it (ago-landing#20, deployed 2026-09-18). Both pages read every figure out of
   # `prices.json` through one shared lookup, so the calculator and the price list cannot disagree,
@@ -295,7 +295,7 @@ images:
   # so that fix is superseded rather than dropped.
   - name: ago-landing
     newName: ghcr.io/golyakoff/ago-landing
-    newTag: 88170a4400cbb1f1dba6758770a19b7d30814df4
+    newTag: 21af60f4d13291c98d3f1e512e61a9ab33ba96e7
   # `25-180`/`25-183`: the brand-identity reference page, same "does not share a tag with the other
   # three static bundles" reasoning as the comment above - `ago-brandbook` is its own repository,
   # moving on its own commits.

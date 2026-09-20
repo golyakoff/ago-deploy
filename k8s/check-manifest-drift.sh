@@ -44,12 +44,24 @@
 #     running `kubectl diff -k` directly). Left out of the comparison entirely, the same reasoning
 #     `apply-demo.sh`'s own rollback guard used to leave Jobs out of its image comparison (found by
 #     running it, not by reasoning about it, per that script's own header).
-#   - **Everything that is not a Deployment or a NetworkPolicy** - ConfigMaps, Secrets, Services,
-#     Certificates, the namespace itself. Not because they cannot drift, but because this item's own
-#     incident and its own Done-when name "a manifest change that a `kubectl set image` roll would not
-#     deliver" - env, probes, spec, NetworkPolicy - and widening the comparison without a second
-#     incident to justify it is exactly the "generic check nobody can explain" `smoke.sh`'s own header
-#     argues against repeating.
+#   - **Everything that is not a Deployment or a NetworkPolicy**, for *content* - ConfigMaps, Secrets,
+#     Services, HTTPRoutes, Certificates, the namespace itself. Not because they cannot drift, but
+#     because this item's own incident and its own Done-when name "a manifest change that a
+#     `kubectl set image` roll would not deliver" - env, probes, spec, NetworkPolicy - and widening the
+#     comparison without a second incident to justify it is exactly the "generic check nobody can
+#     explain" `smoke.sh`'s own header argues against repeating. `25-188` below adds Services and
+#     HTTPRoutes back in, but only for *existence*, not content - a narrower question with its own
+#     incident to justify it.
+#
+# WHAT ELSE THIS COMPARES (`25-188`). Existence, not content, and only for Deployments/Services/
+# HTTPRoutes: every one of those three kinds actually running in the namespace, against the same
+# kinds in the rendered overlay - flagging a name that runs live but is not in the manifest any more.
+# `apply -k` (no `--prune`) only ever adds or updates what the manifest currently lists; it never
+# deletes what used to be listed and is not any more. `25-182` removed `ago-demo-shop2` from this
+# overlay and its own `Deployment`/`Service`/`HTTPRoute` all kept running regardless, found only
+# because that item's own Done-when asked for a live check by hand - this is the check that would have
+# said so instead. See the comment directly above `manifest_names` below for why `--prune` itself was
+# not the fix chosen.
 #
 # WHAT A NONZERO EXIT MEANS, AND WHAT IT DOES NOT (`15-24`). The banner is the primary signal either
 # way - read it. But the exit code now tells the same story, for a standalone caller or a human who
@@ -234,7 +246,72 @@ case "$rc" in
     ;;
 esac
 
-# `23-90`: a second, independent comparison - reading B ("the next run") for the gap the tag
+# `25-188`: a second, independent comparison - existence, not content. `apply-demo.sh` (and a bare
+# `kubectl apply -k`) never carries `--prune`, so a resource dropped from the overlay - a static-site
+# file deleted, an `HTTPRoute` block removed, two Deployments folded into one - keeps running and
+# keeps being routed to until somebody deletes it by hand. `25-182` did exactly that to
+# `ago-demo-shop2` and its own `Deployment`/`Service`/`HTTPRoute` all outlived the manifest edit,
+# found only because that item's own Done-when asked for a live check. This is the "manifest and
+# cluster must agree" posture this file's own header already states for image tags (`WHAT THIS
+# COMPARES`, above), extended from *version* to *existence*.
+#
+# **`Deployment`/`Service`/`HTTPRoute` only, not every kind `apply -k` manages.** These three are the
+# kinds a resource orphaned this way stays live and reachable through - a stale `Deployment` keeps
+# serving traffic, a stale `Service` keeps a ClusterIP routing to it, a stale `HTTPRoute` keeps sending
+# public traffic there - which is exactly the `25-182` incident's own shape. `ConfigMap`/`Secret`
+# names churn on their own content-hash suffix by kustomize's own design (`configMapGenerator`'s
+# comment elsewhere in this repository) and an old hash left behind is expected garbage, not the
+# silent-orphan failure this item is about; widening past these three kinds without a second incident
+# naming one is the same restraint this file's header already argues for the Deployment/NetworkPolicy
+# diff above.
+#
+# **Considered and not built: `kubectl apply -k --prune`.** Kustomize's own prune needs a label
+# selector scoping exactly what it may delete, and `overlays/demo`'s own resources carry no common
+# label today - no `commonLabels`/`labels:` transformer in `kustomization.yaml`, and every static
+# Deployment/Service pair here (e.g. `demo-shop1-static.yaml`) sets only its own per-resource `app:`
+# label, which differs by name and cannot double as a "these are mine" selector. Introducing one now
+# would mean adding a label kustomize's `labels:` transformer also writes into `matchLabels`/selector
+# fields - and a Deployment's `spec.selector.matchLabels` is immutable, so that same edit could refuse
+# to apply against a live Deployment that predates it. Proving that either way needs a real cluster,
+# which this item does not have (its own Done-when says so); reading the overlay's own manifests
+# locally is what found the missing label in the first place. Existence-checking here, against the
+# same rendered overlay this whole script already trusts, needed no assumption a real cluster would
+# have to confirm.
+manifest_names="$(awk '
+  BEGIN { kind = "" }
+  /^kind: / { kind = $2 }
+  /^  name: / && kind != "" {
+    if (kind == "Deployment" || kind == "Service" || kind == "HTTPRoute") print kind "/" $2
+    kind = ""
+  }
+' "$rendered" | sort -u)"
+
+step "Live resources with no match in the rendered overlay"
+
+if ! cluster_names="$(kc get deployment,service,httproute -n "$NS" \
+    -o jsonpath='{range .items[*]}{.kind}/{.metadata.name}{"\n"}{end}' 2>/dev/null | sort -u)"; then
+  echo "   UNKNOWN - could not list Deployments/Services/HTTPRoutes in ${NS}."
+  orphan_rc=2
+elif [ -z "$cluster_names" ]; then
+  echo "   UNKNOWN - the cluster reported no Deployment, Service or HTTPRoute at all in ${NS}, which"
+  echo "   this overlay always defines several of - treating an empty list as a match would hide a"
+  echo "   cluster this check could not actually reach."
+  orphan_rc=2
+else
+  orphans="$(comm -23 <(printf '%s\n' "$cluster_names") <(printf '%s\n' "$manifest_names"))"
+  if [ -n "$orphans" ]; then
+    echo "   DRIFT - these are running in ${NS} but the rendered overlay no longer defines them:" >&2
+    printf '%s\n' "$orphans" | sed 's/^/     /' >&2
+    echo "   apply -k never deletes a resource removed from the manifest (no --prune) - see" >&2
+    echo "   docs/runbooks/redeploy.md's own removal procedure for how to take these down by hand." >&2
+    orphan_rc=1
+  else
+    echo "   every Deployment/Service/HTTPRoute running in ${NS} is still in the rendered overlay."
+    orphan_rc=0
+  fi
+fi
+
+# `23-90`: a third, independent comparison - reading B ("the next run") for the gap the tag
 # normalisation above deliberately cannot see (this file's own header, "WHAT IT DELIBERATELY
 # IGNORES"). Run every time this script runs, not only from deploy.sh/redeploy.sh's own tail call, so
 # a standalone `./check-manifest-drift.sh` - not tied to any deploy - catches an unrecorded gap too,
@@ -252,12 +329,14 @@ record_rc=$?
 
 # Combine into one exit code rather than inventing a fourth PASS/DRIFT/UNKNOWN state (`15-24`'s
 # convention, which this item's own Done-when explicitly says to keep). DRIFT outranks UNKNOWN in the
-# combination, deliberately: DRIFT from either sub-check is a confirmed, actionable gap, while UNKNOWN
+# combination, deliberately: DRIFT from any sub-check is a confirmed, actionable gap, while UNKNOWN
 # only means one sub-check could not be evaluated - a real, specific problem should never be hidden by
-# an unrelated "cannot tell" from the other comparison.
-if [ "$rc" -eq 1 ] || [ "$record_rc" -eq 1 ]; then
+# an unrelated "cannot tell" from another comparison. `25-188` added `orphan_rc` as a third sub-check
+# alongside the field diff (`rc`) and the deploy record (`record_rc`); it folds into the same two-value
+# combination rather than a fourth state, for the identical reason `record_rc` did.
+if [ "$rc" -eq 1 ] || [ "$record_rc" -eq 1 ] || [ "$orphan_rc" -eq 1 ]; then
   rc=1
-elif [ "$rc" -eq 2 ] || [ "$record_rc" -eq 2 ]; then
+elif [ "$rc" -eq 2 ] || [ "$record_rc" -eq 2 ] || [ "$orphan_rc" -eq 2 ]; then
   rc=2
 else
   rc=0

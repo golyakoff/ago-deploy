@@ -169,6 +169,25 @@ spec:
         mode: Terminate
         certificateRefs:
           - name: ago-public-tls
+    # `25-180`: the public brand-identity reference page (ago-brandbook, a separate repository -
+    # repositories.md's "each deployable surface gets its own repo" pattern), on its own subdomain
+    # rather than the apex - unlike ago-landing this is not the platform's front door, it is a
+    # reference page for whoever is building on top of the identity, so it earns a functional name
+    # rather than a claim on the bare domain. Registered by the author at reg.ru, 2026-09-20.
+    #
+    # **The DNS record must resolve before this listener is exercised for real** - same HTTP-01 gate
+    # every other name in this file and in tls.yaml already states: cert-manager's own solver fetches
+    # over the name itself, and this listener's own TLS termination is useless without a certificate
+    # that actually validated. Confirming that resolution and applying this file are the managing
+    # session's own next step, not done by this change.
+    - name: https-brandbook
+      port: 443
+      protocol: HTTPS
+      hostname: brandbook.reserve-me.ru
+      tls:
+        mode: Terminate
+        certificateRefs:
+          - name: ago-public-tls
 ---
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
@@ -390,6 +409,27 @@ spec:
             value: /
       backendRefs:
         - name: ago-landing
+          port: 80
+---
+# `25-180`: the brand-identity reference page - ago-brandbook Service (brandbook-static.yaml), same
+# whole-app-not-a-prefix shape as every other single-static-site route in this overlay.
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: brandbook
+spec:
+  parentRefs:
+    - name: ago-chat-gateway
+      sectionName: https-brandbook
+  hostnames:
+    - brandbook.reserve-me.ru
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+      backendRefs:
+        - name: ago-brandbook
           port: 80
 ---
 # `20-20`: AGO Calendar's own REST API. No `/hubs` prefix - this host maps no SignalR hub at all

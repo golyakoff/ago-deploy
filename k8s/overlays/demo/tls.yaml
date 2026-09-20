@@ -99,3 +99,13 @@ spec:
     # it. Applying this repository's config to the real cluster, and creating/confirming that DNS
     # record first, is the managing session's own next step - not done by this change.
     - files.reserve-me.ru
+    # `25-180`: the public brand-identity reference page, registered by the author at reg.ru,
+    # 2026-09-20 - DNS propagation was pending at filing time. **This name is written here but its
+    # resolution is NOT confirmed by this change** - the same THE-A-RECORD-MUST-EXIST-AND-RESOLVE gate
+    # every addition above this line states applies identically: issuance is HTTP-01, Let's Encrypt
+    # fetches over the name itself, and one failed authorization fails the whole certificate, taking
+    # every other working hostname down with it. Confirming `brandbook.reserve-me.ru` actually
+    # resolves (`dig brandbook.reserve-me.ru` or equivalent, from the node) before this file is
+    # applied for real is the managing session's own next step - not performed by this change, and not
+    # something a worktree with no cluster access could verify in the first place.
+    - brandbook.reserve-me.ru

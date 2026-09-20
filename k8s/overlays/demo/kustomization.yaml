@@ -298,21 +298,12 @@ images:
   - name: ago-landing
     newName: ghcr.io/golyakoff/ago-landing
     newTag: 88170a4400cbb1f1dba6758770a19b7d30814df4
-  # `25-180`: the brand-identity reference page, same "does not share a tag with the other three
-  # static bundles" reasoning as the comment above - `ago-brandbook` is its own repository, moving on
-  # its own commits. Unlike the four above when *they* were first added here, there is no commit to
-  # point at yet that was ever actually built into an image: `ago-brandbook`'s `main` is still the
-  # placeholder README this item's own worktree branched from, and its CI workflow (this item's own
-  # Part 1) has never run on `main` to publish anything to GHCR. `newTag: unreleased` is deliberately
-  # not a real commit SHA - `ghcr.io/golyakoff/ago-brandbook:unreleased` does not exist, so an
-  # `apply -k` against this value fails to pull rather than silently deploying nothing or stopping on
-  # a stale image, which is the loud failure this placeholder is for. **Set this to the real 40-char
-  # commit SHA `ago-brandbook`'s own CI publishes on its first merge to `main`, per this repository's
-  # own "the committed record must match what's running" rule (`docs/runbooks/redeploy.md`), before
-  # this Deployment is ever applied for real** - the managing session's own next step, not done here.
+  # `25-180`/`25-183`: the brand-identity reference page, same "does not share a tag with the other
+  # three static bundles" reasoning as the comment above - `ago-brandbook` is its own repository,
+  # moving on its own commits.
   - name: ago-brandbook
     newName: ghcr.io/golyakoff/ago-brandbook
-    newTag: 981c9b6fcf34cce99d4ce5464c6469759b9532fe
+    newTag: 605c37d6f5067278b9347b2475945fc933dc13c5
   # `20-20`: AGO Calendar's own four images. The three backend ones move together and never
   # independently, same rule as the ago-chat-* four above and the same reason: `calendar-migrator.yaml`
   # applies the migrations *this* commit's Domain carries, so a migrator on a different SHA from the

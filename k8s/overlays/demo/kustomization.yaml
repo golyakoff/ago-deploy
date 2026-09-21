@@ -281,10 +281,10 @@ images:
   # fixed) and the automatic-reply label is removed entirely - no migration.
   - name: ago-demo-shop1
     newName: ghcr.io/golyakoff/ago-demo-shop1
-    newTag: c745154e5ebb84e3a5f785456307d4cde16bc90b
+    newTag: 923126f04c3c095cea4860209c1206299c253edd
   - name: ago-widget-assets
     newName: ghcr.io/golyakoff/ago-widget-assets
-    newTag: c745154e5ebb84e3a5f785456307d4cde16bc90b
+    newTag: 923126f04c3c095cea4860209c1206299c253edd
   # The front page rebuilt around a price calculator, and `pricing.html` brought onto the same design
   # system with it (ago-landing#20, deployed 2026-09-18). Both pages read every figure out of
   # `prices.json` through one shared lookup, so the calculator and the price list cannot disagree,

@@ -279,12 +279,16 @@ images:
   # demo copy resolving against the page's own locale instead of a hardcoded English literal.
   # `25-154`: a choice_list/date_time_picker step's own prompt text now renders (a 25-133 regression,
   # fixed) and the automatic-reply label is removed entirely - no migration.
+  # `25-202`..`25-206`: the touch routing sheet's own row width fix, the below-launcher hover-region
+  # gap fix, AboveComposer retired as an inside-panel card in favour of a hover-revealed banner above
+  # the toggle, and that banner's row text/dividers brought in line with the touch sheet's own look -
+  # no migration.
   - name: ago-demo-shop1
     newName: ghcr.io/golyakoff/ago-demo-shop1
-    newTag: 3b99549bcb3867001dbfe162ac2c1133659aebe5
+    newTag: 72af3a7dcaad22893f654c5a37712549de0bcc17
   - name: ago-widget-assets
     newName: ghcr.io/golyakoff/ago-widget-assets
-    newTag: 3b99549bcb3867001dbfe162ac2c1133659aebe5
+    newTag: 72af3a7dcaad22893f654c5a37712549de0bcc17
   # The front page rebuilt around a price calculator, and `pricing.html` brought onto the same design
   # system with it (ago-landing#20, deployed 2026-09-18). Both pages read every figure out of
   # `prices.json` through one shared lookup, so the calculator and the price list cannot disagree,

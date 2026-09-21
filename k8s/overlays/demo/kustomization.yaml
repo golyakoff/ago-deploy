@@ -237,9 +237,13 @@ images:
   # a three-repo item - requires the `ago-chat` pin below to already be live for the field to exist).
   # `25-150`: the tooltip's positioning override, applied entirely imperatively - fixes the every-
   # other-open flip-flop.
+  # `25-207`: the visitor avatar becomes a badge (creature large and centred, food a small badge with
+  # no background circle) with a localized fallback name ("Сова · Клубника") instead of a bare emoji
+  # pair and hex code. `25-209`: PhoneInput's own RU flag/+7 prefix hides the moment a value leaves
+  # the plain-Russian shape, so it never asserts a country the typed value contradicts - no migration.
   - name: ago-console
     newName: ghcr.io/golyakoff/ago-console
-    newTag: 076f3ae5cbc3f2b7154c91ba5459f8f87605acfc
+    newTag: 5f79a7a5b73a3a3f56c1b414f53b046774adfcea
   # All three come from one `ago-widget` commit, and that is the point rather than tidiness: the two
   # demo pages and a real tenant's embed then run byte-identical bundles, which is checkable (three
   # `version.json` files naming one commit) instead of assumed.
@@ -283,12 +287,15 @@ images:
   # gap fix, AboveComposer retired as an inside-panel card in favour of a hover-revealed banner above
   # the toggle, and that banner's row text/dividers brought in line with the touch sheet's own look -
   # no migration.
+  # `25-209`: the contact-capture phone field's own RU flag/+7 prefix used to sit beside a value that
+  # already repeated +7 inside itself - the mask now emits only the subscriber-number shape, and the
+  # prefix hides outright once its own escape hatch for a non-Russian number engages.
   - name: ago-demo-shop1
     newName: ghcr.io/golyakoff/ago-demo-shop1
-    newTag: 72af3a7dcaad22893f654c5a37712549de0bcc17
+    newTag: fae396944b8f0a43e1e50ebb330a82a925d621f2
   - name: ago-widget-assets
     newName: ghcr.io/golyakoff/ago-widget-assets
-    newTag: 72af3a7dcaad22893f654c5a37712549de0bcc17
+    newTag: fae396944b8f0a43e1e50ebb330a82a925d621f2
   # The front page rebuilt around a price calculator, and `pricing.html` brought onto the same design
   # system with it (ago-landing#20, deployed 2026-09-18). Both pages read every figure out of
   # `prices.json` through one shared lookup, so the calculator and the price list cannot disagree,

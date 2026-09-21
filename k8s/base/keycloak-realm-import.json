@@ -68,6 +68,36 @@
       ]
     },
     {
+      "clientId": "ago-android",
+      "name": "AGO Android app (26-11)",
+      "description": "Native Android client (26-12) for the Authorization Code + PKCE flow. Public client, no secret. Redirect URI is a custom scheme, not an HTTPS App Link - see docs/backlog/26-11 and docs/runbooks/realm-operations.md for why.",
+      "enabled": true,
+      "publicClient": true,
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "protocol": "openid-connect",
+      "redirectUris": [
+        "ago-android://callback"
+      ],
+      "attributes": {
+        "pkce.code.challenge.method": "S256"
+      },
+      "protocolMappers": [
+        {
+          "name": "ago-android-audience",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "config": {
+            "included.client.audience": "ago-console",
+            "id.token.claim": "false",
+            "access.token.claim": "true"
+          }
+        }
+      ]
+    },
+    {
       "clientId": "ago-demo-provisioner",
       "name": "AGO demo tenant provisioner (8-07)",
       "description": "Service account for Ago.Chat.Api/Worker to create and delete minted demo users. Holds realm-management:manage-users on this realm only - see ago-root/docs/adr/0058. Secret comes from infra-credentials, never this file.",

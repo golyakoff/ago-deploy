@@ -173,21 +173,25 @@ images:
   # long-documented flake) - the identical commit had already passed that same suite in full at merge
   # time, which a real regression could not do twice differently on unchanged code; read as another
   # recurrence of the known flake, not a reason to hold this pin.
+  # `25-221`/`26-29`, 2026-09-22: a conversation starts `Pending`, not `Waiting` - only a real visitor
+  # message graduates it, so opening the widget no longer routes an empty conversation to an operator.
+  # The operator queue row also carries the last message's own preview text and timestamp now (one new
+  # batched, site-scoped read-store query, no new index, no migration for either change).
   - name: ago-chat-api
     newName: ghcr.io/golyakoff/ago-chat-api
-    newTag: 0d5368d59541f19ead0edbf4486da9f23c8f595e
+    newTag: bc0996dcef7ae4507df2296378ce005bd22f02b6
   - name: ago-chat-worker
     newName: ghcr.io/golyakoff/ago-chat-worker
-    newTag: 0d5368d59541f19ead0edbf4486da9f23c8f595e
+    newTag: bc0996dcef7ae4507df2296378ce005bd22f02b6
   - name: ago-chat-webhooks
     newName: ghcr.io/golyakoff/ago-chat-webhooks
-    newTag: 0d5368d59541f19ead0edbf4486da9f23c8f595e
+    newTag: bc0996dcef7ae4507df2296378ce005bd22f02b6
   # `8-08`: the migrator moves with the three hosts and never independently - it applies the
   # migrations *that commit* carries, so a migrator on a different SHA from the hosts is the exact
   # mismatch this item exists to prevent. deploy.sh sets all four from one argument for that reason.
   - name: ago-chat-migrator
     newName: ghcr.io/golyakoff/ago-chat-migrator
-    newTag: 0d5368d59541f19ead0edbf4486da9f23c8f595e
+    newTag: bc0996dcef7ae4507df2296378ce005bd22f02b6
   # `15-07`/`adr/0051`: the four static bundles, which `15-06` could not reach - and the one it did
   # not reach is the one the 2026-08-25 incident happened to. Their four `imagePullPolicy: Never`
   # patches are gone from *-static.yaml for the same reason the three above went.
@@ -258,9 +262,14 @@ images:
   # `25-220`, 2026-09-22: the panel-title field's own placeholder now reads "Напишите нам..." -
   # kept in sync with `ago-widget`'s identical default below, not a console-only wording change.
   # No migration.
+  # `26-31`/`25-225`/`25-168`, 2026-09-22: the queue rows no longer show the raw eight-character
+  # visitor code (a real human label already exists for every visitor since `25-207`); the three
+  # unfiltered conversation-state switches gain a `Pending` case and a runtime default so `25-221`'s
+  # new state doesn't render blank; a real gradient-"A" favicon (the console's own in-app header glyph
+  # stays flat, deliberately - a named divergence, not an oversight). No migration.
   - name: ago-console
     newName: ghcr.io/golyakoff/ago-console
-    newTag: 9f04d55ba1a83271292ef7474c06b467bc10af69
+    newTag: 6ee24369833ee8660696765f21410ec54e927982
   # All three come from one `ago-widget` commit, and that is the point rather than tidiness: the two
   # demo pages and a real tenant's embed then run byte-identical bundles, which is checkable (three
   # `version.json` files naming one commit) instead of assumed.
@@ -318,12 +327,19 @@ images:
   # above for its own half); and the chat panel, that same banner, and the channel-launcher's round
   # icons now play a real entrance animation on reveal (slide-up / staggered "bubble-in") instead of
   # merely appearing, rehearsed live against this exact geometry before implementing. No migration.
+  # `25-223`/`25-224`, 2026-09-22: the channel-launcher's bubble-in stagger now plays nearest-to-
+  # farthest correctly in both widget positions (only `.ago-position-left` was actually backwards -
+  # a live reproduction found the default position's own geometry was already right, contradicting
+  # the original report's "both positions wrong" reading); "Раскрывать виджет автоматически" now
+  # reveals the configured channel-switcher instead of opening the chat panel, via a new, separate
+  # `autoRevealed` flag (falls back to the old panel-opening behaviour for a site with no
+  # channel-switcher configured). No migration.
   - name: ago-demo-shop1
     newName: ghcr.io/golyakoff/ago-demo-shop1
-    newTag: 80f08be9c6607eecffa34abe392c87685fd8674a
+    newTag: 223b35f31ae7cade00bf1679239d6bfd28a7e190
   - name: ago-widget-assets
     newName: ghcr.io/golyakoff/ago-widget-assets
-    newTag: 80f08be9c6607eecffa34abe392c87685fd8674a
+    newTag: 223b35f31ae7cade00bf1679239d6bfd28a7e190
   # The front page rebuilt around a price calculator, and `pricing.html` brought onto the same design
   # system with it (ago-landing#20, deployed 2026-09-18). Both pages read every figure out of
   # `prices.json` through one shared lookup, so the calculator and the price list cannot disagree,
@@ -332,9 +348,11 @@ images:
   # The copy-me `<script>` snippet the previous pin existed to fix (`adr/0092`) is gone from the page
   # entirely - installation is now one line in the widget section rather than a section of its own -
   # so that fix is superseded rather than dropped.
+  # `25-168`, 2026-09-22: a real gradient-"A" favicon (the brandbook's own colours), where the tab
+  # icon used to be the browser's generic fallback. No migration.
   - name: ago-landing
     newName: ghcr.io/golyakoff/ago-landing
-    newTag: 21af60f4d13291c98d3f1e512e61a9ab33ba96e7
+    newTag: 3882e880183bb764ef6b24eccd15b759a10db866
   # `25-180`/`25-183`: the brand-identity reference page, same "does not share a tag with the other
   # three static bundles" reasoning as the comment above - `ago-brandbook` is its own repository,
   # moving on its own commits.

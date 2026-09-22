@@ -161,21 +161,33 @@ images:
   # regardless of code) - no migration.
   # `25-138`: a server-side name+phone gate for a text-channel visitor with no widget-equivalent
   # capture form - no migration, plain `deploy.sh`, smoke 46/46.
+  # `26-03`/`26-04`/`26-05`/`25-210`: the Android client's own device-registration table
+  # (`Stage26AddOperatorDevices`, additive `CreateTable`), the RuStore Push adapter
+  # (`Ago.Chat.Infrastructure.RuStore`, no migration of its own - reads `Push:RuStore:*` from
+  # `25-216`'s manifest wiring below), the push fan-out consumers (`NotifyOperatorDevicesHandler`,
+  # `Ago.Chat.Worker`-only, no migration), and the widget panel-title tenant override
+  # (`Stage25AddSiteWidgetPanelTitle`, additive `AddColumn`). Two real migrations, both additive -
+  # this pin's own move is what runs the migrator (`apply-demo.sh`, not plain `deploy.sh`); a backup
+  # was taken immediately before this bump. **A later, out-of-band CI re-run on this exact commit**
+  # failed one integration test (`WidgetActivityFlusherServiceTests`, `23-40`/`25-112`'s own
+  # long-documented flake) - the identical commit had already passed that same suite in full at merge
+  # time, which a real regression could not do twice differently on unchanged code; read as another
+  # recurrence of the known flake, not a reason to hold this pin.
   - name: ago-chat-api
     newName: ghcr.io/golyakoff/ago-chat-api
-    newTag: 2ba026374876aa3aa14b42528b3d4bca903c5a97
+    newTag: 0d5368d59541f19ead0edbf4486da9f23c8f595e
   - name: ago-chat-worker
     newName: ghcr.io/golyakoff/ago-chat-worker
-    newTag: 2ba026374876aa3aa14b42528b3d4bca903c5a97
+    newTag: 0d5368d59541f19ead0edbf4486da9f23c8f595e
   - name: ago-chat-webhooks
     newName: ghcr.io/golyakoff/ago-chat-webhooks
-    newTag: 2ba026374876aa3aa14b42528b3d4bca903c5a97
+    newTag: 0d5368d59541f19ead0edbf4486da9f23c8f595e
   # `8-08`: the migrator moves with the three hosts and never independently - it applies the
   # migrations *that commit* carries, so a migrator on a different SHA from the hosts is the exact
   # mismatch this item exists to prevent. deploy.sh sets all four from one argument for that reason.
   - name: ago-chat-migrator
     newName: ghcr.io/golyakoff/ago-chat-migrator
-    newTag: 2ba026374876aa3aa14b42528b3d4bca903c5a97
+    newTag: 0d5368d59541f19ead0edbf4486da9f23c8f595e
   # `15-07`/`adr/0051`: the four static bundles, which `15-06` could not reach - and the one it did
   # not reach is the one the 2026-08-25 incident happened to. Their four `imagePullPolicy: Never`
   # patches are gone from *-static.yaml for the same reason the three above went.
@@ -241,9 +253,11 @@ images:
   # no background circle) with a localized fallback name ("Сова · Клубника") instead of a bare emoji
   # pair and hex code. `25-209`: PhoneInput's own RU flag/+7 prefix hides the moment a value leaves
   # the plain-Russian shape, so it never asserts a country the typed value contradicts - no migration.
+  # `25-210`: a panel-title field on the widget-config screen, for the same tenant-scoped override
+  # `Stage25AddSiteWidgetPanelTitle` (see `ago-chat-api`'s own pin above) adds server-side.
   - name: ago-console
     newName: ghcr.io/golyakoff/ago-console
-    newTag: 5f79a7a5b73a3a3f56c1b414f53b046774adfcea
+    newTag: 2a9bbfdb9f353a1acb75b93ef687a99b72c20e7e
   # All three come from one `ago-widget` commit, and that is the point rather than tidiness: the two
   # demo pages and a real tenant's embed then run byte-identical bundles, which is checkable (three
   # `version.json` files naming one commit) instead of assumed.
@@ -290,12 +304,17 @@ images:
   # `25-209`: the contact-capture phone field's own RU flag/+7 prefix used to sit beside a value that
   # already repeated +7 inside itself - the mask now emits only the subscriber-number shape, and the
   # prefix hides outright once its own escape hatch for a non-Russian number engages.
+  # `25-210`/`25-211`: the panel-title config threads through to a new default greeting
+  # ("Чем мы могли бы вам помочь?", tenant-overridable via the same `WidgetConfig.PanelTitle` this
+  # pin's `ago-console`/`ago-chat-api` siblings above add server-side), and the channel-switcher's
+  # icons/row height grow (175%/28px, 0.625rem row padding) with a dividing line between every visible
+  # item, plus the gray header bar - no migration.
   - name: ago-demo-shop1
     newName: ghcr.io/golyakoff/ago-demo-shop1
-    newTag: fae396944b8f0a43e1e50ebb330a82a925d621f2
+    newTag: b2e2beb99b8181ceb432e67445670dff05755f17
   - name: ago-widget-assets
     newName: ghcr.io/golyakoff/ago-widget-assets
-    newTag: fae396944b8f0a43e1e50ebb330a82a925d621f2
+    newTag: b2e2beb99b8181ceb432e67445670dff05755f17
   # The front page rebuilt around a price calculator, and `pricing.html` brought onto the same design
   # system with it (ago-landing#20, deployed 2026-09-18). Both pages read every figure out of
   # `prices.json` through one shared lookup, so the calculator and the price list cannot disagree,

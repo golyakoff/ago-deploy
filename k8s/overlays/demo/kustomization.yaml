@@ -267,9 +267,12 @@ images:
   # unfiltered conversation-state switches gain a `Pending` case and a runtime default so `25-221`'s
   # new state doesn't render blank; a real gradient-"A" favicon (the console's own in-app header glyph
   # stays flat, deliberately - a named divergence, not an oversight). No migration.
+  # `25-212`, 2026-09-23: a multi-tenancy operator's first sign-in probes `/api/v1/me/tenancies`
+  # before `operators/me`, setting the active-site signal from it - a real operator with more than
+  # one eligible tenancy no longer gets 403'd into `/onboarding` on a fresh session. No migration.
   - name: ago-console
     newName: ghcr.io/golyakoff/ago-console
-    newTag: 6ee24369833ee8660696765f21410ec54e927982
+    newTag: 93e1c4bfdbd20a86d1398941356e7fd8096e0bd1
   # All three come from one `ago-widget` commit, and that is the point rather than tidiness: the two
   # demo pages and a real tenant's embed then run byte-identical bundles, which is checkable (three
   # `version.json` files naming one commit) instead of assumed.

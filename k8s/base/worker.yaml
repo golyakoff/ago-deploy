@@ -98,6 +98,16 @@ spec:
             # `14-02`/`adr/0069`: same requirement as ago-chat-api - see that manifest's own comment.
             - name: Channels__CredentialEncryptionKey
               value: "$(CHANNELS_CREDENTIAL_ENCRYPTION_KEY)"
+            # `25-216`/`26-04`/`adr/0180`: `RuStoreOptions`, bound and `.ValidateOnStart()`-checked
+            # only in `Ago.Chat.Worker/Program.cs` - never `ChatModule.ConfigureServices`, which
+            # `ago-chat-api` and `ago-chat-webhooks` also call. Worker-only, on purpose: `secrets.md`'s
+            # own row for this credential states the identical isolation `KEYCLOAK_DEMO_PROVISIONER_SECRET`
+            # above already has for a different one. Never add these two lines to api.yaml or
+            # webhooks.yaml.
+            - name: Push__RuStore__ServiceToken
+              value: "$(RUSTORE_PUSH_SERVICE_TOKEN)"
+            - name: Push__RuStore__ProjectId
+              value: "$(RUSTORE_PUSH_PROJECT_ID)"
             # `13-02`: same requirement as ago-chat-api - see that manifest's own comment (STUB, no
             # real ЮKassa merchant account yet).
             # `25-29`: split into ago-business decision 0012's base-plus-marginal formula - see

@@ -255,9 +255,12 @@ images:
   # the plain-Russian shape, so it never asserts a country the typed value contradicts - no migration.
   # `25-210`: a panel-title field on the widget-config screen, for the same tenant-scoped override
   # `Stage25AddSiteWidgetPanelTitle` (see `ago-chat-api`'s own pin above) adds server-side.
+  # `25-220`, 2026-09-22: the panel-title field's own placeholder now reads "Напишите нам..." -
+  # kept in sync with `ago-widget`'s identical default below, not a console-only wording change.
+  # No migration.
   - name: ago-console
     newName: ghcr.io/golyakoff/ago-console
-    newTag: 2a9bbfdb9f353a1acb75b93ef687a99b72c20e7e
+    newTag: 9f04d55ba1a83271292ef7474c06b467bc10af69
   # All three come from one `ago-widget` commit, and that is the point rather than tidiness: the two
   # demo pages and a real tenant's embed then run byte-identical bundles, which is checkable (three
   # `version.json` files naming one commit) instead of assumed.
@@ -309,12 +312,18 @@ images:
   # pin's `ago-console`/`ago-chat-api` siblings above add server-side), and the channel-switcher's
   # icons/row height grow (175%/28px, 0.625rem row padding) with a dividing line between every visible
   # item, plus the gray header bar - no migration.
+  # `25-219`/`25-220`/`25-222`, 2026-09-22: the channel-switcher banner's own header bar now reuses
+  # `.ago-header`'s real tenant-coloured gradient instead of a flat grey, and drops to a regular
+  # font-weight; the built-in default greeting becomes "Напишите нам..." (see the `ago-console` pin
+  # above for its own half); and the chat panel, that same banner, and the channel-launcher's round
+  # icons now play a real entrance animation on reveal (slide-up / staggered "bubble-in") instead of
+  # merely appearing, rehearsed live against this exact geometry before implementing. No migration.
   - name: ago-demo-shop1
     newName: ghcr.io/golyakoff/ago-demo-shop1
-    newTag: b2e2beb99b8181ceb432e67445670dff05755f17
+    newTag: 80f08be9c6607eecffa34abe392c87685fd8674a
   - name: ago-widget-assets
     newName: ghcr.io/golyakoff/ago-widget-assets
-    newTag: b2e2beb99b8181ceb432e67445670dff05755f17
+    newTag: 80f08be9c6607eecffa34abe392c87685fd8674a
   # The front page rebuilt around a price calculator, and `pricing.html` brought onto the same design
   # system with it (ago-landing#20, deployed 2026-09-18). Both pages read every figure out of
   # `prices.json` through one shared lookup, so the calculator and the price list cannot disagree,

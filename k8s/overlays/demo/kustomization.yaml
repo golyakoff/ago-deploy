@@ -173,25 +173,23 @@ images:
   # long-documented flake) - the identical commit had already passed that same suite in full at merge
   # time, which a real regression could not do twice differently on unchanged code; read as another
   # recurrence of the known flake, not a reason to hold this pin.
-  # `25-221`/`26-29`, 2026-09-22: a conversation starts `Pending`, not `Waiting` - only a real visitor
-  # message graduates it, so opening the widget no longer routes an empty conversation to an operator.
-  # The operator queue row also carries the last message's own preview text and timestamp now (one new
-  # batched, site-scoped read-store query, no new index, no migration for either change).
+  # `26-76`, 2026-09-23: a booking-step queue row previews its already-rendered first line (with a
+  # client-side calendar prefix) instead of going blank - one additive DTO field, no migration.
   - name: ago-chat-api
     newName: ghcr.io/golyakoff/ago-chat-api
-    newTag: bc0996dcef7ae4507df2296378ce005bd22f02b6
+    newTag: 2ec8fa150a3dd327b1200804093dbf229b532168
   - name: ago-chat-worker
     newName: ghcr.io/golyakoff/ago-chat-worker
-    newTag: bc0996dcef7ae4507df2296378ce005bd22f02b6
+    newTag: 2ec8fa150a3dd327b1200804093dbf229b532168
   - name: ago-chat-webhooks
     newName: ghcr.io/golyakoff/ago-chat-webhooks
-    newTag: bc0996dcef7ae4507df2296378ce005bd22f02b6
+    newTag: 2ec8fa150a3dd327b1200804093dbf229b532168
   # `8-08`: the migrator moves with the three hosts and never independently - it applies the
   # migrations *that commit* carries, so a migrator on a different SHA from the hosts is the exact
   # mismatch this item exists to prevent. deploy.sh sets all four from one argument for that reason.
   - name: ago-chat-migrator
     newName: ghcr.io/golyakoff/ago-chat-migrator
-    newTag: bc0996dcef7ae4507df2296378ce005bd22f02b6
+    newTag: 2ec8fa150a3dd327b1200804093dbf229b532168
   # `15-07`/`adr/0051`: the four static bundles, which `15-06` could not reach - and the one it did
   # not reach is the one the 2026-08-25 incident happened to. Their four `imagePullPolicy: Never`
   # patches are gone from *-static.yaml for the same reason the three above went.

@@ -79,10 +79,12 @@
       "serviceAccountsEnabled": false,
       "protocol": "openid-connect",
       "redirectUris": [
-        "ago-android://callback"
+        "ago-android://callback",
+        "ago-android://logout-callback"
       ],
       "attributes": {
-        "pkce.code.challenge.method": "S256"
+        "pkce.code.challenge.method": "S256",
+        "post.logout.redirect.uris": "ago-android://logout-callback"
       },
       "protocolMappers": [
         {

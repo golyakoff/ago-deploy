@@ -10,8 +10,11 @@
 #
 # UNLIKE `ago-demo-provisioner`, this client has no secret and no service account - it is a public
 # client with PKCE, so there is nothing to configure after creation beyond the client itself and its
-# one protocol mapper. That also makes this script simpler to make idempotent: with no secret to
-# reset on every run, "already exists" really does mean "nothing to do".
+# one protocol mapper. That also makes this script simpler to make idempotent - almost: with no secret
+# to reset on every run, "already exists" mostly means "nothing to do", except that `26-93` added a
+# second redirect URI after the demo realm's client already existed, which is exactly the case this
+# whole file's own header warns about - so the "already exists" branch below also ensures both redirect
+# URIs and the post-logout attribute are present, not only the mapper.
 #
 # Run on the node, after the realm exists:
 #   ./apply-android-client.sh
@@ -30,6 +33,12 @@ MAPPER_NAME="ago-android-audience"
 # credential the resource server already accepts, with zero changes to ago-chat.
 AUDIENCE="ago-console"
 REDIRECT_URI="ago-android://callback"
+# `26-93`: RP-Initiated Logout's own redirect, validated by Keycloak against the client's
+# `post.logout.redirect.uris` attribute - a separate list from `redirectUris` above, and one Keycloak
+# 26 treats as empty (not "same as redirectUris") when the attribute is absent, which is exactly what
+# produced a live "Invalid redirect uri" refusal on sign-out until this was set by hand once and this
+# script was extended to keep setting it.
+LOGOUT_REDIRECT_URI="ago-android://logout-callback"
 
 kc() { if kubectl version >/dev/null 2>&1; then kubectl "$@"; else sudo k3s kubectl "$@"; fi; }
 
@@ -60,8 +69,9 @@ if [[ -z "$CLIENT_UUID" ]]; then
     -s 'directAccessGrantsEnabled=false' \
     -s 'serviceAccountsEnabled=false' \
     -s 'protocol=openid-connect' \
-    -s "redirectUris=[\"$REDIRECT_URI\"]" \
-    -s 'attributes."pkce.code.challenge.method"=S256' >/dev/null
+    -s "redirectUris=[\"$REDIRECT_URI\",\"$LOGOUT_REDIRECT_URI\"]" \
+    -s 'attributes."pkce.code.challenge.method"=S256' \
+    -s "attributes.\"post.logout.redirect.uris\"=$LOGOUT_REDIRECT_URI" >/dev/null
   CLIENT_UUID=$(exec_kc get clients -r "$REALM" -q "clientId=$CLIENT_ID" --fields id --format csv --noquotes | tail -n1)
   if [[ -z "$CLIENT_UUID" ]]; then
     echo "Created $CLIENT_ID but could not read it back - stopping rather than guessing." >&2
@@ -71,7 +81,21 @@ if [[ -z "$CLIENT_UUID" ]]; then
     -s 'name=AGO Android app (26-11)' >/dev/null
   echo "Created $CLIENT_ID ($CLIENT_UUID)."
 else
-  echo "$CLIENT_ID already exists in realm $REALM ($CLIENT_UUID) - leaving the client alone."
+  echo "$CLIENT_ID already exists in realm $REALM ($CLIENT_UUID) - checking its redirect URIs..."
+fi
+
+# Runs whether the client was just created or already existed - a create above already carries both
+# values, so this is a genuine no-op read-then-maybe-write in that case, and the only path that matters
+# for a client `26-93` reached before the logout redirect existed.
+CURRENT_REDIRECTS=$(exec_kc get "clients/$CLIENT_UUID" -r "$REALM" --fields redirectUris --format csv --noquotes)
+if [[ "$CURRENT_REDIRECTS" != *"$LOGOUT_REDIRECT_URI"* ]]; then
+  echo "Adding $LOGOUT_REDIRECT_URI to $CLIENT_ID's redirect URIs and post-logout attribute..."
+  exec_kc update "clients/$CLIENT_UUID" -r "$REALM" \
+    -s "redirectUris=[\"$REDIRECT_URI\",\"$LOGOUT_REDIRECT_URI\"]" \
+    -s "attributes.\"post.logout.redirect.uris\"=$LOGOUT_REDIRECT_URI" >/dev/null
+  echo "Added."
+else
+  echo "$LOGOUT_REDIRECT_URI already present - leaving it alone."
 fi
 
 echo "Checking the $MAPPER_NAME protocol mapper..."

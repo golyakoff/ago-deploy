@@ -24,6 +24,9 @@ resources:
   # `25-180`: the public brand-identity reference page (colors, type, the five real channel icons) -
   # its own repository (`ago-brandbook`), same demo-overlay-only static-file shape as the four above.
   - brandbook-static.yaml
+  # `26-131`: the Android design mini-site - its own repository (`ago-android-design`), same
+  # demo-overlay-only static-file shape as brandbook directly above.
+  - android-design-static.yaml
   # `20-20`: AGO Calendar's own console bundle, same reasoning as the four above - demo-overlay-only,
   # no local-dev counterpart.
   # `15-03`: alerting. Demo-overlay-only, deliberately - see alertmanager.yaml's own header for why
@@ -371,6 +374,12 @@ images:
   - name: ago-brandbook
     newName: ghcr.io/golyakoff/ago-brandbook
     newTag: 0ece59b0e0157f0d9b530b64358503b5c7db2e2c
+  # `26-131`: the Android design mini-site, its own repository (`ago-android-design`) moving on its
+  # own commits - same "does not share a tag" reasoning as ago-brandbook directly above. This SHA is
+  # ago-android-design's `main` HEAD, whose CI run published the image to GHCR.
+  - name: ago-android-design
+    newName: ghcr.io/golyakoff/ago-android-design
+    newTag: 5a3b14e5d1fd390fee939c9fc97d8accef5e7b99
   # `20-20`: AGO Calendar's own four images. The three backend ones move together and never
   # independently, same rule as the ago-chat-* four above and the same reason: `calendar-migrator.yaml`
   # applies the migrations *this* commit's Domain carries, so a migrator on a different SHA from the

@@ -379,7 +379,7 @@ images:
   # ago-android-design's `main` HEAD, whose CI run published the image to GHCR.
   - name: ago-android-design
     newName: ghcr.io/golyakoff/ago-android-design
-    newTag: b09e9de32cc5b0ff9816e008c3674f3a09b36b20
+    newTag: bca6e081312d59a216e7ceed10460364c5d0eb5f
   # `20-20`: AGO Calendar's own four images. The three backend ones move together and never
   # independently, same rule as the ago-chat-* four above and the same reason: `calendar-migrator.yaml`
   # applies the migrations *this* commit's Domain carries, so a migrator on a different SHA from the

@@ -108,6 +108,14 @@ spec:
               value: "$(RUSTORE_PUSH_SERVICE_TOKEN)"
             - name: Push__RuStore__ProjectId
               value: "$(RUSTORE_PUSH_PROJECT_ID)"
+            # `26-100`/`adr/0181`: FCM is the primary operator-push transport, RuStore the per-device
+            # fallback. Worker-only, the identical isolation the two RuStore lines above have: the raw
+            # FCM_SERVICE_ACCOUNT_JSON reaches every infra-credentials `envFrom` consumer, but only this
+            # config-key mapping (bound and `.ValidateOnStart()`-checked by `Ago.Chat.Worker`'s
+            # `FcmOptions`) exists here and MUST never be added to api.yaml or webhooks.yaml. ProjectId
+            # is not set here - `FcmOptions.ProjectId` defaults to `ago-chat-783f7`.
+            - name: Push__Fcm__ServiceAccountJson
+              value: "$(FCM_SERVICE_ACCOUNT_JSON)"
             # `13-02`: same requirement as ago-chat-api - see that manifest's own comment (STUB, no
             # real ЮKassa merchant account yet).
             # `25-29`: split into ago-business decision 0012's base-plus-marginal formula - see

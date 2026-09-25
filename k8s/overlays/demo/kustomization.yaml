@@ -189,21 +189,28 @@ images:
   # additive: `ago-calendar` `Stage26AddServiceIsActive` (`AddColumn services.is_active`) - this pin's
   # own move runs the migrator (`apply-demo.sh`, not plain `deploy.sh`); a backup
   # (`ago-backup-20260924T182809Z`) was taken immediately before this bump. chat carries no migration.
+  # `26-134`/`adr-0184`, 2026-09-25: chat now owns the Person - a person-registry read API, an
+  # operator-notes home (`person_notes`), and a `PersonRegistered` consumer for no-chat-origin
+  # bookings; the `ContactCollected`/`ContactCarryover` copy path (adr/0147) is removed. One migration
+  # (`Stage26AddPersonNotesDropContactCarryover`) - this pin's own move runs the migrator
+  # (`apply-demo.sh`, not plain `deploy.sh`). Deployed together with `ago-calendar`'s companion
+  # `26-134` pin below, whose migration is **destructive** (drops `customers`); a backup
+  # (`ago-backup-20260925T231944Z`) was taken immediately before this bump. Chat first, then calendar.
   - name: ago-chat-api
     newName: ghcr.io/golyakoff/ago-chat-api
-    newTag: 4b6b3e4e4524e3250122b39f982e3788f9723c9c
+    newTag: 8530e2297438692fc25552dde7d0cd44f870d278
   - name: ago-chat-worker
     newName: ghcr.io/golyakoff/ago-chat-worker
-    newTag: 4b6b3e4e4524e3250122b39f982e3788f9723c9c
+    newTag: 8530e2297438692fc25552dde7d0cd44f870d278
   - name: ago-chat-webhooks
     newName: ghcr.io/golyakoff/ago-chat-webhooks
-    newTag: 4b6b3e4e4524e3250122b39f982e3788f9723c9c
+    newTag: 8530e2297438692fc25552dde7d0cd44f870d278
   # `8-08`: the migrator moves with the three hosts and never independently - it applies the
   # migrations *that commit* carries, so a migrator on a different SHA from the hosts is the exact
   # mismatch this item exists to prevent. deploy.sh sets all four from one argument for that reason.
   - name: ago-chat-migrator
     newName: ghcr.io/golyakoff/ago-chat-migrator
-    newTag: 4b6b3e4e4524e3250122b39f982e3788f9723c9c
+    newTag: 8530e2297438692fc25552dde7d0cd44f870d278
   # `15-07`/`adr/0051`: the four static bundles, which `15-06` could not reach - and the one it did
   # not reach is the one the 2026-08-25 incident happened to. Their four `imagePullPolicy: Never`
   # patches are gone from *-static.yaml for the same reason the three above went.
@@ -409,15 +416,25 @@ images:
   # `25-132`: three Russian copy strings in ModuleStepFactory - no migration.
   # `25-154`: the date-choice button's own weekday abbreviates ("Вт, 18 сентября 2026"); the
   # confirmation card's "Когда" line is unaffected - no migration.
+  # `26-134`/`adr-0184`, 2026-09-25: calendar now references the Person by an opaque id and **drops its
+  # own customer copy** - the `customers` and `customer_merges` tables and the whole customer-merge
+  # feature are gone (O2); a thin `person_records` table keyed by `person_id` keeps only the rule-8
+  # write-gating facts (phone per O1, no-show count, operator-verified-phone timestamps); a
+  # `PersonRegistered` publisher matches chat's consumer. The migration
+  # `Stage26PersonRecordsReplaceCustomers` is **DESTRUCTIVE** - it drops tables, so image rollback
+  # cannot recover the previous schema (redeploy.md: recovery is restore-from-backup). A backup
+  # (`ago-backup-20260925T231944Z`) was taken immediately before this bump. Deploy order: chat's
+  # `26-134` pin above first (owns the Person + consumer), then this. This pin's own move runs the
+  # migrator (`apply-demo.sh`), which runs both migrators before either product's hosts move.
   - name: ago-calendar-api
     newName: ghcr.io/golyakoff/ago-calendar-api
-    newTag: e959564b6b436d610a892529984a216047c4a9f5
+    newTag: 95ce462d6aaf399968f086fb98093fd7e7dbcf0a
   - name: ago-calendar-worker
     newName: ghcr.io/golyakoff/ago-calendar-worker
-    newTag: e959564b6b436d610a892529984a216047c4a9f5
+    newTag: 95ce462d6aaf399968f086fb98093fd7e7dbcf0a
   - name: ago-calendar-migrator
     newName: ghcr.io/golyakoff/ago-calendar-migrator
-    newTag: e959564b6b436d610a892529984a216047c4a9f5
+    newTag: 95ce462d6aaf399968f086fb98093fd7e7dbcf0a
 
 patches:
   # `8-07`/ago-root `adr/0058`: this is the one deployment that wants the demo-credential endpoint, so

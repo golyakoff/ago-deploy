@@ -113,3 +113,8 @@ spec:
     # applied for real is the managing session's own next step - not performed by this change, and not
     # something a worktree with no cluster access could verify in the first place.
     - brandbook.reserve-me.ru
+    # `26-131`: the Android design mini-site (ago-android-design). DNS was confirmed resolving to the
+    # node (`getent hosts android-design.reserve-me.ru` -> the node IP) before this SAN was added, so
+    # the HTTP-01 authorization every name in this shared cert shares can actually complete - one
+    # failed authorization fails the whole certificate and takes every other name down with it.
+    - android-design.reserve-me.ru

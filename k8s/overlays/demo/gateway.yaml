@@ -177,6 +177,17 @@ spec:
         mode: Terminate
         certificateRefs:
           - name: ago-public-tls
+    # `26-131`: the Android design mini-site (ago-android-design, a separate repository), same
+    # subdomain-not-apex, own-repo, unadvertised shape as https-brandbook directly above. Registered
+    # by the author, DNS confirmed resolving to the node before this listener was applied.
+    - name: https-android-design
+      port: 443
+      protocol: HTTPS
+      hostname: android-design.reserve-me.ru
+      tls:
+        mode: Terminate
+        certificateRefs:
+          - name: ago-public-tls
 ---
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
@@ -399,6 +410,27 @@ spec:
             value: /
       backendRefs:
         - name: ago-brandbook
+          port: 80
+---
+# `26-131`: the Android design mini-site - ago-android-design Service (android-design-static.yaml),
+# same whole-app-not-a-prefix shape as the brandbook route directly above.
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: android-design
+spec:
+  parentRefs:
+    - name: ago-chat-gateway
+      sectionName: https-android-design
+  hostnames:
+    - android-design.reserve-me.ru
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+      backendRefs:
+        - name: ago-android-design
           port: 80
 ---
 # `20-20`: AGO Calendar's own REST API. No `/hubs` prefix - this host maps no SignalR hub at all

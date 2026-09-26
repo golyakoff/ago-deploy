@@ -304,7 +304,7 @@ images:
   # requires the Booked state, never legal on a pending row (mirrors 26-163 on Android). No migration.
   - name: ago-console
     newName: ghcr.io/golyakoff/ago-console
-    newTag: bf97f75be1d0a0486ba20684ab21f2a80dce3c04
+    newTag: 08226b5510d21d2b5885cdb139b2769deac45e2a
   # All three come from one `ago-widget` commit, and that is the point rather than tidiness: the two
   # demo pages and a real tenant's embed then run byte-identical bundles, which is checkable (three
   # `version.json` files naming one commit) instead of assumed.
@@ -443,13 +443,13 @@ images:
   # migrator (`apply-demo.sh`), which runs both migrators before either product's hosts move.
   - name: ago-calendar-api
     newName: ghcr.io/golyakoff/ago-calendar-api
-    newTag: 95ce462d6aaf399968f086fb98093fd7e7dbcf0a
+    newTag: 212336f3e6cee891bc11841614235451ee7bd9e4
   - name: ago-calendar-worker
     newName: ghcr.io/golyakoff/ago-calendar-worker
-    newTag: 95ce462d6aaf399968f086fb98093fd7e7dbcf0a
+    newTag: 212336f3e6cee891bc11841614235451ee7bd9e4
   - name: ago-calendar-migrator
     newName: ghcr.io/golyakoff/ago-calendar-migrator
-    newTag: 95ce462d6aaf399968f086fb98093fd7e7dbcf0a
+    newTag: 212336f3e6cee891bc11841614235451ee7bd9e4
 
 patches:
   # `8-07`/ago-root `adr/0058`: this is the one deployment that wants the demo-credential endpoint, so

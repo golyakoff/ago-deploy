@@ -24,6 +24,11 @@ kind: ConfigMap
 metadata:
   name: clickhouse-low-memory
 data:
+  # Kept deliberately minimal: this exact set is what boots clean on clickhouse-server 24.8-alpine
+  # (verified live 2026-09-27). An earlier draft added max_concurrent_queries / background pool sizes /
+  # a <profiles> block / uncompressed_cache_size and ClickHouse rejected one of them at startup with
+  # exit 36 (BAD_ARGUMENTS) - the two caps below are the ones that actually matter for a small host,
+  # so further pool/concurrency tuning is left out until a real need (and a per-setting test) justifies it.
   low-memory.xml: |
     <clickhouse>
       <!-- Hard ceiling ClickHouse enforces on itself: 768 MiB, comfortably below the 1Gi container
@@ -31,33 +36,15 @@ data:
       <max_server_memory_usage>805306368</max_server_memory_usage>
       <!-- Stock default is 5 GiB - the single biggest source of idle RSS on a small host. -->
       <mark_cache_size>134217728</mark_cache_size>
-      <uncompressed_cache_size>0</uncompressed_cache_size>
-      <!-- Keep concurrency and background pools small: this is a low-volume analytics store. -->
-      <max_concurrent_queries>8</max_concurrent_queries>
-      <background_pool_size>4</background_pool_size>
-      <background_schedule_pool_size>4</background_schedule_pool_size>
-      <tables_loader_foreground_pool_size>2</tables_loader_foreground_pool_size>
       <listen_host>0.0.0.0</listen_host>
-      <!-- Per-query default ceiling; the ingest/aggregator can raise it per session if ever needed. -->
-      <profiles>
-        <default>
-          <max_memory_usage>536870912</max_memory_usage>
-        </default>
-      </profiles>
     </clickhouse>
-  # Trim the system.*_log tables ClickHouse writes by default - on a low-disk, low-mem node their
-  # background flushes are pure overhead for a store we run for our own rollups, not for query
-  # introspection. Removed rather than kept-small so no writer thread exists at all.
+  # Trim the two heaviest system.*_log tables ClickHouse writes by default - on a low-disk, low-mem node
+  # their background flushes are overhead for a store we run for our own rollups, not for query
+  # introspection. Only the two verified-valid removals are kept.
   disable-logs.xml: |
     <clickhouse>
       <asynchronous_metric_log remove="1"/>
       <metric_log remove="1"/>
-      <query_thread_log remove="1"/>
-      <trace_log remove="1"/>
-      <session_log remove="1"/>
-      <part_log remove="1"/>
-      <text_log remove="1"/>
-      <crash_log remove="1"/>
     </clickhouse>
 ---
 apiVersion: apps/v1

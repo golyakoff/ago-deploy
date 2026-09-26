@@ -51,7 +51,7 @@ spec:
         # image/digest/no-root/no-shell combination was chosen and verified, none of which changes by
         # moving the container from a sidecar to a standalone Deployment.
         - name: telegram-relay
-          image: ghcr.io/xtls/xray-core:26.7.11@sha256:a1644183accdb0b5be967093fe34be756fd5de15fe2ee0206e842ae17350967f
+          image: ghcr.io/xtls/xray-core:26.9.9@sha256:45338c4df61fda061c47ce62aafda6c5d7d59cbdefc33f2e335d8b0c748b748a
           command: ["/usr/local/bin/xray"]
           args: ["run", "-c", "/usr/local/etc/xray/config.json"]
           securityContext:

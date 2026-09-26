@@ -196,21 +196,26 @@ images:
   # (`apply-demo.sh`, not plain `deploy.sh`). Deployed together with `ago-calendar`'s companion
   # `26-134` pin below, whose migration is **destructive** (drops `customers`); a backup
   # (`ago-backup-20260925T231944Z`) was taken immediately before this bump. Chat first, then calendar.
+  # `26-122`, 2026-09-26: `operator_devices` dedups by a stable `device_id` (Android sends
+  # `Settings.Secure.ANDROID_ID`) so a reinstall/re-login/transport-switch replaces the row instead of
+  # piling up stale registrations (26-83 fix A). One migration (`Stage26AddOperatorDeviceId`,
+  # additive: nullable column + unique index) - this pin's own move runs the migrator (`apply-demo.sh`);
+  # a backup (`ago-backup-20260926T011508Z`) was taken immediately before this bump.
   - name: ago-chat-api
     newName: ghcr.io/golyakoff/ago-chat-api
-    newTag: 8530e2297438692fc25552dde7d0cd44f870d278
+    newTag: 9efb2368786e1ed4e1dd3cf5caaaa66cd0f4d00f
   - name: ago-chat-worker
     newName: ghcr.io/golyakoff/ago-chat-worker
-    newTag: 8530e2297438692fc25552dde7d0cd44f870d278
+    newTag: 9efb2368786e1ed4e1dd3cf5caaaa66cd0f4d00f
   - name: ago-chat-webhooks
     newName: ghcr.io/golyakoff/ago-chat-webhooks
-    newTag: 8530e2297438692fc25552dde7d0cd44f870d278
+    newTag: 9efb2368786e1ed4e1dd3cf5caaaa66cd0f4d00f
   # `8-08`: the migrator moves with the three hosts and never independently - it applies the
   # migrations *that commit* carries, so a migrator on a different SHA from the hosts is the exact
   # mismatch this item exists to prevent. deploy.sh sets all four from one argument for that reason.
   - name: ago-chat-migrator
     newName: ghcr.io/golyakoff/ago-chat-migrator
-    newTag: 8530e2297438692fc25552dde7d0cd44f870d278
+    newTag: 9efb2368786e1ed4e1dd3cf5caaaa66cd0f4d00f
   # `15-07`/`adr/0051`: the four static bundles, which `15-06` could not reach - and the one it did
   # not reach is the one the 2026-08-25 incident happened to. Their four `imagePullPolicy: Never`
   # patches are gone from *-static.yaml for the same reason the three above went.

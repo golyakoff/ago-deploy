@@ -300,9 +300,11 @@ images:
   # `26-161`/`adr-0184`, 2026-09-26: the calendar console reads the Person from chat's registry API
   # (display-merge) instead of a calendar-local customer copy, and the retired customer-merge UI is
   # gone. Deployed with `deploy.sh console` (set-image, no migration); this pin catches the manifest up.
+  # `26-164`, 2026-09-26: «Не пришёл» removed from the pending queue (CalendarQueuePage) - no-show
+  # requires the Booked state, never legal on a pending row (mirrors 26-163 on Android). No migration.
   - name: ago-console
     newName: ghcr.io/golyakoff/ago-console
-    newTag: 2315100cb1b9da1e1480ba75be55086c9a0e359c
+    newTag: d8c93996832b5d14320028115c239861d3dc769c
   # All three come from one `ago-widget` commit, and that is the point rather than tidiness: the two
   # demo pages and a real tenant's embed then run byte-identical bundles, which is checkable (three
   # `version.json` files naming one commit) instead of assumed.

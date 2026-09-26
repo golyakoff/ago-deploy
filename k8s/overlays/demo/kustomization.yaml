@@ -206,19 +206,19 @@ images:
   # migration (uses the existing `last_seen_at`); the migrator re-run on this pin is an idempotent no-op.
   - name: ago-chat-api
     newName: ghcr.io/golyakoff/ago-chat-api
-    newTag: 629f64dcac074568e07061e9a8cd15e60aa304e3
+    newTag: d9bff781915bb3aa5893212ac09018e242f36663
   - name: ago-chat-worker
     newName: ghcr.io/golyakoff/ago-chat-worker
-    newTag: 629f64dcac074568e07061e9a8cd15e60aa304e3
+    newTag: d9bff781915bb3aa5893212ac09018e242f36663
   - name: ago-chat-webhooks
     newName: ghcr.io/golyakoff/ago-chat-webhooks
-    newTag: 629f64dcac074568e07061e9a8cd15e60aa304e3
+    newTag: d9bff781915bb3aa5893212ac09018e242f36663
   # `8-08`: the migrator moves with the three hosts and never independently - it applies the
   # migrations *that commit* carries, so a migrator on a different SHA from the hosts is the exact
   # mismatch this item exists to prevent. deploy.sh sets all four from one argument for that reason.
   - name: ago-chat-migrator
     newName: ghcr.io/golyakoff/ago-chat-migrator
-    newTag: 629f64dcac074568e07061e9a8cd15e60aa304e3
+    newTag: d9bff781915bb3aa5893212ac09018e242f36663
   # `15-07`/`adr/0051`: the four static bundles, which `15-06` could not reach - and the one it did
   # not reach is the one the 2026-08-25 incident happened to. Their four `imagePullPolicy: Never`
   # patches are gone from *-static.yaml for the same reason the three above went.
@@ -443,13 +443,13 @@ images:
   # migrator (`apply-demo.sh`), which runs both migrators before either product's hosts move.
   - name: ago-calendar-api
     newName: ghcr.io/golyakoff/ago-calendar-api
-    newTag: 212336f3e6cee891bc11841614235451ee7bd9e4
+    newTag: 1c1a5c0af272420d99e6314ef10e46ce568dfa8e
   - name: ago-calendar-worker
     newName: ghcr.io/golyakoff/ago-calendar-worker
-    newTag: 212336f3e6cee891bc11841614235451ee7bd9e4
+    newTag: 1c1a5c0af272420d99e6314ef10e46ce568dfa8e
   - name: ago-calendar-migrator
     newName: ghcr.io/golyakoff/ago-calendar-migrator
-    newTag: 212336f3e6cee891bc11841614235451ee7bd9e4
+    newTag: 1c1a5c0af272420d99e6314ef10e46ce568dfa8e
 
 patches:
   # `8-07`/ago-root `adr/0058`: this is the one deployment that wants the demo-credential endpoint, so

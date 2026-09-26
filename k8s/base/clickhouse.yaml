@@ -1,0 +1,181 @@
+# ADR-0186: the analytics raw-event store. Single node, no replication (the point is off-Postgres
+# retained raw events, not HA) - same "one local instance is the point" stance postgres.yaml takes.
+#
+# **Memory cap is not optional here.** The demo node has ~2Gi free and no swap (measured 2026-09-27),
+# and ClickHouse's stock defaults size caches against total RAM (mark_cache 5Gi by default) and will
+# OOM-kill a neighbour (postgres) on a node this size. The config.d override below is what keeps it
+# bounded well under the container limit; the two must stay consistent - max_server_memory_usage sits
+# below the container memory limit so ClickHouse throttles a query itself rather than being OOM-killed.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: clickhouse-data
+spec:
+  accessModes: ["ReadWriteOnce"]
+  resources:
+    requests:
+      storage: 5Gi # a label, not an enforced quota (local-path) - see postgres.yaml's own note
+---
+# Low-footprint overrides merged into /etc/clickhouse-server/config.d. Every number here is a
+# deliberate reduction from a stock default that assumes a dedicated many-GB host, chosen for a shared
+# ~2Gi-free node - not a measurement.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: clickhouse-low-memory
+data:
+  low-memory.xml: |
+    <clickhouse>
+      <!-- Hard ceiling ClickHouse enforces on itself: 768 MiB, comfortably below the 1Gi container
+           limit so a heavy query is throttled/errored, never OOM-killed (no swap on this node). -->
+      <max_server_memory_usage>805306368</max_server_memory_usage>
+      <!-- Stock default is 5 GiB - the single biggest source of idle RSS on a small host. -->
+      <mark_cache_size>134217728</mark_cache_size>
+      <uncompressed_cache_size>0</uncompressed_cache_size>
+      <!-- Keep concurrency and background pools small: this is a low-volume analytics store. -->
+      <max_concurrent_queries>8</max_concurrent_queries>
+      <background_pool_size>4</background_pool_size>
+      <background_schedule_pool_size>4</background_schedule_pool_size>
+      <tables_loader_foreground_pool_size>2</tables_loader_foreground_pool_size>
+      <listen_host>0.0.0.0</listen_host>
+      <!-- Per-query default ceiling; the ingest/aggregator can raise it per session if ever needed. -->
+      <profiles>
+        <default>
+          <max_memory_usage>536870912</max_memory_usage>
+        </default>
+      </profiles>
+    </clickhouse>
+  # Trim the system.*_log tables ClickHouse writes by default - on a low-disk, low-mem node their
+  # background flushes are pure overhead for a store we run for our own rollups, not for query
+  # introspection. Removed rather than kept-small so no writer thread exists at all.
+  disable-logs.xml: |
+    <clickhouse>
+      <asynchronous_metric_log remove="1"/>
+      <metric_log remove="1"/>
+      <query_thread_log remove="1"/>
+      <trace_log remove="1"/>
+      <session_log remove="1"/>
+      <part_log remove="1"/>
+      <text_log remove="1"/>
+      <crash_log remove="1"/>
+    </clickhouse>
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: clickhouse
+spec:
+  # Recreate + one replica + one ReadWriteOnce PVC - the identical single-writer reasoning
+  # postgres.yaml records: two pods mounting one data dir on one node corrupt each other, so a moment
+  # of downtime on a roll is the honest cost.
+  strategy:
+    type: Recreate
+  replicas: 1
+  selector:
+    matchLabels:
+      app: clickhouse
+  template:
+    metadata:
+      labels:
+        app: clickhouse
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 101 # the clickhouse image's own uid
+        runAsGroup: 101
+        fsGroup: 101 # unlike postgres, clickhouse is happy with a group-owned data dir
+        seccompProfile:
+          type: RuntimeDefault
+      # local-path provisions the PVC dir root-owned; clickhouse runs as 101 and would fail to write.
+      # Same chown-init shape postgres.yaml/minio.yaml use for a chown no manifest field can express.
+      initContainers:
+        - name: chown-data
+          image: clickhouse/clickhouse-server:24.8-alpine
+          command: ["sh", "-c", "chown -R 101:101 /var/lib/clickhouse"]
+          securityContext:
+            runAsNonRoot: false
+            runAsUser: 0
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+              add: ["CHOWN", "FOWNER"]
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/clickhouse
+          resources:
+            requests:
+              memory: 16Mi
+              cpu: 10m
+            limits:
+              memory: 64Mi
+              cpu: 200m
+      containers:
+        - name: clickhouse
+          image: clickhouse/clickhouse-server:24.8-alpine
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          ports:
+            - name: http
+              containerPort: 8123
+            - name: native
+              containerPort: 9000
+          # CLICKHOUSE_USER / CLICKHOUSE_PASSWORD / CLICKHOUSE_DB - the image's own entrypoint creates
+          # the user and database from these on first boot. Supplied by the clickhouse-credentials
+          # Secret, created out-of-band on the node (never in this public repo), same as
+          # infra-credentials for postgres.
+          envFrom:
+            - secretRef:
+                name: clickhouse-credentials
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/clickhouse
+            - name: config-low-memory
+              mountPath: /etc/clickhouse-server/config.d/low-memory.xml
+              subPath: low-memory.xml
+            - name: config-low-memory
+              mountPath: /etc/clickhouse-server/config.d/disable-logs.xml
+              subPath: disable-logs.xml
+          resources:
+            requests:
+              memory: 256Mi
+              cpu: 100m
+            limits:
+              memory: 1Gi
+              cpu: "1"
+          readinessProbe:
+            httpGet:
+              path: /ping
+              port: 8123
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /ping
+              port: 8123
+            initialDelaySeconds: 30
+            periodSeconds: 15
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: clickhouse-data
+        - name: config-low-memory
+          configMap:
+            name: clickhouse-low-memory
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: clickhouse
+spec:
+  selector:
+    app: clickhouse
+  ports:
+    - name: http
+      port: 8123
+      targetPort: 8123
+    - name: native
+      port: 9000
+      targetPort: 9000

@@ -206,19 +206,19 @@ images:
   # migration (uses the existing `last_seen_at`); the migrator re-run on this pin is an idempotent no-op.
   - name: ago-chat-api
     newName: ghcr.io/golyakoff/ago-chat-api
-    newTag: 8428571d2ef0eb831ef6b646a8d8287ffb7d83e3
+    newTag: 13447ad2dce810812c581ca6355358d56abb1338
   - name: ago-chat-worker
     newName: ghcr.io/golyakoff/ago-chat-worker
-    newTag: 8428571d2ef0eb831ef6b646a8d8287ffb7d83e3
+    newTag: 13447ad2dce810812c581ca6355358d56abb1338
   - name: ago-chat-webhooks
     newName: ghcr.io/golyakoff/ago-chat-webhooks
-    newTag: 8428571d2ef0eb831ef6b646a8d8287ffb7d83e3
+    newTag: 13447ad2dce810812c581ca6355358d56abb1338
   # `8-08`: the migrator moves with the three hosts and never independently - it applies the
   # migrations *that commit* carries, so a migrator on a different SHA from the hosts is the exact
   # mismatch this item exists to prevent. deploy.sh sets all four from one argument for that reason.
   - name: ago-chat-migrator
     newName: ghcr.io/golyakoff/ago-chat-migrator
-    newTag: 8428571d2ef0eb831ef6b646a8d8287ffb7d83e3
+    newTag: 13447ad2dce810812c581ca6355358d56abb1338
   # `15-07`/`adr/0051`: the four static bundles, which `15-06` could not reach - and the one it did
   # not reach is the one the 2026-08-25 incident happened to. Their four `imagePullPolicy: Never`
   # patches are gone from *-static.yaml for the same reason the three above went.

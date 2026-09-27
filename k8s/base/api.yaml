@@ -43,6 +43,11 @@ spec:
           envFrom:
             - secretRef:
                 name: infra-credentials
+            # `adr/0186` S7: read-only analytics rollup DB (ago_analytics) - provides
+            # ANALYTICS_DB_* for the connection string below. Out-of-band secret, ago-chat-api only
+            # (Worker/Webhooks serve no analytics reads and fall back to live aggregation).
+            - secretRef:
+                name: analytics-db-credentials
           env:
             # `ago-root#354`: stated rather than left to .NET's own default-to-Production behaviour.
             # DevProvisioningEndpoints/PhoneVerificationDevEndpoints (Ago.Calendar.Api's equivalent -
@@ -62,6 +67,11 @@ spec:
             # vars), not a shell.
             - name: AGO_CHAT_CONNECTION_STRING
               value: "Host=postgres;Port=5432;Database=$(POSTGRES_DB);Username=$(POSTGRES_USER);Password=$(POSTGRES_PASSWORD)"
+            # `adr/0186` S7: when set, ChatModule swaps the analytics read-store to read precomputed
+            # rollups from ago_analytics (O(days), not O(conversations) live on the operational DB) and
+            # surfaces computedAsOf; unset => live-aggregation fallback. Read-only role ago_analytics.
+            - name: AGO_CHAT_ANALYTICS_CONNECTION_STRING
+              value: "Host=postgres;Port=5432;Database=$(ANALYTICS_DB_NAME);Username=$(ANALYTICS_DB_USER);Password=$(ANALYTICS_DB_PASSWORD)"
             # RabbitMqOptions (Ago.Platform.Messaging.RabbitMq) marks HostName/UserName/Password
             # [Required] - appsettings.json carries no Messaging:RabbitMq section, so these must
             # come from here or ChatModule's AddRabbitMqMessaging fails validation at startup.

@@ -460,7 +460,7 @@ images:
   # writing - see this item's handback for the order.
   - name: ago-analytics-host
     newName: ghcr.io/golyakoff/ago-analytics-host
-    newTag: 778ae053c40dcd07a648403cb346dbc8e45ab971
+    newTag: 7af022f33474958463c3a25267d9f79eae4f81b5
 
 patches:
   # `8-07`/ago-root `adr/0058`: this is the one deployment that wants the demo-credential endpoint, so

@@ -450,6 +450,17 @@ images:
   - name: ago-calendar-migrator
     newName: ghcr.io/golyakoff/ago-calendar-migrator
     newTag: 1c1a5c0af272420d99e6314ef10e46ce568dfa8e
+  # `26-218`/ADR-0186: one pin for both AGO Analytics deployables. `ago-analytics-host` is the single
+  # image `ago-analytics`'s CI publishes (its worker + its migrator both run it - the migrator Job
+  # overrides the entrypoint with `migrate`); both `base/ago-analytics.yaml` and
+  # `base/ago-analytics-migrator.yaml` reference `image: ago-analytics-host:local`, so this one entry
+  # pins them together. SHA = `ago-analytics` origin/main at handback (piped from
+  # `git -C C:/git/ago/ago-analytics rev-parse origin/main`, not hand-typed). Apply the migrator Job
+  # (`kubectl apply -l app=ago-analytics-migrator`) and confirm it Completes before the worker starts
+  # writing - see this item's handback for the order.
+  - name: ago-analytics-host
+    newName: ghcr.io/golyakoff/ago-analytics-host
+    newTag: adefd74b6402dc6b7c5655347d25dd1389bea2ea
 
 patches:
   # `8-07`/ago-root `adr/0058`: this is the one deployment that wants the demo-credential endpoint, so

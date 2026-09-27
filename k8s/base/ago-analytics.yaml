@@ -1,0 +1,121 @@
+# `26-218`/ADR-0186 (design §13, slices S4/S5): `Ago.Analytics.Host` as the worker - the standalone
+# analytics pipeline that runs independently of the AGO Chat hosts (the same repo-per-service shape
+# `ago-calendar` already is). Two background services in one process:
+#   * the ingest consumer - subscribes to AGO Chat's analytics integration events on RabbitMQ and
+#     writes one raw row per event into ClickHouse (`analytics_events`);
+#   * the scheduled rollup aggregator - a `PeriodicTimer` `BackgroundService` (hourly by default) that
+#     reads the deduplicated raw from ClickHouse and writes per-tenant-local-day rollups into the
+#     dedicated `ago_analytics` Postgres database.
+# This is the same image the migrator Job runs, using the default ENTRYPOINT (`["dotnet","app.dll"]`,
+# no `migrate` arg) so `Program.cs` takes the worker path.
+#
+# `replicas: 1`, and this is `calendar-worker.yaml`'s reasoning, not `worker.yaml`'s. The aggregator is
+# a singleton `PeriodicTimer` with no ownership mechanism of its own (no advisory lock, no leader
+# election) - two replicas would each tick on the same interval and race the same per-day
+# delete-then-insert against `ago_analytics`. The ingest consumer is a *competing* consumer and would
+# be safe to scale, but it shares this process with the aggregator, so the aggregator is what caps the
+# replica count at one until the pipeline grows a claiming mechanism. `strategy: Recreate` for the same
+# reason: never briefly run two aggregators side by side during a rollout (the default RollingUpdate
+# would start the new pod before the old one terminates).
+#
+# NO `containerPort`, NO probes, and NO Service - all deliberate, all for the reason `calendar-worker.yaml`
+# spells out: `Ago.Analytics.Host` uses `Host.CreateApplicationBuilder` (the bare generic host), not
+# `WebApplication.CreateBuilder`, so nothing binds a port - the `EXPOSE 8080` in its Dockerfile is
+# inert for this image, exactly as that Dockerfile's own comment says. A probe against a port nothing
+# opens would be a check that only ever fails, and the chiselled base has no shell for an `exec`
+# fallback. Kubernetes' health signal for this container is therefore the process's own exit code - an
+# unhandled exception in either service's loop still crashes and restarts the pod - just not probed.
+# A genuine gap relative to `ago-chat-worker`'s health endpoint, named here rather than papered over.
+#
+# MEMORY-TIGHT NODE (ADR-0026 one-node sizing; ClickHouse already resident, ~2Gi free, no swap): the
+# limits below are set low on purpose. Requests 256Mi/100m, limits 512Mi/500m - a starting shape, not a
+# measured figure (CLAUDE.md rule 7 - a real limit needs a load-test number, which this pipeline does
+# not have yet). If the ingest batch buffer or the aggregator's raw scan pushes past 512Mi under real
+# volume, that is a measured bump, recorded when measured.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ago-analytics
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: ago-analytics
+  template:
+    metadata:
+      labels:
+        app: ago-analytics
+    spec:
+      # No preStop needed: with no readiness probe and no Service routing traffic here, there is nothing
+      # for a preStop sleep to protect against. 30s gives an in-flight ingest batch or a running rollup
+      # pass room to finish its current transaction before SIGTERM (the aggregator's own remarks:
+      # `computedAsOf` does not advance on a failed/cancelled run, so a mid-run shutdown loses no data).
+      terminationGracePeriodSeconds: 30
+      # `17-05`/`adr/0054`: stated, not inherited - same chiselled-base non-root uid as every other host,
+      # so a base-image change that reversed the default fails loudly rather than silently reintroducing
+      # root. `readOnlyRootFilesystem` costs one emptyDir at /tmp: this host writes no files of its own.
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1654
+        runAsGroup: 1654
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: analytics
+          image: ago-analytics-host:local
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          # Three secrets: `infra-credentials` for the broker (RABBITMQ_USER/PASSWORD), plus the two
+          # out-of-band analytics secrets (ADR-0186 S2). The worker needs all three; the migrator Job
+          # needs only the latter two (it opens no broker connection).
+          envFrom:
+            - secretRef:
+                name: infra-credentials
+            - secretRef:
+                name: analytics-db-credentials
+            - secretRef:
+                name: clickhouse-credentials
+          env:
+            # See `calendar-worker.yaml`: the bare generic host reads `DOTNET_`-prefixed configuration,
+            # so `ASPNETCORE_ENVIRONMENT` would be read by nothing here. `Production` keeps a stray
+            # `appsettings.Development.json` (whose Aggregator:Interval is 5 minutes) from overriding the
+            # hourly production cadence.
+            - name: DOTNET_ENVIRONMENT
+              value: "Production"
+            # ago_analytics rollup store (design §3.2), composed from `analytics-db-credentials` keys.
+            # Same connection string the migrator applies the schema to.
+            - name: ConnectionStrings__AnalyticsDb
+              value: "Host=postgres;Port=5432;Database=$(ANALYTICS_DB_NAME);Username=$(ANALYTICS_DB_USER);Password=$(ANALYTICS_DB_PASSWORD)"
+            # ClickHouse raw event store over HTTP 8123, composed from `clickhouse-credentials` keys.
+            - name: ClickHouse__ConnectionString
+              value: "Host=clickhouse;Port=8123;Database=$(CLICKHOUSE_DB);Username=$(CLICKHOUSE_USER);Password=$(CLICKHOUSE_PASSWORD)"
+            # The broker the ingest consumer subscribes on. It MUST name the same broker and default
+            # vhost `/` that AGO Chat's Worker publishes the analytics events to - two (now three)
+            # products, one broker, one default vhost (`adr/0026`'s one-node sizing) - which is why
+            # these are the same literals `worker.yaml`/`calendar-worker.yaml` use rather than a second
+            # set. Same credential as the others too; a reader-scoped user would be the better answer
+            # and is not available without a RabbitMQ user-provisioning step that does not exist here yet.
+            - name: Messaging__RabbitMq__HostName
+              value: "rabbitmq"
+            - name: Messaging__RabbitMq__UserName
+              value: "$(RABBITMQ_USER)"
+            - name: Messaging__RabbitMq__Password
+              value: "$(RABBITMQ_PASSWORD)"
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+          resources:
+            requests:
+              memory: 256Mi
+              cpu: 100m
+            limits:
+              memory: 512Mi
+              cpu: 500m
+      volumes:
+        - name: tmp
+          emptyDir: {}

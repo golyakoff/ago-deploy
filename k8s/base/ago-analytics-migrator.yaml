@@ -1,0 +1,121 @@
+# `26-218`/ADR-0186 (design §13, slices S3/S3b): the AGO Analytics schema migrator, following
+# `8-08`/`adr/0056`'s established shape (see `migrator.yaml`'s own header for the full reasoning - a
+# Job because "is the schema current" has an answer and is then over, and ordering the hosts after it
+# is a property of the images/runtime rather than of this file. Not repeated in full here).
+#
+# ONE IMAGE, TWO ROLES. Unlike `ago-chat` and `ago-calendar` (each of which publishes a *separate*
+# `*-migrator` image), `ago-analytics` publishes exactly one image - `ago-analytics-host` (its CI
+# builds only `Ago.Analytics.Host`). That single image serves both this migrator Job and the
+# `ago-analytics` worker Deployment: the worker uses the image's default ENTRYPOINT
+# (`["dotnet","app.dll"]`), and this Job overrides it with `command: ["dotnet","app.dll","migrate"]`.
+# `Ago.Analytics.Host/Program.cs` dispatches on `AnalyticsMigratorRunner.IsMigrateCommand(args)` (arg
+# `migrate`/`--migrate`) *before* the worker host is built, so in migrate mode it brings up only the
+# two schema-owning adapters - no RabbitMQ, no background services - applies both schemas, and exits.
+#
+# WHAT THIS JOB APPLIES, AND WHY IT IS IDEMPOTENT. `AnalyticsMigratorRunner.RunAsync` does two things
+# in order: (1) the ClickHouse raw-event DDL (`CREATE TABLE IF NOT EXISTS analytics_events` - a no-op
+# when the table already exists); (2) the `ago_analytics` EF migrations
+# (`AnalyticsRollupDbContext.Database.MigrateAsync` - applies only what is pending, its own
+# `__EFMigrationsHistory` inside `ago_analytics`, separate from `ago_chat`'s ledger per ADR-0186
+# decision 2). Both are idempotent, so this Job runs on every deploy and exits 0 when there is nothing
+# to do. Exit code is the contract (0 success / 1 failure); `--verify` is a read-only "is the EF schema
+# current" mode this Job does not use.
+#
+# NO init container and NO Postgres-availability wait, and both differ from `calendar-migrator.yaml` on
+# purpose:
+#   * No `CREATE DATABASE`/`CREATE ROLE` init step - the `ago_analytics` database and its owning role
+#     (`ago_analytics`) already exist on the stand, created out-of-band as part of ADR-0186 slice S2
+#     (they are not provisioned from this repository, the same way `clickhouse-credentials` is not).
+#     There is nothing for an init container to make exist first.
+#   * No `pg_isready` wait loop - `AnalyticsMigratorRunner` deliberately omits `8-10`'s
+#     database-availability wait (its own remarks say so): this repository has no need yet for the
+#     "gave up waiting vs. rejected" distinction, and a connection failure here is reported as a
+#     migration failure the Job (`backoffLimit: 0`) surfaces rather than retries into a crash loop.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: ago-analytics-migrator
+  # `8-08`'s own pattern: an object-level label so a targeted `kubectl apply -l app=ago-analytics-migrator`
+  # can re-run this Job alone, the same way `redeploy.sh`/`apply-demo.sh` already do for the other two
+  # migrators.
+  labels:
+    app: ago-analytics-migrator
+spec:
+  # `adr/0056`, unchanged from `migrator.yaml`'s reasoning: a migration that failed will fail again, so
+  # retrying buys nothing and costs the clarity of a Job that is simply Failed. One attempt, then a
+  # human.
+  backoffLimit: 0
+  # `8-12`/ago-root#361: same trap as the other two migrators' identical field - a completed Job's
+  # immutable `spec.template` outlives this TTL long enough to reject the next `apply -k` after a pin
+  # bump. `apply-demo.sh` deletes a finished Job first; see `migrator.yaml`'s own comment on this field.
+  ttlSecondsAfterFinished: 3600
+  template:
+    metadata:
+      labels:
+        app: ago-analytics-migrator
+    spec:
+      restartPolicy: Never
+      # `17-05`/`adr/0054`: stated, not inherited - `ago-analytics`'s Dockerfile copies the same
+      # chiselled-base shape (`8-00`) the other services use, so the same non-root uid applies here for
+      # the same reason: a base-image change that reversed the default would otherwise do so silently.
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1654
+        runAsGroup: 1654
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: migrator
+          image: ago-analytics-host:local
+          # The one-shot migrate mode of the shared host image (see this file's header). Overrides the
+          # image's default `["dotnet","app.dll"]` ENTRYPOINT; the pinned image reference itself is
+          # still what the demo overlay's `images:` transform sets.
+          command: ["dotnet", "app.dll", "migrate"]
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          # The two out-of-band secrets this migrator needs - NOT `infra-credentials` (it opens no
+          # broker connection). `analytics-db-credentials` carries ANALYTICS_DB_USER/PASSWORD/NAME;
+          # `clickhouse-credentials` carries CLICKHOUSE_USER/PASSWORD/DB. Both are applied to the stand
+          # out-of-band (ADR-0186 S2), the same way `clickhouse.yaml` already reads `clickhouse-credentials`.
+          envFrom:
+            - secretRef:
+                name: analytics-db-credentials
+            - secretRef:
+                name: clickhouse-credentials
+          env:
+            # `ago-root#354`: stated intent. `AnalyticsMigratorRunner` builds on the bare generic host
+            # (`Host.CreateApplicationBuilder`), so it reads the `DOTNET_`-prefixed environment, never
+            # the `ASPNETCORE_` one a `WebApplication` host would layer on (the same distinction
+            # `calendar-worker.yaml` documents). `Production` keeps a stray `appsettings.Development.json`
+            # in the image from overriding these values.
+            - name: DOTNET_ENVIRONMENT
+              value: "Production"
+            # Composed from the secret keys via `$(VAR)` substitution - the same envFrom-then-reference
+            # shape every other host in this base uses (`worker.yaml`'s AGO_CHAT_CONNECTION_STRING).
+            # `AnalyticsConfiguration.ResolveAnalyticsDbConnectionString` reads `ConnectionStrings:AnalyticsDb`
+            # first. Database/user is `ago_analytics` (ADR-0186: the rollup store has its own role +
+            # credentials, distinct from the operational `ago`/`ago_chat`).
+            - name: ConnectionStrings__AnalyticsDb
+              value: "Host=postgres;Port=5432;Database=$(ANALYTICS_DB_NAME);Username=$(ANALYTICS_DB_USER);Password=$(ANALYTICS_DB_PASSWORD)"
+            # ClickHouse.Client speaks HTTP on 8123 (design §6). Bound to `ClickHouse:ConnectionString`
+            # (`ClickHouseOptions`). User/db is `analytics`.
+            - name: ClickHouse__ConnectionString
+              value: "Host=clickhouse;Port=8123;Database=$(CLICKHOUSE_DB);Username=$(CLICKHOUSE_USER);Password=$(CLICKHOUSE_PASSWORD)"
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+          resources:
+            requests:
+              memory: 64Mi
+              cpu: 50m
+            limits:
+              # Applying DDL + EF migrations is IO-bound and short-lived; this process holds a couple of
+              # connections and no state. A shape, not a measured number - same as the other migrators.
+              memory: 256Mi
+              cpu: 500m
+      volumes:
+        - name: tmp
+          emptyDir: {}

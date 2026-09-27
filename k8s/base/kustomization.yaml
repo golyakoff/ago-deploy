@@ -26,6 +26,13 @@ resources:
   - calendar-migrator.yaml
   - calendar-api.yaml
   - calendar-worker.yaml
+  # `26-218`/ADR-0186: AGO Analytics' two deployables, migrator-first for a reader (same convention as
+  # the two host groups above). One published image (`ago-analytics-host`) serves both - the migrator
+  # Job overrides its entrypoint with `migrate`, the worker uses the default. The raw store
+  # (`clickhouse.yaml`) is already listed among the datastores above; these two are the pipeline that
+  # writes it and the `ago_analytics` rollups.
+  - ago-analytics-migrator.yaml
+  - ago-analytics.yaml
   - jaeger.yaml
   - prometheus.yaml
   - grafana.yaml

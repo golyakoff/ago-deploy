@@ -135,6 +135,16 @@ spec:
                     # checked, and nothing checks this: the list is a hand-kept mirror of a fact that
                     # lives in the manifests.
                     ago-chat-roleassignment-backfill,
+                    # `26-218`/ADR-0186: both AGO Analytics deployables reach Postgres. The worker's
+                    # rollup aggregator writes `ago_analytics` (its own database on this same instance),
+                    # and the migrator Job applies that database's EF schema - each opens the connection
+                    # this policy governs, so each is added here in the same change that adds the
+                    # workloads (the "add a Postgres client = add it here" lesson this list has already
+                    # relearned three times above). They authenticate as the dedicated `ago_analytics`
+                    # role, not `ago`, but this policy is pod-identity, not DB-role, so both still need
+                    # the allowance.
+                    ago-analytics,
+                    ago-analytics-migrator,
                   ]
         - ipBlock:
             cidr: 10.42.0.1/32
@@ -198,7 +208,12 @@ spec:
                 # CrashLoopBackOff rather than caught beforehand - the reasoning above was correct
                 # when written and stale the moment 25-63 landed, which is exactly the trap a
                 # comment like the old one sets for whoever reads it next without re-checking it.
-                values: [ago-chat-api, ago-chat-worker, ago-chat-webhooks, ago-calendar-worker, ago-calendar-api]
+                # `26-218`/ADR-0186: `ago-analytics` added - its ingest consumer subscribes to AGO
+                # Chat's analytics integration events on this same broker (the same default vhost `/`),
+                # the second thing outside `Ago.Chat.*` to consume from it after `ago-calendar-worker`.
+                # Only the worker is here, not `ago-analytics-migrator`: the migrator opens no broker
+                # connection (it registers only the two schema-owning adapters).
+                values: [ago-chat-api, ago-chat-worker, ago-chat-webhooks, ago-calendar-worker, ago-calendar-api, ago-analytics]
         - ipBlock:
             cidr: 10.42.0.1/32
         - ipBlock:

@@ -217,6 +217,13 @@ spec:
               value: "customer:read"
             - name: ModulePermissions__calendar__Operator__5
               value: "customer:edit"
+            # `26-234`/`26-208`/`adr/0187`: booking:reschedule is Operator-scoped, the same day-to-day
+            # placement the other booking:* actions have, and must match `RegisterSiteHandler`'s own
+            # OperatorRolePermissions byte-for-byte (the fourth restatement `23-102` warns about). Absent
+            # here, the module-grant repair path re-seeds every calendar permission into an existing
+            # tenant's roles EXCEPT this one, so a pre-26-208 operator 403s on reschedule forever.
+            - name: ModulePermissions__calendar__Operator__6
+              value: "booking:reschedule"
             - name: ModulePermissions__calendar__Admin__0
               value: "calendar:configure"
             # `13-02`: BillingOptions/YooKassaOptions are bound and validated for every host

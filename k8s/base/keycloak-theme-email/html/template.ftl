@@ -179,7 +179,7 @@
       <td align="center" class="px-24" style="padding:0 48px;">
         <p style="margin:0 0 6px 0; font-family:'IBM Plex Sans', Arial, sans-serif; font-size:13px; line-height:20px; color:#9aa3ba;">
           ${msg("emailFooterTagline")} ·
-          <a href="https://reserve-me.ru" style="color:#6b7686; text-decoration:underline;">reserve-me.ru</a>
+          <a href="https://agochat.ru" style="color:#6b7686; text-decoration:underline;">agochat.ru</a>
         </p>
         <p style="margin:0; font-family:'IBM Plex Sans', Arial, sans-serif; font-size:12px; line-height:19px; color:#b3bac9;">
           ${msg("emailFooterDisclaimer")}

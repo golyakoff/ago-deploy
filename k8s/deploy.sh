@@ -36,7 +36,7 @@
 set -euo pipefail
 
 NS="${NS:-ago-chat}"
-DOMAIN="${DOMAIN:-reserve-me.ru}"
+DOMAIN="${DOMAIN:-agochat.ru}"
 REGISTRY="${REGISTRY:-ghcr.io/golyakoff}"
 # `25-124`: `$HOME` is `/root` under `sudo` (its own default `env_reset`), not `ago`'s real home -
 # this script's own documented invocation is `sudo ./deploy.sh` (`docs/runbooks/redeploy.md`), so

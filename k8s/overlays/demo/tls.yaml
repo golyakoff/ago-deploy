@@ -15,7 +15,7 @@ spec:
     # the domain already being deployed here is the natural choice, but this file intentionally ships
     # with a placeholder, not a real one, exactly like every other credential-shaped value in this
     # overlay.
-    email: letsencrypt-admin@reserve-me.ru
+    email: letsencrypt-admin@agochat.ru
     privateKeySecretRef:
       name: letsencrypt-prod-account-key
     solvers:
@@ -31,101 +31,22 @@ kind: Certificate
 metadata:
   name: ago-public-tls
 spec:
-  # `grafana.reserve-me.ru` was kept here after its listener and route were removed on 2026-08-25, and
-  # the reasoning was sound at the time: taking a name out of a Certificate re-issues the whole thing,
-  # a real operation with a real failure mode bought for no security gain, since a SAN is not an
-  # exposure and every one of these names is in public Certificate Transparency logs anyway.
+  # One multi-SAN cert for every public host (rather than one per host) - fewer moving parts, and
+  # Let's Encrypt's per-registered-domain rate limits are friendlier to a single cert. Re-applying this
+  # file re-issues in place; cert-manager does not replay an HTTP-01 challenge a name already passed.
   #
-  # **That reasoning rested on the DNS record still existing, and on 2026-09-03 the author deleted it.**
-  # The conclusion inverts with the premise. Issuance is HTTP-01, so Let's Encrypt fetches over each
-  # name in the list - a name that no longer resolves cannot be validated, and one failed authorisation
-  # fails the *whole* certificate, not just its own entry. Left in, it would have looked healthy until
-  # the 2026-11-01 renewal and then taken all eight working names TLS-invalid at once on 2026-12-01,
-  # with nothing pointing back at a DNS record deleted two months earlier.
-  #
-  # The old comment ended "if this certificate is ever re-issued for some other reason, drop the name
-  # then". That moment arrived on the same day, when `console.reserve-me.ru` was retired - except this
-  # is no longer an opportunity to tidy up, it is the repair.
-  # One cert for all of them (rather than one per host) - fewer moving parts than one Certificate per host, and Let's Encrypt's own rate
-  # limits (certificates per registered domain per week) are friendlier to a single multi-SAN cert
-  # than separate ones for a domain this size. Re-applying this file adds one more SAN to the
-  # existing certificate (cert-manager re-issues in place); it does not need a from-scratch replay
-  # of every HTTP-01 challenge that already passed for the other hostnames.
+  # `26-267`: the reserve-me.ru names were removed here in phase 4 of the agochat.ru migration
+  # (ago-business docs/infra/domain-migration-agochat.md). **Removing a name needs no validation** -
+  # only adding does - so this re-issues once for the nine remaining agochat.ru names and none of them
+  # is re-challenged. Order matters: the SAN goes first (here) and the reserve-me.ru A-record second
+  # (the author's registrar step). Reversed, a renewal would fail HTTP-01 for a name with no DNS, and
+  # one failed authorization fails the whole certificate. That gate is exactly why the nine agochat.ru
+  # A-records were confirmed resolving to the node before they were ever added (phase 1).
   secretName: ago-public-tls
   issuerRef:
     name: letsencrypt-prod
     kind: ClusterIssuer
   dnsNames:
-    # `chat-api.` joins while `chat.` is still the API: adding a SAN re-issues the certificate in
-    # place, so the six names already working keep working through it. The name must resolve before
-    # this is applied - issuance is HTTP-01, and Let's Encrypt fetches over the name itself.
-    - chat-api.reserve-me.ru
-    - auth.reserve-me.ru
-    - demo-shop1.reserve-me.ru
-    - reserve-me.ru
-    # `25-182`: `demo-shop2.reserve-me.ru` removed here - the second demo tenant had no listener/route
-    # left to serve it (gateway.yaml, same change) and `ago-landing` had already stopped linking to it.
-    # Same "removing a name needs no validation" rule `22-09`'s own comment below states: this
-    # re-issues once for the remaining names and none of them is re-challenged. The DNS record itself
-    # is the author's own next step, downstream of this change, not performed by it.
-    # `20-20`: AGO Calendar's own two hostnames - a working default this item proposes rather than a
-    # settled name (see this item's report). Adding them re-issues the whole certificate once (fresh
-    # HTTP-01 challenges for these two only - cert-manager does not replay the five that already
-    # passed), the same real, bounded operation `grafana.reserve-me.ru`'s own comment above already
-    # describes for a SAN change.
-    - calendar-api.reserve-me.ru
-    # `22-09`: `calendar.reserve-me.ru` removed 2026-09-06. **Removing a name needs no validation** -
-    # only adding does - so this re-issues once for the seven remaining names and none of them is
-    # re-challenged. The order matters and is the whole reason this comment exists: the SAN goes
-    # first and the A-record goes second. Reversed, the next renewal would fail HTTP-01 for a name
-    # with no DNS, and **one failed authorization fails the whole certificate** - every other
-    # hostname loses TLS with it. That nearly happened with `grafana.` on 2026-09-03.
-    # `22-10`/`adr/0093`: the console gets a name that is not a product, because there is no console
-    # per product any more. `office.` joins *before* anything is served from it and long before
-    # `chat.` and `calendar.` leave - adding a SAN re-issues in place, so the eight names already
-    # working keep working through it.
-    #
-    # The A-record was created 2026-09-03 and confirmed resolving from the node before this was
-    # applied. That order is a gate, not a courtesy: issuance is HTTP-01, Let's Encrypt fetches over
-    # the name itself, and **one failed authorization fails the whole certificate** - every other
-    # hostname would lose TLS with it.
-    - office.reserve-me.ru
-    # `25-103`: MinIO's S3 API gets its own public hostname - `Storage__S3__ServiceUrl` is both the
-    # address the server uses to talk to MinIO and the host a presigned URL is signed against
-    # (`gateway.yaml`'s own new `https-files` listener has the full reasoning), and a browser outside
-    # the cluster could resolve neither `minio` nor any public name before this. A function-scoped
-    # name, not a product one - MinIO is infrastructure, the same reason `auth.` and `calendar-api.`
-    # are named for what they are rather than a product.
-    #
-    # THE A-RECORD MUST EXIST AND RESOLVE BEFORE THIS FILE IS APPLIED - the same gate every addition
-    # above this line states: issuance is HTTP-01, Let's Encrypt fetches over the name itself, and one
-    # failed authorization fails the whole certificate, taking the other nine working names down with
-    # it. Applying this repository's config to the real cluster, and creating/confirming that DNS
-    # record first, is the managing session's own next step - not done by this change.
-    - files.reserve-me.ru
-    # `25-180`: the public brand-identity reference page, registered by the author at reg.ru,
-    # 2026-09-20 - DNS propagation was pending at filing time. **This name is written here but its
-    # resolution is NOT confirmed by this change** - the same THE-A-RECORD-MUST-EXIST-AND-RESOLVE gate
-    # every addition above this line states applies identically: issuance is HTTP-01, Let's Encrypt
-    # fetches over the name itself, and one failed authorization fails the whole certificate, taking
-    # every other working hostname down with it. Confirming `brandbook.reserve-me.ru` actually
-    # resolves (`dig brandbook.reserve-me.ru` or equivalent, from the node) before this file is
-    # applied for real is the managing session's own next step - not performed by this change, and not
-    # something a worktree with no cluster access could verify in the first place.
-    - brandbook.reserve-me.ru
-    # `26-131`: the Android design mini-site (ago-android-design). DNS was confirmed resolving to the
-    # node (`getent hosts android-design.reserve-me.ru` -> the node IP) before this SAN was added, so
-    # the HTTP-01 authorization every name in this shared cert shares can actually complete - one
-    # failed authorization fails the whole certificate and takes every other name down with it.
-    - android-design.reserve-me.ru
-    # `26-267`: dual-serve for the reserve-me.ru -> agochat.ru migration (ago-business
-    # docs/infra/domain-migration-agochat.md, phase 1). The nine agochat.ru names are added ALONGSIDE
-    # the reserve-me.ru ones - a 1:1 mirror of the live host set - so both domains carry valid TLS
-    # through the cutover. Adding SANs re-issues the certificate in place; the nine names above already
-    # passed HTTP-01 and are NOT re-challenged. All nine agochat.ru A-records were confirmed resolving
-    # to the node (`getent hosts` from the node) before this was applied - the same gate every name
-    # above states, because one failed authorization fails the whole certificate. Phase 4 removes the
-    # reserve-me.ru names (SAN first, then A-record - removal needs no validation).
     - chat-api.agochat.ru
     - auth.agochat.ru
     - demo-shop1.agochat.ru

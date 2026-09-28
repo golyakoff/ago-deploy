@@ -178,6 +178,10 @@ spec:
               value: "https://office.reserve-me.ru"
             - name: Operator__ConsoleOrigins__1
               value: "http://localhost:5173"
+            # `26-267`: office.agochat.ru added alongside during the domain migration (phase 1); the
+            # reserve-me.ru origin stays until phase 4.
+            - name: Operator__ConsoleOrigins__2
+              value: "https://office.agochat.ru"
             # `adr/0090`/`20-19`: "ships disabled and stays disabled." `PublicBookingApiOptions.Enabled`
             # already defaults to `false` when the whole `PublicBookingApi` section is absent - this
             # line is not required for that default to hold, it exists so the decision is a visible

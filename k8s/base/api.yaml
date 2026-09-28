@@ -335,6 +335,11 @@ spec:
               value: "https://office.reserve-me.ru"
             - name: Console__AllowedOrigins__1
               value: "http://localhost:5173"
+            # `26-267`: office.agochat.ru added alongside during the domain migration (phase 1), so the
+            # console served at the new host can hold a hub connection and fetch over REST before its
+            # canonical URL is flipped (phase 2). The reserve-me.ru origin stays until phase 4.
+            - name: Console__AllowedOrigins__2
+              value: "https://office.agochat.ru"
             # `25-73`: added `[Required]` in `ago-chat` and this environment never carried a value for
             # it - found live, 2026-09-14, the first redeploy since `25-73` merged, when
             # `ValidateOnStart` refused to let any of the three chat hosts start

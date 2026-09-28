@@ -188,6 +188,38 @@ spec:
         mode: Terminate
         certificateRefs:
           - name: ago-public-tls
+    # `26-267`: dual-serve listeners for the reserve-me.ru -> agochat.ru migration (ago-business
+    # docs/infra/domain-migration-agochat.md, phase 1). Added ALONGSIDE the reserve-me.ru listeners
+    # above - nothing reserve-me.ru is touched, so the invariant "reserve-me.ru works throughout phases
+    # 0-3" holds by construction. One wildcard HTTPS listener covers every agochat.ru subdomain (the
+    # shared ago-public-tls cert carries each exact SAN - tls.yaml), the apex gets its own (a Gateway
+    # API wildcard never matches the bare apex), and two :80 listeners give cert-manager's HTTP-01
+    # solver a path to the agochat.ru challenge and carry the http->https redirect. Phase 4 removes
+    # these together with the reserve-me.ru set.
+    - name: http-agochat
+      port: 80
+      protocol: HTTP
+      hostname: "*.agochat.ru"
+    - name: http-agochat-apex
+      port: 80
+      protocol: HTTP
+      hostname: agochat.ru
+    - name: https-agochat
+      port: 443
+      protocol: HTTPS
+      hostname: "*.agochat.ru"
+      tls:
+        mode: Terminate
+        certificateRefs:
+          - name: ago-public-tls
+    - name: https-agochat-apex
+      port: 443
+      protocol: HTTPS
+      hostname: agochat.ru
+      tls:
+        mode: Terminate
+        certificateRefs:
+          - name: ago-public-tls
 ---
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
@@ -639,3 +671,245 @@ spec:
   logging:
     accessLog:
       format: '$remote_addr - $remote_user [$time_local] "$request_method $uri $server_protocol" $status $body_bytes_sent "$http_referer" "$http_user_agent"'
+---
+# `26-267`: agochat.ru dual-serve routes (migration phase 1). Each mirrors its reserve-me.ru
+# counterpart above verbatim (same backendRefs, same rules) but attaches to the agochat.ru listeners
+# and carries the agochat.ru hostname. Separate routes rather than editing the reserve-me.ru ones, so
+# nothing already serving reserve-me.ru is touched. Phase 4 deletes this whole block together with the
+# reserve-me.ru listeners.
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: http-to-https-redirect-agochat
+spec:
+  parentRefs:
+    - name: ago-chat-gateway
+      sectionName: http-agochat
+    - name: ago-chat-gateway
+      sectionName: http-agochat-apex
+  hostnames:
+    - "*.agochat.ru"
+    - agochat.ru
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+      filters:
+        - type: RequestRedirect
+          requestRedirect:
+            scheme: https
+            statusCode: 301
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: ago-chat-api-agochat
+spec:
+  parentRefs:
+    - name: ago-chat-gateway
+      sectionName: https-agochat
+  hostnames:
+    - chat-api.agochat.ru
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /healthz
+      backendRefs:
+        - name: ago-chat-api
+          port: 80
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /api
+      backendRefs:
+        - name: ago-chat-api
+          port: 80
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /hubs
+      backendRefs:
+        - name: ago-chat-api
+          port: 80
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /widget
+      filters:
+        - type: URLRewrite
+          urlRewrite:
+            path:
+              type: ReplacePrefixMatch
+              replacePrefixMatch: /
+      backendRefs:
+        - name: ago-widget-assets
+          port: 80
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: ago-chat-auth-agochat
+spec:
+  parentRefs:
+    - name: ago-chat-gateway
+      sectionName: https-agochat
+  hostnames:
+    - auth.agochat.ru
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+      backendRefs:
+        - name: keycloak
+          port: 8080
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: ago-console-agochat
+spec:
+  parentRefs:
+    - name: ago-chat-gateway
+      sectionName: https-agochat
+  hostnames:
+    - office.agochat.ru
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+      backendRefs:
+        - name: ago-console
+          port: 80
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: ago-demo-shop1-agochat
+spec:
+  parentRefs:
+    - name: ago-chat-gateway
+      sectionName: https-agochat
+  hostnames:
+    - demo-shop1.agochat.ru
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+      backendRefs:
+        - name: ago-demo-shop1
+          port: 80
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: landing-agochat
+spec:
+  parentRefs:
+    - name: ago-chat-gateway
+      sectionName: https-agochat-apex
+  hostnames:
+    - agochat.ru
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+      backendRefs:
+        - name: ago-landing
+          port: 80
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: brandbook-agochat
+spec:
+  parentRefs:
+    - name: ago-chat-gateway
+      sectionName: https-agochat
+  hostnames:
+    - brandbook.agochat.ru
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+      backendRefs:
+        - name: ago-brandbook
+          port: 80
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: android-design-agochat
+spec:
+  parentRefs:
+    - name: ago-chat-gateway
+      sectionName: https-agochat
+  hostnames:
+    - android-design.agochat.ru
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+      backendRefs:
+        - name: ago-android-design
+          port: 80
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: ago-calendar-api-agochat
+spec:
+  parentRefs:
+    - name: ago-chat-gateway
+      sectionName: https-agochat
+  hostnames:
+    - calendar-api.agochat.ru
+  rules:
+    - matches:
+        - path:
+            type: Exact
+            value: /
+        - path:
+            type: PathPrefix
+            value: /healthz
+        - path:
+            type: PathPrefix
+            value: /api/v1/console
+        - path:
+            type: PathPrefix
+            value: /api/v1/calendars
+        - path:
+            type: PathPrefix
+            value: /api/v1/embed
+        - path:
+            type: PathPrefix
+            value: /api/v1/me
+      backendRefs:
+        - name: ago-calendar-api
+          port: 80
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: ago-minio-files-agochat
+spec:
+  parentRefs:
+    - name: ago-chat-gateway
+      sectionName: https-agochat
+  hostnames:
+    - files.agochat.ru
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+      backendRefs:
+        - name: minio
+          port: 9000

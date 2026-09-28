@@ -387,7 +387,7 @@ images:
   # icon used to be the browser's generic fallback. No migration.
   - name: ago-landing
     newName: ghcr.io/golyakoff/ago-landing
-    newTag: 3882e880183bb764ef6b24eccd15b759a10db866
+    newTag: 285bfc448c2f86b3b2a4c00cc522401a93cdf130
   # `25-180`/`25-183`: the brand-identity reference page, same "does not share a tag with the other
   # three static bundles" reasoning as the comment above - `ago-brandbook` is its own repository,
   # moving on its own commits.

@@ -118,3 +118,20 @@ spec:
     # the HTTP-01 authorization every name in this shared cert shares can actually complete - one
     # failed authorization fails the whole certificate and takes every other name down with it.
     - android-design.reserve-me.ru
+    # `26-267`: dual-serve for the reserve-me.ru -> agochat.ru migration (ago-business
+    # docs/infra/domain-migration-agochat.md, phase 1). The nine agochat.ru names are added ALONGSIDE
+    # the reserve-me.ru ones - a 1:1 mirror of the live host set - so both domains carry valid TLS
+    # through the cutover. Adding SANs re-issues the certificate in place; the nine names above already
+    # passed HTTP-01 and are NOT re-challenged. All nine agochat.ru A-records were confirmed resolving
+    # to the node (`getent hosts` from the node) before this was applied - the same gate every name
+    # above states, because one failed authorization fails the whole certificate. Phase 4 removes the
+    # reserve-me.ru names (SAN first, then A-record - removal needs no validation).
+    - chat-api.agochat.ru
+    - auth.agochat.ru
+    - demo-shop1.agochat.ru
+    - agochat.ru
+    - calendar-api.agochat.ru
+    - office.agochat.ru
+    - files.agochat.ru
+    - brandbook.agochat.ru
+    - android-design.agochat.ru

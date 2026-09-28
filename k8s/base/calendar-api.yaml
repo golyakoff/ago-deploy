@@ -174,14 +174,12 @@ spec:
             # `localhost:5173` is the Vite dev server default, kept so a developer running the console
             # locally against this API works with no second setting - the same convenience
             # `Console__AllowedOrigins__1` gives `ago-console`.
+            # `26-267`: office.agochat.ru is the console origin after the domain migration (phase 4
+            # removed office.reserve-me.ru here). localhost:5173 stays for the Vite dev-server loop.
             - name: Operator__ConsoleOrigins__0
-              value: "https://office.reserve-me.ru"
+              value: "https://office.agochat.ru"
             - name: Operator__ConsoleOrigins__1
               value: "http://localhost:5173"
-            # `26-267`: office.agochat.ru added alongside during the domain migration (phase 1); the
-            # reserve-me.ru origin stays until phase 4.
-            - name: Operator__ConsoleOrigins__2
-              value: "https://office.agochat.ru"
             # `adr/0090`/`20-19`: "ships disabled and stays disabled." `PublicBookingApiOptions.Enabled`
             # already defaults to `false` when the whole `PublicBookingApi` section is absent - this
             # line is not required for that default to hold, it exists so the decision is a visible

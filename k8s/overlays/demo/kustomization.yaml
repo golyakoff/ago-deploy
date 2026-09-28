@@ -504,7 +504,7 @@ patches:
                   - name: DemoTenant__Enabled
                     value: "true"
                   - name: DemoTenant__VisitorOrigin
-                    value: "https://demo-shop1.reserve-me.ru"
+                    value: "https://demo-shop1.agochat.ru"
                   # `23-45`: the two seeded shops whose operator password is printed on the demo
                   # pages, and the only accounts the console's standing public-demo warning is shown
                   # to. Everybody else - a real tenant, a minted demo tenant, the platform owner - is

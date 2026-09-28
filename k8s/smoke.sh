@@ -25,7 +25,7 @@
 # Run from anywhere for the HTTP checks. The migration check needs cluster access and is skipped with
 # a warning without it - run it on the node to get the check that matters most.
 #
-# Usage:  ./smoke.sh [domain]           (default: reserve-me.ru)
+# Usage:  ./smoke.sh [domain]           (default: agochat.ru)
 #         CHAT_REPO=~/ago/ago-chat ./smoke.sh    (enables the migration check)
 #
 # Side effect worth knowing: the visitor-session check creates one real visitor row per run. Visitors
@@ -34,7 +34,7 @@
 
 set -uo pipefail
 
-DOMAIN="${1:-reserve-me.ru}"
+DOMAIN="${1:-agochat.ru}"
 
 # The chat API's hostname, as a variable rather than spelled out six times. It moved from `chat.` to
 # `chat-api.` on 2026-09-02, when the naming scheme was settled: the bare product name belongs to the

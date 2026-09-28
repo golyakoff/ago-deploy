@@ -1,201 +1,31 @@
-# adr/0026, as amended by adr/0091: the public edge. chat.reserve-me.ru is the operator console and
-# chat-api.reserve-me.ru is the API - console.reserve-me.ru is retired. Also auth.reserve-me.ru,
-# demo-shop1.reserve-me.ru, and the
-# domain's own apex, reserve-me.ru (the public marketing page, `ago-landing` - a separate
-# repository, repositories.md's "each deployable surface gets its own repo" pattern; a Gateway API
-# wildcard hostname matches subdomains only, never the bare apex, hence its own listener pair rather
-# than a route on the wildcard ones). Same NGINX Gateway Fabric component as overlays/local/
-# (adr/0014) - only the listeners, hostnames, and TLS wiring differ.
+# adr/0026, adr/0091, adr/0093; `26-267`: the public edge, on agochat.ru.
 #
-# **grafana.reserve-me.ru was removed 2026-08-25.** It had a listener and an HTTPRoute here, on the
-# author's own 2026-08-24 call: public Grafana over an SSH tunnel, for reachability without a live
-# session, gated by Grafana's own login plus TLS rather than by network topology. Reversed for two
-# reasons that were not in view then. It is an admin UI behind a single shared password with no second
-# factor and no lockout, and (`17-04`) nothing in this project watches for a published vulnerability in
-# anything it ships - so a permanently internet-facing admin surface is one whose next CVE nobody would
-# hear about. And the need it served - looking at dashboards without a live session - is served by an
-# SSH tunnel that costs one command, documented in ago-root's runbooks/public-deploy.md.
+# The stack migrated from reserve-me.ru to agochat.ru (ago-business
+# docs/infra/domain-migration-agochat.md). Phase 4 (this file) removed the reserve-me.ru listeners and
+# routes; only agochat.ru remains. The reserve-me.ru HTTPRoute objects are deleted explicitly on the
+# node (kubectl apply does not prune), and the reserve-me.ru A-records are the author's own registrar
+# step. A Gateway API wildcard hostname matches subdomains only, never the bare apex, so the apex
+# (ago-landing) keeps its own listener pair. Same NGINX Gateway Fabric component as overlays/local/
+# (adr/0014) - only the listeners, hostnames and TLS wiring differ.
 #
-# Grafana was never the answer to "is it alive" anyway: it runs inside the thing it watches, so it
-# cannot report the failure that matters most. That question is an external check against
-# chat.reserve-me.ru/healthz/ready, which already exercises Postgres, RabbitMQ and Redis (ago-root's
-# backlog/15-03).
-#
-# The console's own listener/HTTPRoute below were designed by 8-01 ahead of this item - 8-02 only had
-# to create the `ago-console` Service (console-static.yaml) the existing backendRef already names;
-# nothing in this file needed to change for that route to start working. The name it answers on has
-# since changed from console. to chat. (adr/0091); the Service and the route are the same ones.
+# grafana is not served here (removed 2026-08-25; reachable over an SSH tunnel - runbooks/public-deploy.md).
 apiVersion: gateway.networking.k8s.io/v1
 kind: Gateway
 metadata:
   name: ago-chat-gateway
 spec:
   gatewayClassName: nginx
-  # `17-02`: same access-log format as overlays/local/gateway.yaml, and for the same reason - the
-  # NginxProxy at the bottom of this file has it. It matters more here: this is the Gateway a real
-  # visitor's hub connection actually crosses, and the token in that request's query string was being
-  # written to this node's disk in full on every connect.
   infrastructure:
     parametersRef:
       group: gateway.nginx.org
       kind: NginxProxy
       name: ago-chat-gateway-proxy
   listeners:
-    # Plain HTTP stays open on every host in this overlay - cert-manager's own gatewayHTTPRoute ACME
-    # solver (adr/0026, tls.yaml) answers Let's Encrypt's HTTP-01 challenge through a temporary
-    # HTTPRoute it creates itself under this same Gateway, and it needs a working :80 listener to do
-    # that. Everything else on :80 redirects to HTTPS (the `http-to-https-redirect` HTTPRoute below) -
-    # deferred by 8-01 for lack of a live server to verify against; now there is one (8-02).
-    - name: http
-      port: 80
-      protocol: HTTP
-      hostname: "*.reserve-me.ru"
-    # A Gateway API wildcard hostname (`*.reserve-me.ru` above) matches subdomains only, never the
-    # bare apex - the landing page (ago-landing) lives at the apex itself, so it needs its own
-    # listener pair (this one plus `https-landing` below), not just a route on the wildcard ones.
-    - name: http-apex
-      port: 80
-      protocol: HTTP
-      hostname: reserve-me.ru
-    # `22-10`/`adr/0093`: the console's own name, and the reason it is not a product name. There is no
-    # console per product any more, so `adr/0091`'s rule - the bare product name belongs to that
-    # product's console - describes a thing that stopped existing; `office.` is a hostname no product
-    # can claim.
-    #
-    # It goes up *beside* `https-chat` rather than replacing it. Both names serve the console while
-    # the move is verified, and `chat.` retires in this item's own last step, once a real sign-in at
-    # `office.` has been seen - not once it returns 200, which `20-20` already proved means nothing.
-    - name: https-office
-      port: 443
-      protocol: HTTPS
-      hostname: office.reserve-me.ru
-      tls:
-        mode: Terminate
-        certificateRefs:
-          - name: ago-public-tls
-    # The chat API's new, permanent name. Both listeners serve the same API for now, on purpose:
-    # `chat.` is what the widget, the console and the landing page's copy-me snippet all point at
-    # today, and it becomes the chat *console* at the end of this migration. Serving both first is
-    # what makes that flip safe - a consumer can move to `chat-api.` and be verified working before
-    # anything about `chat.` changes.
-    - name: https-chat-api
-      port: 443
-      protocol: HTTPS
-      hostname: chat-api.reserve-me.ru
-      tls:
-        mode: Terminate
-        certificateRefs:
-          - name: ago-public-tls
-    - name: https-auth
-      port: 443
-      protocol: HTTPS
-      hostname: auth.reserve-me.ru
-      tls:
-        mode: Terminate
-        certificateRefs:
-          - name: ago-public-tls
-    # `adr/0091` step 3 completed, 2026-09-03: there is no `https-console` listener any more. The
-    # console lives at `chat.reserve-me.ru`, the bare product name, which is the whole point of that
-    # decision - `console.` was a role word with no product in it and could not survive a second
-    # product having a console too.
-    #
-    # The ADR planned to keep `console.` for one release as a grace period for bookmarks and links.
-    # The author retired it immediately instead, on the ground the grace period was protecting
-    # nobody: this is a live demo stand with no tenants, and the only person who ever opened that
-    # address was the author. A grace period with no one in it is just a second name to maintain.
-    # 8-02: demo-shop1-static.yaml creates the ago-demo-shop1 Service this route's own backendRef
-    # names - the public demo landing page + the widget's own built bundle, served together
-    # (demo-shop1-static.yaml's own header comment has the same-origin reasoning).
-    - name: https-demo-shop1
-      port: 443
-      protocol: HTTPS
-      hostname: demo-shop1.reserve-me.ru
-      tls:
-        mode: Terminate
-        certificateRefs:
-          - name: ago-public-tls
-    # The public marketing page (ago-landing, a separate repository - repositories.md's "each
-    # deployable surface gets its own repo" pattern) at the domain's own apex.
-    - name: https-landing
-      port: 443
-      protocol: HTTPS
-      hostname: reserve-me.ru
-      tls:
-        mode: Terminate
-        certificateRefs:
-          - name: ago-public-tls
-    # `20-20`: AGO Calendar's own listener. There were two; `22-09` retired the console one
-    # (`calendar.reserve-me.ru`) on 2026-09-06, because the calendar's screens are part of the one
-    # console at `office.` since `22-06`. **The API's own name stays** - the console merged, the API
-    # did not, and conflating the two is the mistake this comment exists to prevent.
-    - name: https-calendar
-      port: 443
-      protocol: HTTPS
-      hostname: calendar-api.reserve-me.ru
-      tls:
-        mode: Terminate
-        certificateRefs:
-          - name: ago-public-tls
-    # `25-103`: `Storage__S3__ServiceUrl` (`base/api.yaml`, `worker.yaml`, `webhooks.yaml`) is the one
-    # setting `Ago.Platform.Storage.S3` uses both for the server's own calls to MinIO and as the host
-    # a presigned URL is signed against (AWS SigV4 signs the host into the request) - it was
-    # `http://minio:9000`, the in-cluster Service DNS name, and nothing in this file routed any public
-    # hostname to MinIO at all, so every presigned upload/download URL this deployment issued named a
-    # host a browser outside the cluster could not resolve. This listener, and the HTTPRoute below it,
-    # are what fixes that.
-    #
-    # `:9000` (the S3 API) only - **never `:9001`** (MinIO's own admin console, `minio.yaml`'s own
-    # `--console-address :9001`). Same "no permanently internet-facing admin surface" instinct this
-    # file's own header already states for why `grafana.reserve-me.ru` was removed 2026-08-25: an
-    # admin UI with no second factor and no lockout, permanently reachable from the internet, is a
-    # standing risk this deployment does not need to carry. No listener, route, or backendRef in this
-    # file names `9001`, and none should.
-    - name: https-files
-      port: 443
-      protocol: HTTPS
-      hostname: files.reserve-me.ru
-      tls:
-        mode: Terminate
-        certificateRefs:
-          - name: ago-public-tls
-    # `25-180`: the public brand-identity reference page (ago-brandbook, a separate repository -
-    # repositories.md's "each deployable surface gets its own repo" pattern), on its own subdomain
-    # rather than the apex - unlike ago-landing this is not the platform's front door, it is a
-    # reference page for whoever is building on top of the identity, so it earns a functional name
-    # rather than a claim on the bare domain. Registered by the author at reg.ru, 2026-09-20.
-    #
-    # **The DNS record must resolve before this listener is exercised for real** - same HTTP-01 gate
-    # every other name in this file and in tls.yaml already states: cert-manager's own solver fetches
-    # over the name itself, and this listener's own TLS termination is useless without a certificate
-    # that actually validated. Confirming that resolution and applying this file are the managing
-    # session's own next step, not done by this change.
-    - name: https-brandbook
-      port: 443
-      protocol: HTTPS
-      hostname: brandbook.reserve-me.ru
-      tls:
-        mode: Terminate
-        certificateRefs:
-          - name: ago-public-tls
-    # `26-131`: the Android design mini-site (ago-android-design, a separate repository), same
-    # subdomain-not-apex, own-repo, unadvertised shape as https-brandbook directly above. Registered
-    # by the author, DNS confirmed resolving to the node before this listener was applied.
-    - name: https-android-design
-      port: 443
-      protocol: HTTPS
-      hostname: android-design.reserve-me.ru
-      tls:
-        mode: Terminate
-        certificateRefs:
-          - name: ago-public-tls
-    # `26-267`: dual-serve listeners for the reserve-me.ru -> agochat.ru migration (ago-business
-    # docs/infra/domain-migration-agochat.md, phase 1). Added ALONGSIDE the reserve-me.ru listeners
-    # above - nothing reserve-me.ru is touched, so the invariant "reserve-me.ru works throughout phases
-    # 0-3" holds by construction. One wildcard HTTPS listener covers every agochat.ru subdomain (the
-    # shared ago-public-tls cert carries each exact SAN - tls.yaml), the apex gets its own (a Gateway
-    # API wildcard never matches the bare apex), and two :80 listeners give cert-manager's HTTP-01
-    # solver a path to the agochat.ru challenge and carry the http->https redirect. Phase 4 removes
-    # these together with the reserve-me.ru set.
+    # Plain HTTP: cert-manager's own gatewayHTTPRoute ACME solver (adr/0026, tls.yaml) answers
+    # Let's Encrypt's HTTP-01 challenge through a temporary HTTPRoute under this Gateway, and needs a
+    # working :80 listener per challenged name. Everything else on :80 redirects to HTTPS
+    # (http-to-https-redirect below). The wildcard covers every agochat.ru subdomain; the apex gets its
+    # own :80 listener (a wildcard never matches the bare apex).
     - name: http-agochat
       port: 80
       protocol: HTTP
@@ -204,6 +34,8 @@ spec:
       port: 80
       protocol: HTTP
       hostname: agochat.ru
+    # One wildcard HTTPS listener terminates every agochat.ru subdomain with the shared ago-public-tls
+    # cert (which carries each exact SAN - tls.yaml); the apex gets its own.
     - name: https-agochat
       port: 443
       protocol: HTTPS
@@ -224,22 +56,20 @@ spec:
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
 metadata:
-  name: http-to-https-redirect
+  name: http-to-https-redirect-agochat
 spec:
   parentRefs:
     - name: ago-chat-gateway
-      sectionName: http
+      sectionName: http-agochat
     - name: ago-chat-gateway
-      sectionName: http-apex
+      sectionName: http-agochat-apex
   hostnames:
-    - "*.reserve-me.ru"
-    - reserve-me.ru
+    - "*.agochat.ru"
+    - agochat.ru
   rules:
-    # cert-manager's own ACME HTTP-01 solver attaches its own temporary HTTPRoute to this same
-    # `http` listener with an *exact* hostname (the specific domain being challenged) and an exact
-    # `/.well-known/acme-challenge/<token>` path - Gateway API's own route-precedence rules (exact
-    # hostname beats this route's wildcard; exact path beats this rule's PathPrefix) mean that route
-    # always wins for its own request without needing to special-case it here.
+    # cert-manager's own ACME HTTP-01 solver attaches its own temporary HTTPRoute to the :80 listeners
+    # with an exact hostname and an exact /.well-known/acme-challenge/<token> path; Gateway API's
+    # route-precedence rules (exact beats wildcard) mean that route always wins for its own request.
     - matches:
         - path:
             type: PathPrefix
@@ -253,21 +83,14 @@ spec:
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
 metadata:
-  name: ago-chat-api
+  name: ago-chat-api-agochat
 spec:
-  # `adr/0091` step 3, 2026-09-03: `chat.` is gone from here. The API answered on both names for one
-  # release so every consumer could move and be verified on `chat-api.` first - the widget's build
-  # default, the console's `.env.production`, both demo images, `smoke.sh`. All were moved, deployed
-  # and checked live (zero occurrences of the bare `chat.` origin in any served bundle) before this
-  # line was deleted, which is what made deleting it a non-event rather than a cutover.
   parentRefs:
     - name: ago-chat-gateway
-      sectionName: https-chat-api
+      sectionName: https-agochat
   hostnames:
-    - chat-api.reserve-me.ru
+    - chat-api.agochat.ru
   rules:
-    # Same three prefixes as overlays/local/gateway.yaml - unchanged by the public/TLS shift, only the
-    # hostname and parent listener differ.
     - matches:
         - path:
             type: PathPrefix
@@ -289,30 +112,9 @@ spec:
       backendRefs:
         - name: ago-chat-api
           port: 80
-    # `adr/0092`: the one thing on this host that is not the API. The widget bundle a tenant's own
-    # page loads - `<script src="https://chat-api.reserve-me.ru/widget/widget.js">`.
-    #
-    # **Why on the API's host rather than a `widget.`/`cdn.` one of its own.** The widget bakes its
-    # API origin in at build time, and that single property is what forced `adr/0091`'s rename into a
-    # three-step migration with a cache-expiry wait in the middle: an already-served bundle cannot be
-    # re-pointed by anything we deploy. Serving the canonical copy from the API's own origin is the
-    # way out - `config.ts` already reads `data-api` with a build-time fallback and already captures
-    # `script.src`, so the widget can eventually derive its API base from where it was loaded. A
-    # separate asset hostname would foreclose that permanently and make the next rename cost what
-    # this one did.
-    #
-    # Two arguments for a separate host were checked and dropped rather than repeated: the per-IP
-    # `RateLimitPolicy` below targets the **Gateway**, so it already applies to every hostname
-    # including any new one; and cache headers come from the image's own nginx.conf, not from the
-    # host it is routed at.
-    #
-    # `ReplacePrefixMatch` strips `/widget` so the image serves its files from its own root - which
-    # keeps it identical to the demo images' layout, and is what lets `ui/moduleLoader.ts` resolve
-    # `widget-module-booking.js` as a sibling of `widget.js` (`adr/0058`) without knowing this
-    # prefix exists.
-    #
-    # The API pods never see these requests. Matched on `/widget` rather than `/widget/` so the bare
-    # path resolves too.
+    # adr/0092: the widget bundle a tenant's page loads - <script src="https://chat-api.agochat.ru/widget/widget.js">.
+    # ReplacePrefixMatch strips /widget so the image serves from its own root; matched on /widget (not
+    # /widget/) so the bare path resolves too.
     - matches:
         - path:
             type: PathPrefix
@@ -330,16 +132,15 @@ spec:
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
 metadata:
-  name: ago-chat-auth
+  name: ago-chat-auth-agochat
 spec:
   parentRefs:
     - name: ago-chat-gateway
-      sectionName: https-auth
+      sectionName: https-agochat
   hostnames:
-    - auth.reserve-me.ru
+    - auth.agochat.ru
   rules:
-    # The whole app, not a path prefix - Keycloak owns this entire hostname (its login UI, its
-    # admin console, its OIDC discovery/JWKS/token endpoints all live under one root here).
+    # The whole app, not a path prefix - Keycloak owns this entire hostname.
     - matches:
         - path:
             type: PathPrefix
@@ -351,28 +152,14 @@ spec:
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
 metadata:
-  name: ago-console
+  name: ago-console-agochat
 spec:
-  # `adr/0091` step 3: the bare product name now belongs to the human-facing console, which is the
-  # whole point of that decision - `chat.reserve-me.ru` is the address a customer would guess, and
-  # `console.` was a role word with no product in it.
-  #
-  # **`console.` stays for one more release on purpose.** A bookmark, a link somebody was sent, and
-  # the operator-login button on the landing page all still name it; deleting the two at once would
-  # make every one of them fail on the same day. Removing it - here, from the certificate's SAN list,
-  # from the Keycloak client's redirect URIs, and from DNS - is the release after this one.
-  # `22-10`: two parents and two hostnames, deliberately, for the length of the move. The same
-  # bundle answers at both names, so a bookmark keeps working while `office.` is proven. Retiring
-  # `chat.` is removing one entry from each of these two lists - and then, in strict order, the
-  # certificate SAN and only after that the A-record.
   parentRefs:
     - name: ago-chat-gateway
-      sectionName: https-office
+      sectionName: https-agochat
   hostnames:
-    - office.reserve-me.ru
+    - office.agochat.ru
   rules:
-    # ago-console Service: console-static.yaml (8-02), port 80 matching every other Service in
-    # this overlay's own convention (base/*.yaml).
     - matches:
         - path:
             type: PathPrefix
@@ -384,16 +171,14 @@ spec:
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
 metadata:
-  name: ago-demo-shop1
+  name: ago-demo-shop1-agochat
 spec:
   parentRefs:
     - name: ago-chat-gateway
-      sectionName: https-demo-shop1
+      sectionName: https-agochat
   hostnames:
-    - demo-shop1.reserve-me.ru
+    - demo-shop1.agochat.ru
   rules:
-    # ago-demo-shop1 Service: demo-shop1-static.yaml (8-02) - the whole app, not a path prefix,
-    # same shape as ago-console above (a single static site, no API path split needed here).
     - matches:
         - path:
             type: PathPrefix
@@ -405,16 +190,14 @@ spec:
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
 metadata:
-  name: landing
+  name: landing-agochat
 spec:
   parentRefs:
     - name: ago-chat-gateway
-      sectionName: https-landing
+      sectionName: https-agochat-apex
   hostnames:
-    - reserve-me.ru
+    - agochat.ru
   rules:
-    # ago-landing Service: landing-static.yaml - the whole app, not a path prefix, same shape as
-    # every other single-static-site route in this overlay.
     - matches:
         - path:
             type: PathPrefix
@@ -423,18 +206,16 @@ spec:
         - name: ago-landing
           port: 80
 ---
-# `25-180`: the brand-identity reference page - ago-brandbook Service (brandbook-static.yaml), same
-# whole-app-not-a-prefix shape as every other single-static-site route in this overlay.
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
 metadata:
-  name: brandbook
+  name: brandbook-agochat
 spec:
   parentRefs:
     - name: ago-chat-gateway
-      sectionName: https-brandbook
+      sectionName: https-agochat
   hostnames:
-    - brandbook.reserve-me.ru
+    - brandbook.agochat.ru
   rules:
     - matches:
         - path:
@@ -444,18 +225,16 @@ spec:
         - name: ago-brandbook
           port: 80
 ---
-# `26-131`: the Android design mini-site - ago-android-design Service (android-design-static.yaml),
-# same whole-app-not-a-prefix shape as the brandbook route directly above.
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
 metadata:
-  name: android-design
+  name: android-design-agochat
 spec:
   parentRefs:
     - name: ago-chat-gateway
-      sectionName: https-android-design
+      sectionName: https-agochat
   hostnames:
-    - android-design.reserve-me.ru
+    - android-design.agochat.ru
   rules:
     - matches:
         - path:
@@ -465,53 +244,20 @@ spec:
         - name: ago-android-design
           port: 80
 ---
-# `20-20`: AGO Calendar's own REST API. No `/hubs` prefix - this host maps no SignalR hub at all
-# (`Ago.Calendar.Api/Program.cs` has no `MapHub` call; checked against the source, not assumed). No
-# `/healthz` prefix either, matching calendar-api.yaml's own header: this host serves no such route
-# today, so a route naming it would 404 on every request rather than proxy anything real.
+# 20-20/22-18: AGO Calendar's own REST API. No /hubs (no SignalR hub here). The public surface is
+# enumerated rather than PathPrefix / so the chat-to-module channel (/api/v1/module-tasks,
+# /api/v1/module-registrations, authenticated by a deployment-wide secret) is never published; those
+# calls stay inside the pod network. A route added to this host is not served until it is named here.
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
 metadata:
-  name: ago-calendar-api
+  name: ago-calendar-api-agochat
 spec:
   parentRefs:
     - name: ago-chat-gateway
-      sectionName: https-calendar
+      sectionName: https-agochat
   hostnames:
-    - calendar-api.reserve-me.ru
-  # `22-18`: the public surface is enumerated rather than left as `PathPrefix /`, because two prefixes
-  # must not be on it. `/api/v1/module-tasks` (`adr/0065`) and `/api/v1/module-registrations`
-  # (`adr/0095`) are the chat-to-module channel: chat and this API run in the same cluster and can
-  # reach each other by Service DNS, so those calls never need to leave the pod network - and the
-  # provisioning routes are authenticated by a **deployment-wide** secret whose holder can register,
-  # rotate or delete the registration for *any* site this deployment serves (`adr/0095`'s own
-  # Consequences). Publishing them buys nothing and costs that.
-  #
-  # Gateway API has no negative matcher, so exclusion means listing what stays. That is the risk in
-  # this change and it is stated rather than hidden: a prefix omitted here stops being served, and the
-  # failure looks like a broken screen rather than a routing change. The list below was read out of
-  # `Ago.Calendar.Api/Program.cs`'s own registrations rather than assumed:
-  #
-  #   /                       the module-name probe (`MapGet("/", () => module.Name)`) - Exact, not a
-  #                           prefix, precisely so it cannot re-admit everything beneath it
-  #   /healthz                live, ready, version
-  #   /api/v1/console         the operator console (`MapConsoleEndpoints`)
-  #   /api/v1/calendars       booking and phone verification
-  #   /api/v1/embed           the public booking surface (`adr/0090` - gated off in code, routed anyway
-  #                           so enabling it is a configuration change and not also a routing one)
-  #   /api/v1/me              which shops this identity can reach a calendar in (`22-14`/`adr/0100`),
-  #                           called by the console from the browser, so it belongs with
-  #                           `/api/v1/console` rather than with the module channel
-  #
-  # `22-23`: that last line was added the same day `22-18` landed, and its absence would have been the
-  # first proof of the risk stated above. `22-14` gave `Ago.Calendar.Api` a new browser-facing route a
-  # few hours after this list was read out of `Program.cs`, and neither item could see the other: the
-  # route would have 404ed at the gateway, and the console would have rendered "you have no calendar" -
-  # which is the exact symptom `22-14` exists to remove. **A route added to that host is not served
-  # until it is named here.**
-  #
-  # `/dev/*` is deliberately absent: those endpoints map only outside Production (`ago-root#354`), and
-  # smoke.sh asserts they 404. A route for them would make that check prove less, not more.
+    - calendar-api.agochat.ru
   rules:
     - matches:
         - path:
@@ -536,23 +282,18 @@ spec:
         - name: ago-calendar-api
           port: 80
 ---
-# `25-103`: same shape as `ago-demo-shop1` above - one listener, one route, the whole app behind
-# `PathPrefix /`, no path split needed for a single-purpose backend.
-#
-# `minio.yaml`'s own Service exposes two named ports on one Service, `api` (9000) and `console`
-# (9001) - this backendRef names `port: 9000` explicitly, by number, so the admin console stays
-# unreachable through this Gateway regardless of what the Service itself exposes. Nothing in this
-# repository names port 9001 in a route, and this rule is why.
+# 25-103: MinIO's S3 API. backendRef names port 9000 (the S3 API) explicitly, by number, so the admin
+# console (:9001) stays unreachable through this Gateway.
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
 metadata:
-  name: ago-minio-files
+  name: ago-minio-files-agochat
 spec:
   parentRefs:
     - name: ago-chat-gateway
-      sectionName: https-files
+      sectionName: https-agochat
   hostnames:
-    - files.reserve-me.ru
+    - files.agochat.ru
   rules:
     - matches:
         - path:
@@ -671,245 +412,3 @@ spec:
   logging:
     accessLog:
       format: '$remote_addr - $remote_user [$time_local] "$request_method $uri $server_protocol" $status $body_bytes_sent "$http_referer" "$http_user_agent"'
----
-# `26-267`: agochat.ru dual-serve routes (migration phase 1). Each mirrors its reserve-me.ru
-# counterpart above verbatim (same backendRefs, same rules) but attaches to the agochat.ru listeners
-# and carries the agochat.ru hostname. Separate routes rather than editing the reserve-me.ru ones, so
-# nothing already serving reserve-me.ru is touched. Phase 4 deletes this whole block together with the
-# reserve-me.ru listeners.
-apiVersion: gateway.networking.k8s.io/v1
-kind: HTTPRoute
-metadata:
-  name: http-to-https-redirect-agochat
-spec:
-  parentRefs:
-    - name: ago-chat-gateway
-      sectionName: http-agochat
-    - name: ago-chat-gateway
-      sectionName: http-agochat-apex
-  hostnames:
-    - "*.agochat.ru"
-    - agochat.ru
-  rules:
-    - matches:
-        - path:
-            type: PathPrefix
-            value: /
-      filters:
-        - type: RequestRedirect
-          requestRedirect:
-            scheme: https
-            statusCode: 301
----
-apiVersion: gateway.networking.k8s.io/v1
-kind: HTTPRoute
-metadata:
-  name: ago-chat-api-agochat
-spec:
-  parentRefs:
-    - name: ago-chat-gateway
-      sectionName: https-agochat
-  hostnames:
-    - chat-api.agochat.ru
-  rules:
-    - matches:
-        - path:
-            type: PathPrefix
-            value: /healthz
-      backendRefs:
-        - name: ago-chat-api
-          port: 80
-    - matches:
-        - path:
-            type: PathPrefix
-            value: /api
-      backendRefs:
-        - name: ago-chat-api
-          port: 80
-    - matches:
-        - path:
-            type: PathPrefix
-            value: /hubs
-      backendRefs:
-        - name: ago-chat-api
-          port: 80
-    - matches:
-        - path:
-            type: PathPrefix
-            value: /widget
-      filters:
-        - type: URLRewrite
-          urlRewrite:
-            path:
-              type: ReplacePrefixMatch
-              replacePrefixMatch: /
-      backendRefs:
-        - name: ago-widget-assets
-          port: 80
----
-apiVersion: gateway.networking.k8s.io/v1
-kind: HTTPRoute
-metadata:
-  name: ago-chat-auth-agochat
-spec:
-  parentRefs:
-    - name: ago-chat-gateway
-      sectionName: https-agochat
-  hostnames:
-    - auth.agochat.ru
-  rules:
-    - matches:
-        - path:
-            type: PathPrefix
-            value: /
-      backendRefs:
-        - name: keycloak
-          port: 8080
----
-apiVersion: gateway.networking.k8s.io/v1
-kind: HTTPRoute
-metadata:
-  name: ago-console-agochat
-spec:
-  parentRefs:
-    - name: ago-chat-gateway
-      sectionName: https-agochat
-  hostnames:
-    - office.agochat.ru
-  rules:
-    - matches:
-        - path:
-            type: PathPrefix
-            value: /
-      backendRefs:
-        - name: ago-console
-          port: 80
----
-apiVersion: gateway.networking.k8s.io/v1
-kind: HTTPRoute
-metadata:
-  name: ago-demo-shop1-agochat
-spec:
-  parentRefs:
-    - name: ago-chat-gateway
-      sectionName: https-agochat
-  hostnames:
-    - demo-shop1.agochat.ru
-  rules:
-    - matches:
-        - path:
-            type: PathPrefix
-            value: /
-      backendRefs:
-        - name: ago-demo-shop1
-          port: 80
----
-apiVersion: gateway.networking.k8s.io/v1
-kind: HTTPRoute
-metadata:
-  name: landing-agochat
-spec:
-  parentRefs:
-    - name: ago-chat-gateway
-      sectionName: https-agochat-apex
-  hostnames:
-    - agochat.ru
-  rules:
-    - matches:
-        - path:
-            type: PathPrefix
-            value: /
-      backendRefs:
-        - name: ago-landing
-          port: 80
----
-apiVersion: gateway.networking.k8s.io/v1
-kind: HTTPRoute
-metadata:
-  name: brandbook-agochat
-spec:
-  parentRefs:
-    - name: ago-chat-gateway
-      sectionName: https-agochat
-  hostnames:
-    - brandbook.agochat.ru
-  rules:
-    - matches:
-        - path:
-            type: PathPrefix
-            value: /
-      backendRefs:
-        - name: ago-brandbook
-          port: 80
----
-apiVersion: gateway.networking.k8s.io/v1
-kind: HTTPRoute
-metadata:
-  name: android-design-agochat
-spec:
-  parentRefs:
-    - name: ago-chat-gateway
-      sectionName: https-agochat
-  hostnames:
-    - android-design.agochat.ru
-  rules:
-    - matches:
-        - path:
-            type: PathPrefix
-            value: /
-      backendRefs:
-        - name: ago-android-design
-          port: 80
----
-apiVersion: gateway.networking.k8s.io/v1
-kind: HTTPRoute
-metadata:
-  name: ago-calendar-api-agochat
-spec:
-  parentRefs:
-    - name: ago-chat-gateway
-      sectionName: https-agochat
-  hostnames:
-    - calendar-api.agochat.ru
-  rules:
-    - matches:
-        - path:
-            type: Exact
-            value: /
-        - path:
-            type: PathPrefix
-            value: /healthz
-        - path:
-            type: PathPrefix
-            value: /api/v1/console
-        - path:
-            type: PathPrefix
-            value: /api/v1/calendars
-        - path:
-            type: PathPrefix
-            value: /api/v1/embed
-        - path:
-            type: PathPrefix
-            value: /api/v1/me
-      backendRefs:
-        - name: ago-calendar-api
-          port: 80
----
-apiVersion: gateway.networking.k8s.io/v1
-kind: HTTPRoute
-metadata:
-  name: ago-minio-files-agochat
-spec:
-  parentRefs:
-    - name: ago-chat-gateway
-      sectionName: https-agochat
-  hostnames:
-    - files.agochat.ru
-  rules:
-    - matches:
-        - path:
-            type: PathPrefix
-            value: /
-      backendRefs:
-        - name: minio
-          port: 9000

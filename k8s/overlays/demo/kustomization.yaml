@@ -304,7 +304,7 @@ images:
   # requires the Booked state, never legal on a pending row (mirrors 26-163 on Android). No migration.
   - name: ago-console
     newName: ghcr.io/golyakoff/ago-console
-    newTag: 515e9ef20a0a0459d3c39bee75189108f07d1dbb
+    newTag: 15bcd373adb6a36b1a950ebcf87038588f9856d1
   # All three come from one `ago-widget` commit, and that is the point rather than tidiness: the two
   # demo pages and a real tenant's embed then run byte-identical bundles, which is checkable (three
   # `version.json` files naming one commit) instead of assumed.
@@ -640,7 +640,7 @@ patches:
           - "start-dev"
           - "--import-realm"
           - "--health-enabled=true"
-          - "--hostname=https://auth.reserve-me.ru"
+          - "--hostname=https://auth.agochat.ru"
           - "--hostname-strict=false"
           - "--proxy-headers=xforwarded"
           - "--http-enabled=true"
@@ -784,7 +784,7 @@ patches:
               - name: api
                 env:
                   - name: Storage__S3__ServiceUrl
-                    value: "https://files.reserve-me.ru"
+                    value: "https://files.agochat.ru"
   - target:
       kind: Deployment
       name: ago-chat-worker
@@ -800,7 +800,7 @@ patches:
               - name: worker
                 env:
                   - name: Storage__S3__ServiceUrl
-                    value: "https://files.reserve-me.ru"
+                    value: "https://files.agochat.ru"
   - target:
       kind: Deployment
       name: ago-chat-webhooks
@@ -816,7 +816,7 @@ patches:
               - name: webhooks
                 env:
                   - name: Storage__S3__ServiceUrl
-                    value: "https://files.reserve-me.ru"
+                    value: "https://files.agochat.ru"
   # `25-109`'s own live capacity-ramp investigation found base/postgres.yaml's own 512Mi limit is a
   # real, reproduced OOM at ~500 concurrently open conversations - not a guess, a crash caught live
   # (`load/reports/2026-09-15-local-capacity-ramp.md`, Run 1). This node runs the real deployment,

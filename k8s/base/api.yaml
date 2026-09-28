@@ -245,7 +245,7 @@ spec:
             - name: Billing__PricePerExtraSeatRub
               value: "200"
             - name: Billing__CheckoutReturnUrl
-              value: "https://office.reserve-me.ru/settings/billing"
+              value: "https://office.agochat.ru/settings/billing"
             - name: Billing__YooKassa__ShopId
               value: "STUB-NOT-A-REAL-YOOKASSA-ACCOUNT"
             - name: Billing__YooKassa__SecretKey
@@ -347,7 +347,7 @@ spec:
             # `Console__AllowedOrigins__0`/`Billing__CheckoutReturnUrl` already use - this is where an
             # invite email's link actually sends the invitee.
             - name: OperatorInvite__ConsoleBaseUrl
-              value: "https://office.reserve-me.ru"
+              value: "https://office.agochat.ru"
             - name: Otel__Exporter__Endpoint
               value: "http://jaeger:4317"
           volumeMounts:

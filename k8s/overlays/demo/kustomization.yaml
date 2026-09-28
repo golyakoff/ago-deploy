@@ -401,7 +401,7 @@ images:
     newName: ghcr.io/golyakoff/ago-android-design
     # `26-163`, 2026-09-26: adds the redesigned «Ожидают» (pending) list + detail-sheet mockup to
     # booking.html §04 (matches the shipped app redesign — no hex, no fake confirm button, no no-show).
-    newTag: 084e3b2639510058dddbe6d1b98b511195a94545
+    newTag: 70d59f2a43ae046f34dae019c1bf2f916eabac10
   # `20-20`: AGO Calendar's own four images. The three backend ones move together and never
   # independently, same rule as the ago-chat-* four above and the same reason: `calendar-migrator.yaml`
   # applies the migrations *this* commit's Domain carries, so a migrator on a different SHA from the

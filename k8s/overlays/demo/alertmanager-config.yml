@@ -23,7 +23,7 @@ global:
   # A cluster-internal address, identical on any k3s install with the default pod CIDR, therefore not
   # a secret - unlike the node's public address, which must never appear in this repository.
   smtp_smarthost: "10.42.0.1:25"
-  smtp_from: "alerts@reserve-me.ru"
+  smtp_from: "alerts@agochat.ru"
   # No STARTTLS and no SMTP AUTH, for the reason overlays/demo/.env.example already records for
   # Keycloak's identical hop: this connection crosses a bridge interface on the same machine and
   # never leaves the node. STARTTLS would need a certificate for an RFC 1918 address; AUTH would mean
@@ -56,7 +56,7 @@ route:
 receivers:
   - name: author-email
     email_configs:
-      # `alerts@reserve-me.ru` is an alias on the node, not a mailbox. Postfix's /etc/aliases expands
+      # `alerts@agochat.ru` is an alias on the node, not a mailbox. Postfix's /etc/aliases expands
       # it to two destinations: the local `ago` mbox (a copy that survives even when outbound mail is
       # broken, and the only copy this repository can name) and the author's real mailbox.
       #
@@ -65,7 +65,7 @@ receivers:
       # data. Keeping it in /etc/aliases on the node rather than in a `.env` key is also the smaller
       # mechanism: changing who gets alerted is `sudo nano /etc/aliases && sudo newaliases`, with no
       # Secret to regenerate, no `kubectl apply`, and no pod to restart.
-      - to: "alerts@reserve-me.ru"
+      - to: "alerts@agochat.ru"
         # A RESOLVED mail is half the value of an alert: without it the only way to learn that the
         # disk stopped filling is to go and look, which is the habit this whole item is trying to
         # replace.

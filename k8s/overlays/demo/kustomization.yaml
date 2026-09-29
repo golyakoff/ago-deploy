@@ -401,7 +401,7 @@ images:
     newName: ghcr.io/golyakoff/ago-android-design
     # `26-269`, 2026-09-28: adds clients.html — the redesigned «Записи ▸ Клиенты» mockup (search,
     # phone-status glyph, client-detail hub, booking/dialog navigations) as its own page + TOC entry.
-    newTag: b811e978a2c11c9db667e7bf939680ac515515dd
+    newTag: b370b6683e5e298a303939c3957dbe42c96c32e8
   # `20-20`: AGO Calendar's own four images. The three backend ones move together and never
   # independently, same rule as the ago-chat-* four above and the same reason: `calendar-migrator.yaml`
   # applies the migrations *this* commit's Domain carries, so a migrator on a different SHA from the
@@ -443,13 +443,13 @@ images:
   # migrator (`apply-demo.sh`), which runs both migrators before either product's hosts move.
   - name: ago-calendar-api
     newName: ghcr.io/golyakoff/ago-calendar-api
-    newTag: 98b3be9256181c5253df079eec00dcc44247e7c2
+    newTag: 214bdf67a492cf031fe68d88698e69f9845aed15
   - name: ago-calendar-worker
     newName: ghcr.io/golyakoff/ago-calendar-worker
-    newTag: 98b3be9256181c5253df079eec00dcc44247e7c2
+    newTag: 214bdf67a492cf031fe68d88698e69f9845aed15
   - name: ago-calendar-migrator
     newName: ghcr.io/golyakoff/ago-calendar-migrator
-    newTag: 98b3be9256181c5253df079eec00dcc44247e7c2
+    newTag: 214bdf67a492cf031fe68d88698e69f9845aed15
   # `26-218`/ADR-0186: one pin for both AGO Analytics deployables. `ago-analytics-host` is the single
   # image `ago-analytics`'s CI publishes (its worker + its migrator both run it - the migrator Job
   # overrides the entrypoint with `migrate`); both `base/ago-analytics.yaml` and

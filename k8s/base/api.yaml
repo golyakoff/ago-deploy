@@ -227,15 +227,14 @@ spec:
             - name: ModulePermissions__calendar__Admin__0
               value: "calendar:configure"
             # `13-02`: BillingOptions/YooKassaOptions are bound and validated for every host
-            # (ChatModule.ConfigureServices) - this manifest never carried either, so a fresh image
-            # crash-loops the moment ValidateOnStart runs (the same class of gap `7-03`'s own remarks
-            # above record for S3StorageOptions). **STUB, not a real merchant account**: no ЮKassa
-            # Shop ID/Secret/WebhookKey exists yet - applying for one needs a published price list,
-            # which does not exist yet either (`ago-business`'s pricing decisions are still pending
-            # sign-off). These three values are deliberately obvious non-credentials - real ЮKassa
-            # will refuse any call made with them (401), so a checkout can fail loudly but never
-            # silently charge anything. Replace with the real triple the moment the merchant account
-            # exists; nothing else in this manifest needs to change to do that.
+            # (ChatModule.ConfigureServices) - a fresh image crash-loops the moment ValidateOnStart
+            # runs without them (the same class of gap `7-03`'s own remarks above record for
+            # S3StorageOptions). `26-287`: ShopId/SecretKey now come from the `ago-billing-yookassa`
+            # k8s Secret (currently the test credentials for тестовый магазин 1479980) - never from
+            # this public manifest. `26-286`/`adr/0190` removed WebhookKey entirely: ЮKassa does not
+            # sign webhooks, so there is no key to carry - the receiver verifies by re-querying the
+            # payment via the API plus an IP allowlist. To go live, swap the Secret's two values for
+            # the live pair; nothing in this manifest changes.
             # `25-29`: split from the flat Billing__PricePerSeatRub (590) into ago-business decision
             # 0012's real base-plus-marginal formula - 490 for the first 3 seats, +200 per seat past
             # that. Both keys must ship together; ChatModule.ValidateOnStart() refuses to boot on
@@ -247,11 +246,15 @@ spec:
             - name: Billing__CheckoutReturnUrl
               value: "https://office.agochat.ru/settings/billing"
             - name: Billing__YooKassa__ShopId
-              value: "STUB-NOT-A-REAL-YOOKASSA-ACCOUNT"
+              valueFrom:
+                secretKeyRef:
+                  name: ago-billing-yookassa
+                  key: shop-id
             - name: Billing__YooKassa__SecretKey
-              value: "stub-no-real-secret-key-configured"
-            - name: Billing__YooKassa__WebhookKey
-              value: "stub-no-real-webhook-key-configured"
+              valueFrom:
+                secretKeyRef:
+                  name: ago-billing-yookassa
+                  key: secret-key
             # `23-85`/`adr/0159`: the option-to-entitlement mapping - `worker.yaml`'s own copy of this
             # exact line has the full reasoning (why `channel`, not `calendar`/`faq`; why a literal
             # option key is fine in this file). That comment's own "only Ago.Chat.Worker needs this

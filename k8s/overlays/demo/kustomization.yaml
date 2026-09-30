@@ -304,7 +304,7 @@ images:
   # requires the Booked state, never legal on a pending row (mirrors 26-163 on Android). No migration.
   - name: ago-console
     newName: ghcr.io/golyakoff/ago-console
-    newTag: 97b2a69ee06d51c8bc531c430fcd56b8b11b4043
+    newTag: 33c49db0074d76a49afcacce0409e025043108fc
   # All three come from one `ago-widget` commit, and that is the point rather than tidiness: the two
   # demo pages and a real tenant's embed then run byte-identical bundles, which is checkable (three
   # `version.json` files naming one commit) instead of assumed.
@@ -371,10 +371,10 @@ images:
   # channel-switcher configured). No migration.
   - name: ago-demo-shop1
     newName: ghcr.io/golyakoff/ago-demo-shop1
-    newTag: fa52308135ba15da4ddb82be4e833974a294836f
+    newTag: 81c495ee52d24c2ac29a7636ab8990d5ad148a96
   - name: ago-widget-assets
     newName: ghcr.io/golyakoff/ago-widget-assets
-    newTag: fa52308135ba15da4ddb82be4e833974a294836f
+    newTag: 81c495ee52d24c2ac29a7636ab8990d5ad148a96
   # The front page rebuilt around a price calculator, and `pricing.html` brought onto the same design
   # system with it (ago-landing#20, deployed 2026-09-18). Both pages read every figure out of
   # `prices.json` through one shared lookup, so the calculator and the price list cannot disagree,
@@ -443,13 +443,13 @@ images:
   # migrator (`apply-demo.sh`), which runs both migrators before either product's hosts move.
   - name: ago-calendar-api
     newName: ghcr.io/golyakoff/ago-calendar-api
-    newTag: df7f1369e77cb02e065d52fb46b28f2a9eca3fec
+    newTag: e5c22d09b377d4b06c9d1e7463151b355d5290d9
   - name: ago-calendar-worker
     newName: ghcr.io/golyakoff/ago-calendar-worker
-    newTag: df7f1369e77cb02e065d52fb46b28f2a9eca3fec
+    newTag: e5c22d09b377d4b06c9d1e7463151b355d5290d9
   - name: ago-calendar-migrator
     newName: ghcr.io/golyakoff/ago-calendar-migrator
-    newTag: df7f1369e77cb02e065d52fb46b28f2a9eca3fec
+    newTag: e5c22d09b377d4b06c9d1e7463151b355d5290d9
   # `26-218`/ADR-0186: one pin for both AGO Analytics deployables. `ago-analytics-host` is the single
   # image `ago-analytics`'s CI publishes (its worker + its migrator both run it - the migrator Job
   # overrides the entrypoint with `migrate`); both `base/ago-analytics.yaml` and

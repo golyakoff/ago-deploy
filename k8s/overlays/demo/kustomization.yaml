@@ -304,7 +304,7 @@ images:
   # requires the Booked state, never legal on a pending row (mirrors 26-163 on Android). No migration.
   - name: ago-console
     newName: ghcr.io/golyakoff/ago-console
-    newTag: 5c0e58a84dd631a892ceec8dab8e0f9f0af01cc9
+    newTag: 735e707aeb78af3ad17b65aeb74acb8db5bbbd97
   # All three come from one `ago-widget` commit, and that is the point rather than tidiness: the two
   # demo pages and a real tenant's embed then run byte-identical bundles, which is checkable (three
   # `version.json` files naming one commit) instead of assumed.

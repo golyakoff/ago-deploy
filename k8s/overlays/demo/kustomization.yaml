@@ -206,19 +206,19 @@ images:
   # migration (uses the existing `last_seen_at`); the migrator re-run on this pin is an idempotent no-op.
   - name: ago-chat-api
     newName: ghcr.io/golyakoff/ago-chat-api
-    newTag: d136dea93229a529677f1906ff8f2843169fa9cd
+    newTag: 2705978f351a399cbd4d6083fe38557bd13e0fc9
   - name: ago-chat-worker
     newName: ghcr.io/golyakoff/ago-chat-worker
-    newTag: d136dea93229a529677f1906ff8f2843169fa9cd
+    newTag: 2705978f351a399cbd4d6083fe38557bd13e0fc9
   - name: ago-chat-webhooks
     newName: ghcr.io/golyakoff/ago-chat-webhooks
-    newTag: d136dea93229a529677f1906ff8f2843169fa9cd
+    newTag: 2705978f351a399cbd4d6083fe38557bd13e0fc9
   # `8-08`: the migrator moves with the three hosts and never independently - it applies the
   # migrations *that commit* carries, so a migrator on a different SHA from the hosts is the exact
   # mismatch this item exists to prevent. deploy.sh sets all four from one argument for that reason.
   - name: ago-chat-migrator
     newName: ghcr.io/golyakoff/ago-chat-migrator
-    newTag: d136dea93229a529677f1906ff8f2843169fa9cd
+    newTag: 2705978f351a399cbd4d6083fe38557bd13e0fc9
   # `15-07`/`adr/0051`: the four static bundles, which `15-06` could not reach - and the one it did
   # not reach is the one the 2026-08-25 incident happened to. Their four `imagePullPolicy: Never`
   # patches are gone from *-static.yaml for the same reason the three above went.
@@ -304,7 +304,7 @@ images:
   # requires the Booked state, never legal on a pending row (mirrors 26-163 on Android). No migration.
   - name: ago-console
     newName: ghcr.io/golyakoff/ago-console
-    newTag: da7fd793efd08033c7766e48aad853fd6f4a5370
+    newTag: 79aec5a9532cf2433a69a29f55fd34496f469566
   # All three come from one `ago-widget` commit, and that is the point rather than tidiness: the two
   # demo pages and a real tenant's embed then run byte-identical bundles, which is checkable (three
   # `version.json` files naming one commit) instead of assumed.

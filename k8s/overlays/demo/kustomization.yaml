@@ -443,13 +443,13 @@ images:
   # migrator (`apply-demo.sh`), which runs both migrators before either product's hosts move.
   - name: ago-calendar-api
     newName: ghcr.io/golyakoff/ago-calendar-api
-    newTag: 74e56eb4775fe7bd438a2663033f7502eab179a4
+    newTag: df7f1369e77cb02e065d52fb46b28f2a9eca3fec
   - name: ago-calendar-worker
     newName: ghcr.io/golyakoff/ago-calendar-worker
-    newTag: 74e56eb4775fe7bd438a2663033f7502eab179a4
+    newTag: df7f1369e77cb02e065d52fb46b28f2a9eca3fec
   - name: ago-calendar-migrator
     newName: ghcr.io/golyakoff/ago-calendar-migrator
-    newTag: 74e56eb4775fe7bd438a2663033f7502eab179a4
+    newTag: df7f1369e77cb02e065d52fb46b28f2a9eca3fec
   # `26-218`/ADR-0186: one pin for both AGO Analytics deployables. `ago-analytics-host` is the single
   # image `ago-analytics`'s CI publishes (its worker + its migrator both run it - the migrator Job
   # overrides the entrypoint with `migrate`); both `base/ago-analytics.yaml` and

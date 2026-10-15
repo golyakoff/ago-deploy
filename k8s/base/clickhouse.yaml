@@ -77,7 +77,7 @@ spec:
       # Same chown-init shape postgres.yaml/minio.yaml use for a chown no manifest field can express.
       initContainers:
         - name: chown-data
-          image: clickhouse/clickhouse-server:24.8-alpine
+          image: clickhouse/clickhouse-server:26.6-alpine
           command: ["sh", "-c", "chown -R 101:101 /var/lib/clickhouse"]
           securityContext:
             runAsNonRoot: false
@@ -99,7 +99,7 @@ spec:
               cpu: 200m
       containers:
         - name: clickhouse
-          image: clickhouse/clickhouse-server:24.8-alpine
+          image: clickhouse/clickhouse-server:26.6-alpine
           securityContext:
             allowPrivilegeEscalation: false
             capabilities:

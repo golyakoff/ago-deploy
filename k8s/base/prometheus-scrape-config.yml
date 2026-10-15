@@ -72,6 +72,19 @@ scrape_configs:
   # `15-05`: the machine itself. Unlike the three jobs below this one has no compose-loop twin - the
   # fast loop runs the hosts on the developer's own machine, where a node-exporter reading that
   # machine's disk would be measuring the wrong thing entirely. k8s loop only, deliberately.
+  # `26-338`: the tail-sampling collector's own metrics (otelcol_processor_tail_sampling_*). They are
+  # what the measuring slice reads to put numbers on decision_wait, the 500 ms threshold and how many
+  # traces a late span splits - without them those stay guesses.
+  - job_name: otel-collector
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["host.docker.internal:8888"]
+        labels:
+          loop: compose
+      - targets: ["otel-collector.ago-chat.svc.cluster.local:8888"]
+        labels:
+          loop: k8s
+
   - job_name: node
     metrics_path: /metrics
     static_configs:

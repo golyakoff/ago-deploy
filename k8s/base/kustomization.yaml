@@ -34,6 +34,8 @@ resources:
   - ago-analytics-migrator.yaml
   - ago-analytics.yaml
   - jaeger.yaml
+  # `26-338`/`adr/0193`: tail-sampling collector in front of Jaeger; hosts export here, not to Jaeger.
+  - otel-collector.yaml
   - prometheus.yaml
   - grafana.yaml
   - node-exporter.yaml
@@ -110,6 +112,9 @@ configMapGenerator:
       - email-verification.ftl=keycloak-theme-email/html/email-verification.ftl
       - messages_en.properties=keycloak-theme-email/messages/messages_en.properties
       - messages_ru.properties=keycloak-theme-email/messages/messages_ru.properties
+  - name: otel-collector-config
+    files:
+      - config.yml=otel-collector-config.yml
   - name: prometheus-config
     files:
       - prometheus.yml=prometheus-scrape-config.yml

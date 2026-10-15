@@ -224,9 +224,8 @@ services:
       timeout: 3s
       retries: 20
 
-  # `7-03`: Jaeger receives OTLP traces directly - adr/0025 rejected an OTel Collector in front of it
-  # ("no second backend to justify one"), so every host's own Otel:Exporter:Endpoint points straight
-  # here. COLLECTOR_OTLP_ENABLED is a no-op on recent Jaeger versions (OTLP is on by default) but kept
+  # `7-03`: Jaeger receives OTLP traces - since `26-338`/ago-root `adr/0193` (which superseded `adr/0025`)
+  # from the tail-sampling collector below, not from the hosts. COLLECTOR_OTLP_ENABLED is a no-op on recent Jaeger versions (OTLP is on by default) but kept
   # explicit rather than relying on a default this file does not otherwise document - the same
   # "explicit over implicit" instinct start-dev's own flags follow above. In-memory storage only: a
   # demo cluster restarts often and 7-03's own scope excludes retention/sizing.
@@ -236,8 +235,8 @@ services:
     environment:
       COLLECTOR_OTLP_ENABLED: "true"
     ports:
-      - "4317:4317" # OTLP gRPC - Otel:Exporter:Endpoint (adr/0025)
-      - "4318:4318" # OTLP HTTP
+      # 4317/4318 are no longer published: the collector owns those host ports and reaches Jaeger over
+      # the compose network. A host's Otel:Exporter:Endpoint (localhost:4317) is unchanged.
       - "16686:16686" # Jaeger UI - http://localhost:16686
     healthcheck:
       # 14269 is Jaeger's own admin server, separate from the OTLP/UI ports above - same
@@ -246,6 +245,24 @@ services:
       interval: 5s
       timeout: 3s
       retries: 10
+
+  # `26-338`/ago-root `adr/0193`: tail sampling between the hosts and Jaeger. Publishes the OTLP ports
+  # Jaeger used to, so a host on the dev machine keeps exporting to localhost:4317 untouched. The config
+  # is the same file the cluster's ConfigMap is generated from. No healthcheck: the image is distroless
+  # (no shell, no wget), so there is nothing to exec - the cluster uses an HTTP probe on :13133.
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.162.0@sha256:39923a8e431bd1f57be82411999d389fcfe40857492e4365456d97a4c1f74be6
+    restart: unless-stopped
+    command: ["--config=/etc/otelcol/config.yml"]
+    ports:
+      - "4317:4317" # OTLP gRPC - every host's Otel:Exporter:Endpoint
+      - "4318:4318" # OTLP HTTP
+      - "8888:8888" # the collector's own metrics (prometheus-scrape-config.yml)
+    volumes:
+      - ../k8s/base/otel-collector-config.yml:/etc/otelcol/config.yml:ro
+    depends_on:
+      jaeger:
+        condition: service_healthy
 
   # `7-03`: scrapes each Ago.Chat.* host's /metrics endpoint (prometheus-scrape-config.yml, reached
   # from k8s/base/ for the same one-copy reason keycloak's realm import file already documents above).

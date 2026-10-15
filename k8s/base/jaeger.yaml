@@ -29,9 +29,10 @@ spec:
             readOnlyRootFilesystem: true
             capabilities:
               drop: ["ALL"]
-          # docker-compose.yml's own jaeger service comment has the detail: adr/0025 rejected an OTel
-          # Collector in front of Jaeger ("no second backend to justify one"), so every
-          # Ago.Chat.* host's Otel:Exporter:Endpoint points straight at this Deployment's Service.
+          # `26-338`/ago-root `adr/0193` superseded `adr/0025`: hosts no longer export here. Their
+          # Otel:Exporter:Endpoint is the tail-sampling collector (otel-collector.yaml), which forwards
+          # only the traces it keeps - so this store, and MEMORY_MAX_TRACES below, now hold errors,
+          # slow requests and a baseline rather than everything.
           # In-memory storage only - 7-03's own scope excludes retention/sizing, and a demo cluster
           # restarts often enough that trace history surviving a pod restart is not worth a PVC here.
           env:

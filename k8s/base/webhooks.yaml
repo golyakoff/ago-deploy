@@ -107,7 +107,7 @@ spec:
                   key: secret-key
             # `7-03`: same requirement as ago-chat-api - see that manifest's own comment.
             - name: Otel__Exporter__Endpoint
-              value: "http://jaeger:4317"
+              value: "http://otel-collector:4317"
           volumeMounts:
             - name: tmp
               mountPath: /tmp

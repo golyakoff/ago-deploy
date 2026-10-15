@@ -205,7 +205,7 @@ spec:
             - name: Keycloak__Admin__ClientSecret
               value: "$(KEYCLOAK_DEMO_PROVISIONER_SECRET)"
             - name: Otel__Exporter__Endpoint
-              value: "http://jaeger:4317"
+              value: "http://otel-collector:4317"
           volumeMounts:
             - name: tmp
               mountPath: /tmp

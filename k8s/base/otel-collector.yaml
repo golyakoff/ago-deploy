@@ -1,0 +1,98 @@
+# `26-338` / ago-root `adr/0193`: the tail-sampling OpenTelemetry Collector between the hosts and
+# Jaeger. It supersedes `adr/0025`'s "direct OTLP export, no collector": head sampling in the host
+# (`Otel:Sampling:Ratio`) decides before the outcome is known, so it cannot prefer errors or slow
+# requests. This can, because it sees the whole trace before deciding.
+#
+# EXACTLY ONE REPLICA, and that is correctness, not a sizing choice: tail sampling is only right when
+# every span of a trace reaches the same instance. A second replica would split traces between two
+# deciders. Scaling out needs a trace-id load-balancing exporter in front of this, which is not here.
+#
+# The policy lives in otel-collector-config.yml (one copy, also mounted by docker-compose); the
+# numbers in it are unmeasured starting points and say so.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: otel-collector
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: otel-collector
+  template:
+    metadata:
+      labels:
+        app: otel-collector
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: otel-collector
+          # Pinned by digest as well as tag: a re-tag cannot change what the cluster runs. An infra
+          # image bump has no CI that runs it - verify against otel-collector-config.yml with
+          # `otelcol-contrib validate --config` before accepting a Dependabot bump (dependabot-sweep).
+          image: otel/opentelemetry-collector-contrib:0.162.0@sha256:39923a8e431bd1f57be82411999d389fcfe40857492e4365456d97a4c1f74be6
+          args: ["--config=/etc/otelcol/config.yml"]
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          ports:
+            - containerPort: 4317 # OTLP gRPC - every host's Otel:Exporter:Endpoint
+            - containerPort: 4318 # OTLP HTTP
+            - containerPort: 8888 # the collector's own metrics, scraped by Prometheus
+            - containerPort: 13133 # health_check extension
+          volumeMounts:
+            - name: config
+              mountPath: /etc/otelcol
+              readOnly: true
+          # memory_limiter in the config is set to 384 MiB under this limit, leaving the Go runtime
+          # headroom to collect instead of being killed - the same shape jaeger.yaml's own comment gives.
+          resources:
+            requests:
+              memory: 128Mi
+              cpu: 100m
+            limits:
+              memory: 512Mi
+              cpu: 500m
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 13133
+            initialDelaySeconds: 3
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 13133
+            initialDelaySeconds: 10
+            periodSeconds: 10
+      volumes:
+        - name: config
+          configMap:
+            name: otel-collector-config
+            items:
+              - key: config.yml
+                path: config.yml
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: otel-collector
+spec:
+  selector:
+    app: otel-collector
+  ports:
+    - name: otlp-grpc
+      port: 4317
+      targetPort: 4317
+    - name: otlp-http
+      port: 4318
+      targetPort: 4318
+    - name: metrics
+      port: 8888
+      targetPort: 8888

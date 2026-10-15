@@ -1,0 +1,74 @@
+# `26-338` / ago-root `adr/0193`: tail sampling between the hosts and Jaeger.
+#
+# One file, two loops: docker-compose mounts it from here and the cluster ConfigMap is generated from it
+# (kustomization.yaml), the same one-copy shape prometheus-scrape-config.yml already follows.
+#
+# The three numbers below - 500 ms, 10 %, decision_wait - are UNMEASURED starting points, chosen as
+# `adr/0193` says they are. The measuring run is the second slice of `26-338`; until it exists, do not
+# call them tuned (`CLAUDE.md` rule 7). `otelcol_processor_tail_sampling_*` on :8888 is what that run reads.
+#
+# Hosts keep `Otel:Sampling:Ratio = 1` while this is in the path: a host that drops at the root has
+# already discarded the error this exists to keep (`adr/0194`).
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+processors:
+  # First in the chain, so a spike is refused before the tail sampler buffers it. Sized under the
+  # 512Mi pod limit in otel-collector.yaml with headroom for the Go runtime.
+  memory_limiter:
+    check_interval: 1s
+    limit_mib: 384
+    spike_limit_mib: 96
+
+  # Keeps a trace if ANY policy matches. Correct only while all spans of a trace reach this one
+  # instance, which is why the Deployment is a single replica (adr/0193, Consequences).
+  tail_sampling:
+    decision_wait: 10s # unmeasured; a span later than this is judged alone and can split a trace
+    num_traces: 20000 # unmeasured; undecided traces held in memory
+    policies:
+      - name: errors
+        type: status_code
+        status_code:
+          status_codes: [ERROR]
+      - name: slow
+        type: latency
+        latency:
+          threshold_ms: 500 # largest p95 in architecture/nfr.md's latency table
+      - name: baseline
+        type: probabilistic
+        probabilistic:
+          sampling_percentage: 10
+
+  batch: {}
+
+exporters:
+  # `jaeger` resolves as the compose service name and as the cluster Service name alike.
+  otlp_grpc/jaeger:
+    endpoint: jaeger:4317
+    tls:
+      insecure: true
+
+extensions:
+  health_check:
+    endpoint: 0.0.0.0:13133
+
+service:
+  extensions: [health_check]
+  telemetry:
+    metrics:
+      readers:
+        - pull:
+            exporter:
+              prometheus:
+                host: 0.0.0.0
+                port: 8888
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, tail_sampling, batch]
+      exporters: [otlp_grpc/jaeger]

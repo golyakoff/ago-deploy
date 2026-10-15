@@ -291,7 +291,9 @@ spec:
             # `7-03`: PlatformObservabilityOptions.Exporter.Endpoint is [Required] - AddPlatformObservability
             # (7-01/7-02) fails ValidateOnStart without it, and appsettings.json carries no default (only
             # appsettings.Development.json does, for the fast loop). jaeger.yaml's own Service, not the
-            # compose loop's localhost:4317 (adr/0025: every host exports OTLP directly here, no collector).
+            # compose loop's localhost:4317. Since `26-338`/ago-root `adr/0193` that is the tail-sampling collector's
+            # Service (otel-collector.yaml), not Jaeger's - hosts keep Otel:Sampling:Ratio at its default 1 so the
+            # collector, not the host, decides what is kept.
             # `8-07`/ago-root `adr/0058`: the demo-tenant minting path. **Off here, on purpose.** An
             # endpoint that creates tenants from the public internet is not something a host should
             # acquire by upgrading, and only the demo deployment wants it - overlays/demo patches this
@@ -349,7 +351,7 @@ spec:
             - name: OperatorInvite__ConsoleBaseUrl
               value: "https://office.agochat.ru"
             - name: Otel__Exporter__Endpoint
-              value: "http://jaeger:4317"
+              value: "http://otel-collector:4317"
           volumeMounts:
             - name: tmp
               mountPath: /tmp

@@ -34,7 +34,7 @@ spec:
           # Pinned by digest as well as tag: a re-tag cannot change what the cluster runs. An infra
           # image bump has no CI that runs it - verify against otel-collector-config.yml with
           # `otelcol-contrib validate --config` before accepting a Dependabot bump (dependabot-sweep).
-          image: otel/opentelemetry-collector-contrib:0.162.0@sha256:39923a8e431bd1f57be82411999d389fcfe40857492e4365456d97a4c1f74be6
+          image: otel/opentelemetry-collector-contrib:0.165.0@sha256:e40d61f10c9a617cca1ffd1be4d7e2b3a4b0f0001798ff07e58cabe82e618cea
           args: ["--config=/etc/otelcol/config.yml"]
           securityContext:
             allowPrivilegeEscalation: false

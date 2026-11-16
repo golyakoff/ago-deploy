@@ -251,7 +251,7 @@ services:
   # is the same file the cluster's ConfigMap is generated from. No healthcheck: the image is distroless
   # (no shell, no wget), so there is nothing to exec - the cluster uses an HTTP probe on :13133.
   otel-collector:
-    image: otel/opentelemetry-collector-contrib:0.162.0@sha256:39923a8e431bd1f57be82411999d389fcfe40857492e4365456d97a4c1f74be6
+    image: otel/opentelemetry-collector-contrib:0.165.0@sha256:e40d61f10c9a617cca1ffd1be4d7e2b3a4b0f0001798ff07e58cabe82e618cea
     restart: unless-stopped
     command: ["--config=/etc/otelcol/config.yml"]
     ports:

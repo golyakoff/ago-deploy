@@ -91,7 +91,7 @@ spec:
           type: RuntimeDefault
       initContainers:
         - name: create-calendar-database
-          image: postgres:18-alpine # already on every node that runs postgres.yaml - no new image
+          image: postgres:19-alpine # already on every node that runs postgres.yaml - no new image
           securityContext:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true

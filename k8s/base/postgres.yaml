@@ -88,7 +88,7 @@ spec:
       # keep clearing.
       initContainers:
         - name: chown-data
-          image: postgres:18-alpine # the same image as the container below - nothing new to pull
+          image: postgres:19-alpine # the same image as the container below - nothing new to pull
           command: ["sh", "-c", "chown 70:70 /var/lib/postgresql"]
           securityContext:
             runAsNonRoot: false
@@ -110,7 +110,7 @@ spec:
               cpu: 200m
       containers:
         - name: postgres
-          image: postgres:18-alpine
+          image: postgres:19-alpine
           securityContext:
             allowPrivilegeEscalation: false
             capabilities:
